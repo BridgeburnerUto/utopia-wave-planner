@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-console.log('[WavePlanner] app.js v4 loaded — op sync + leaderboard');
+console.log('[WavePlanner] app.js v5 loaded — watermark sync + clean leaderboard');
 
 // ── FIREBASE CONFIG ──
 const FB_PROJECT = 'utopia-leaderboard';
@@ -677,51 +677,23 @@ alerts(){
   el.innerHTML=settingsHtml+aHtml;
 },
 
-// ── OP NAME MAP ──
-OP_NAMES:{
-  // Thief - Espionage
-  SOT:'Spy on Throne',SOM:'Spy on Military',SOD:'Spy on Defense',SOS:'Spy on Sciences',
-  INF:'Infiltrate',SB:'Survey Buildings',SN:'Snatch News',SOE:'Spy on Exploration',
-  // Thief - Sabotage
-  RG:'Rob the Granaries',RV:'Rob the Vaults',RT:'Rob the Towers',
-  NS:'Night Strike',KN:'Kidnapping',AR:'Arson',ARS:'Greater Arson',
-  AW:'Assassinate Wizards',PROP:'Propaganda',SW:'Sabotage Wizards',
-  DG:'Destabilize Guilds',BT:'Bribe Thieves',BG:'Bribe Generals',
-  FP:'Free Prisoners',SWH:'Steal War Horses',
-  // Magic - Offensive
-  FB:'Fireball',NM:'Nightmares',LS:'Lightning Strike',TOR:'Tornadoes',
-  LL:'Land Lust',FG:"Fool's Gold",MV:'Mystic Vortex',ET:'Expose Thieves',
-  // Magic - Self buffs (no damage)
-  ToG:'Trees of Gold',BB:'Builders Boon',MSH:'Magic Shield',LP:'Love and Peace',
-  NB:"Nature's Blessing",FL:'Fertile Lands',PA:'Patriotism',MF:'Mind Focus',
-  GP:'Greater Protection',MP:'Minor Protection',IA:'Inspire Army',
-},
-
-OP_CATEGORY(code){
-  const espionage=['SOT','SOM','SOD','SOS','INF','SB','SN','SOE'];
-  const selfBuff=['ToG','BB','MSH','LP','NB','FL','PA','MF','GP','MP','IA'];
-  if(espionage.includes(code))return'espionage';
-  if(selfBuff.includes(code))return'self_buff';
-  const thiefSab=['RG','RV','RT','NS','KN','AR','ARS','AW','PROP','SW','DG','BT','BG','FP','SWH'];
-  if(thiefSab.includes(code))return'thief_sabotage';
-  return'magic_offensive';
-},
-
 // ── FIRESTORE REST HELPERS ──
 async fbWrite(path, data){
-  // Convert JS object to Firestore REST format
   function toFB(v){
     if(v===null||v===undefined)return{nullValue:null};
     if(typeof v==='boolean')return{booleanValue:v};
     if(typeof v==='number')return Number.isInteger(v)?{integerValue:String(v)}:{doubleValue:v};
     if(typeof v==='string')return{stringValue:v};
+    if(v instanceof Set)return{arrayValue:{values:[...v].map(toFB)}};
     if(Array.isArray(v))return{arrayValue:{values:v.map(toFB)}};
     if(typeof v==='object')return{mapValue:{fields:Object.fromEntries(Object.entries(v).map(([k,val])=>[k,toFB(val)]))}};
     return{stringValue:String(v)};
   }
   const fields=Object.fromEntries(Object.entries(data).map(([k,v])=>[k,toFB(v)]));
   const url=`${FB_BASE}/${path}?key=${FB_API_KEY}`;
-  return fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})}).catch(()=>null);
+  const r=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})}).catch(()=>null);
+  if(!r)return null;
+  return r.json();
 },
 
 async fbGet(path){
@@ -734,13 +706,26 @@ async fbGet(path){
 async fbQuery(collection, filters=[]){
   const url=`${FB_BASE}:runQuery?key=${FB_API_KEY}`;
   const where=filters.map(f=>({fieldFilter:{field:{fieldPath:f.field},op:f.op||'EQUAL',value:{stringValue:f.value}}}));
-  const body={structuredQuery:{from:[{collectionId:collection}],where:filters.length===1?where[0]:{compositeFilter:{op:'AND',filters:where}},orderBy:[{field:{fieldPath:'opId'},direction:'DESCENDING'}],limit:500}};
+  const body={structuredQuery:{
+    from:[{collectionId:collection}],
+    where:filters.length===1?where[0]:{compositeFilter:{op:'AND',filters:where}},
+    limit:2000
+  }};
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
   if(!r||!r.ok)return[];
   const data=await r.json();
   return(data||[]).filter(d=>d.document).map(d=>{
     const f=d.document.fields||{};
-    function fromFB(v){if(!v)return null;if('stringValue'in v)return v.stringValue;if('integerValue'in v)return parseInt(v.integerValue);if('doubleValue'in v)return v.doubleValue;if('booleanValue'in v)return v.booleanValue;if('arrayValue'in v)return(v.arrayValue.values||[]).map(fromFB);if('mapValue'in v)return Object.fromEntries(Object.entries(v.mapValue.fields||{}).map(([k,val])=>[k,fromFB(val)]));return null;}
+    function fromFB(v){
+      if(!v)return null;
+      if('stringValue'in v)return v.stringValue;
+      if('integerValue'in v)return parseInt(v.integerValue);
+      if('doubleValue'in v)return v.doubleValue;
+      if('booleanValue'in v)return v.booleanValue;
+      if('arrayValue'in v)return(v.arrayValue.values||[]).map(fromFB);
+      if('mapValue'in v)return Object.fromEntries(Object.entries(v.mapValue.fields||{}).map(([k,val])=>[k,fromFB(val)]));
+      return null;
+    }
     return Object.fromEntries(Object.entries(f).map(([k,v])=>[k,fromFB(v)]));
   });
 },
@@ -757,35 +742,45 @@ async syncOps(){
     const kdId=S.own.location.replace(':','_');
     const kdName=S.own.kingdomName||'';
 
-    // Ops without damage/gain to skip for leaderboard purposes but still log
-    const ESPIONAGE=['SPY_ON_THRONE','SPY_ON_MILITARY','SPY_ON_DEFENSE','SPY_ON_SCIENCES',
-      'INFILTRATE','SURVEY_BUILDINGS','SNATCH_NEWS','SPY_ON_EXPLORATION','SHADOW_LIGHT'];
-    const SELF_BUFF=['TREE_OF_GOLD','BUILDERS_BOON','MAGIC_SHIELD','LOVE_AND_PEACE',
+    // Read the watermark — highest op ID we've already stored
+    const metaPath=`meta/${kdId}_watermark`;
+    const metaDoc=await this.fbGet(metaPath);
+    let lastId=0;
+    try{
+      if(metaDoc&&metaDoc.fields?.lastSyncedId){
+        lastId=parseInt(metaDoc.fields.lastSyncedId.integerValue||0);
+      }
+    }catch(e){}
+
+    // Only process ops newer than our watermark
+    const newOps=ops.filter(op=>op.id&&op.id>lastId);
+    if(!newOps.length){
+      console.log('[WavePlanner] Op sync — nothing new (watermark: '+lastId+')');
+      return;
+    }
+
+    const ESPIONAGE=new Set(['SPY_ON_THRONE','SPY_ON_MILITARY','SPY_ON_DEFENSE','SPY_ON_SCIENCES',
+      'INFILTRATE','SURVEY_BUILDINGS','SNATCH_NEWS','SPY_ON_EXPLORATION','SHADOW_LIGHT']);
+    const SELF_BUFF=new Set(['TREE_OF_GOLD','BUILDERS_BOON','MAGIC_SHIELD','LOVE_AND_PEACE',
       'NATURES_BLESSING','FERTILE_LANDS','PATRIOTISM','MIND_FOCUS','GREATER_PROTECTION',
       'MINOR_PROTECTION','INSPIRE_ARMY','ANIMATE_DEAD','FOUNTAIN_OF_KNOWLEDGE',
-      'MINERS_MYSTIQUE','GHOST_WORKERS','HEROES_INSPIRATION','SALVATION','REVELATION'];
+      'MINERS_MYSTIQUE','GHOST_WORKERS','HEROES_INSPIRATION','SALVATION','REVELATION']);
+    const THIEF_SAB=new Set(['ROB_THE_GRANARIES','ROB_THE_VAULTS','ROB_THE_TOWERS',
+      'KIDNAP','NIGHT_STRIKE','ARSON','GREATER_ARSON','ASSASSINATE_WIZARDS',
+      'PROPAGANDA','SABOTAGE_WIZARDS','DESTABILIZE_GUILDS','BRIBE_THIEVES',
+      'BRIBE_GENERALS','FREE_PRISONERS','STEAL_WAR_HORSES']);
 
     let synced=0;
-    for(const op of ops){
-      if(!op.id||!op.provinceName)continue;
-      const path=`ops/${kdId}_${op.id}`;
+    let maxId=lastId;
 
-      // Use Firestore REST to check existence via GET
-      const existing=await this.fbGet(path);
-      if(existing&&!existing.error)continue; // already stored
-
+    for(const op of newOps){
+      if(!op.provinceName)continue;
       const isSelf=op.provinceName===op.targetName;
-      const isEspionage=ESPIONAGE.includes(op.opType);
-      const isBuff=SELF_BUFF.includes(op.opType)||isSelf;
-      const category=isEspionage?'espionage':isBuff?'self_buff':
-        op.opType.startsWith('ROB_')||op.opType==='KIDNAP'||op.opType==='NIGHT_STRIKE'||
-        op.opType==='ARSON'||op.opType==='GREATER_ARSON'||op.opType==='ASSASSINATE_WIZARDS'||
-        op.opType==='PROPAGANDA'||op.opType==='SABOTAGE_WIZARDS'||op.opType==='DESTABILIZE_GUILDS'||
-        op.opType==='BRIBE_THIEVES'||op.opType==='BRIBE_GENERALS'||op.opType==='FREE_PRISONERS'||
-        op.opType==='STEAL_WAR_HORSES'?'thief_sabotage':'magic_offensive';
+      const isEspionage=ESPIONAGE.has(op.opType);
+      const isBuff=SELF_BUFF.has(op.opType)||isSelf;
+      const category=isEspionage?'espionage':isBuff?'self_buff':THIEF_SAB.has(op.opType)?'thief_sabotage':'magic_offensive';
 
-      await this.fbWrite(path,{
-        uid: `${kdId}_${op.id}`,
+      const written=await this.fbWrite(`ops/${kdId}_${op.id}`,{
         opId: op.id,
         kingdomId: kdId,
         kingdomName: kdName,
@@ -804,12 +799,23 @@ async syncOps(){
         gain: op.gain||0,
         syncedAt: Date.now(),
       });
-      synced++;
+      if(written&&!written.error){
+        synced++;
+        if(op.id>maxId)maxId=op.id;
+      }
     }
-    if(synced>0)console.log(`[WavePlanner] Synced ${synced} new ops to Firebase`);
-    else console.log('[WavePlanner] Op sync — no new ops to store');
+
+    // Update watermark with highest ID successfully written
+    if(maxId>lastId){
+      await this.fbWrite(metaPath,{
+        kingdomId: kdId,
+        lastSyncedId: maxId,
+        updatedAt: Date.now(),
+      });
+      console.log(`[WavePlanner] Synced ${synced} new ops (new watermark: ${maxId})`);
+    }
   }catch(e){
-    console.log('[WavePlanner] Op sync failed silently:',e.message);
+    console.log('[WavePlanner] Op sync failed:',e.message);
   }
 },
 
@@ -834,7 +840,7 @@ async leaderboard(){
       if(!op.provinceName)return;
       if(!byProv[op.provinceName])byProv[op.provinceName]={
         name:op.provinceName,totalOps:0,successOps:0,totalDamage:0,totalGain:0,
-        opCounts:{},lastSeen:''
+        opCounts:{},opNames:{},lastSeen:''
       };
       const p=byProv[op.provinceName];
       p.totalOps++;
@@ -842,6 +848,7 @@ async leaderboard(){
       p.totalDamage+=(op.damage||0);
       p.totalGain+=(op.gain||0);
       p.opCounts[op.opType]=(p.opCounts[op.opType]||0)+1;
+      if(op.opName)p.opNames[op.opType]=op.opName;
       if(!p.lastSeen||op.utoDate>p.lastSeen)p.lastSeen=op.utoDate;
     });
 
@@ -888,6 +895,7 @@ async leaderboard(){
     viewSorted.forEach((p,i)=>{
       const pct=p.totalOps>0?Math.round(p.successOps/p.totalOps*100):0;
       const topOp=Object.entries(p.opCounts).sort((a,b)=>b[1]-a[1])[0];
+      const topOpName=topOp?p.opNames[topOp[0]]||topOp[0]:'';
       const barW=Math.round(p.totalDamage/maxDmg*100);
       const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':String(i+1);
       h+=`<tr>
@@ -900,7 +908,7 @@ async leaderboard(){
         <td style="text-align:right;font-family:monospace">${p.totalOps}</td>
         <td style="text-align:right;font-family:monospace;color:${pct>=70?'#00ff88':pct>=50?'#ffaa00':'#ff4455'}">${pct}%</td>
         <td style="text-align:right;font-family:monospace">${fK(p.totalGain)}</td>
-        <td><span class="wtag" style="cursor:default;font-size:9px">${topOp?this.OP_NAMES[topOp[0]]||topOp[0]:''} ${topOp?'×'+topOp[1]:''}</span></td>
+        <td><span class="wtag" style="cursor:default;font-size:9px">${topOpName}${topOp?' ×'+topOp[1]:''}</span></td>
         <td style="font-family:monospace;font-size:10px;color:#4a6a88">${esc(p.lastSeen||'')}</td>
       </tr>`;
     });
@@ -923,7 +931,7 @@ async leaderboard(){
     Object.entries(byOp).sort((a,b)=>b[1].damage-a[1].damage||b[1].count-a[1].count).forEach(([code,d])=>{
       h+=`<tr>
         <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
-        <td style="color:#7a9ab8">${esc(this.OP_NAMES[code]||d.opName||code)}</td>
+        <td style="color:#7a9ab8">${esc(d.opName||code)}</td>
         <td style="text-align:right;font-family:monospace">${d.count}</td>
         <td style="text-align:right;font-family:monospace">${fK(d.damage)||'—'}</td>
         <td style="text-align:right;font-family:monospace">${fK(d.gain)||'—'}</td>
