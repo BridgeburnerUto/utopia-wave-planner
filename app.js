@@ -1,6 +1,11 @@
 (function(){
 'use strict';
-console.log('[WavePlanner] app.js v3 loaded — resource alerts + attack calculator');
+console.log('[WavePlanner] app.js v4 loaded — op sync + leaderboard');
+
+// ── FIREBASE CONFIG ──
+const FB_PROJECT = 'utopia-leaderboard';
+const FB_API_KEY = 'AIzaSyAnlkMabj-9a-fUEx66o86w2CnJaUgboIY';
+const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 // Token passed from bookmarklet or read directly
 const TOKEN = window.__wp_token || sessionStorage.getItem('Utopia-Token');
 const SERVER = window.__wp_server || parseInt(JSON.parse(localStorage.getItem('IntelState')||'{}').server||'1');
@@ -183,12 +188,14 @@ ov.innerHTML=`
 <div class="wt" id="__wpt_player" onclick="__wpA.tab('player')">MY ORDERS</div>
 <div class="wt" id="__wpt_summary" onclick="__wpA.tab('summary')">SUMMARY</div>
 <div class="wt" id="__wpt_alerts" onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
+<div class="wt" id="__wpt_leaderboard" onclick="__wpA.tab('leaderboard')">LEADERBOARD</div>
 </div>
 <div id="__wpbd">
 <div id="__wpc_board"></div>
 <div id="__wpc_player" style="display:none"></div>
 <div id="__wpc_summary" style="display:none"></div>
 <div id="__wpc_alerts" style="display:none"></div>
+<div id="__wpc_leaderboard" style="display:none"></div>
 <div class="wops" id="__wpops"></div>
 </div>`;
 document.body.appendChild(ov);
@@ -208,6 +215,7 @@ async init(){
     await this.loadEnemy(S.eLoc);
     if(!S.cols.length)this.initCols();
     this.meta();this.board();this.alerts();this.summary();this.player();this.setRole('leader');
+    this.syncOps(); // silent background sync — no await, never blocks UI
   }catch(e){$id('__wpc_board').innerHTML=`<div class="wload" style="color:#ff4455">ERROR: ${esc(e.message)}</div>`;}
 },
 async loadEnemy(loc){
@@ -309,11 +317,11 @@ async refresh(){
 },
 tab(t){
   S.tab=t;
-  ['board','player','summary','alerts'].forEach(x=>{
+  ['board','player','summary','alerts','leaderboard'].forEach(x=>{
     $id('__wpc_'+x).style.display=x===t?'':'none';
     const el=$id('__wpt_'+x);el.className='wt'+(x===t?(x==='player'?' on ong':' on'):'');
   });
-  if(t==='player')this.player();if(t==='summary')this.summary();if(t==='alerts')this.alerts();
+  if(t==='player')this.player();if(t==='summary')this.summary();if(t==='alerts')this.alerts();if(t==='leaderboard')this.leaderboard();
 },
 setThr(key,val){
   S.thresholds[key]=parseInt(val)||0;
@@ -667,7 +675,267 @@ alerts(){
   }
   if(!al.length)aHtml=`<div style="color:#4a6a88;font-family:monospace;font-size:11px;padding:16px 0">// No active alerts${(thr.food||thr.gc||thr.runes)?'':' — set thresholds above to enable resource alerts'}</div>`;
   el.innerHTML=settingsHtml+aHtml;
-}
+},
+
+// ── OP NAME MAP ──
+OP_NAMES:{
+  // Thief - Espionage
+  SOT:'Spy on Throne',SOM:'Spy on Military',SOD:'Spy on Defense',SOS:'Spy on Sciences',
+  INF:'Infiltrate',SB:'Survey Buildings',SN:'Snatch News',SOE:'Spy on Exploration',
+  // Thief - Sabotage
+  RG:'Rob the Granaries',RV:'Rob the Vaults',RT:'Rob the Towers',
+  NS:'Night Strike',KN:'Kidnapping',AR:'Arson',ARS:'Greater Arson',
+  AW:'Assassinate Wizards',PROP:'Propaganda',SW:'Sabotage Wizards',
+  DG:'Destabilize Guilds',BT:'Bribe Thieves',BG:'Bribe Generals',
+  FP:'Free Prisoners',SWH:'Steal War Horses',
+  // Magic - Offensive
+  FB:'Fireball',NM:'Nightmares',LS:'Lightning Strike',TOR:'Tornadoes',
+  LL:'Land Lust',FG:"Fool's Gold",MV:'Mystic Vortex',ET:'Expose Thieves',
+  // Magic - Self buffs (no damage)
+  ToG:'Trees of Gold',BB:'Builders Boon',MSH:'Magic Shield',LP:'Love and Peace',
+  NB:"Nature's Blessing",FL:'Fertile Lands',PA:'Patriotism',MF:'Mind Focus',
+  GP:'Greater Protection',MP:'Minor Protection',IA:'Inspire Army',
+},
+
+OP_CATEGORY(code){
+  const espionage=['SOT','SOM','SOD','SOS','INF','SB','SN','SOE'];
+  const selfBuff=['ToG','BB','MSH','LP','NB','FL','PA','MF','GP','MP','IA'];
+  if(espionage.includes(code))return'espionage';
+  if(selfBuff.includes(code))return'self_buff';
+  const thiefSab=['RG','RV','RT','NS','KN','AR','ARS','AW','PROP','SW','DG','BT','BG','FP','SWH'];
+  if(thiefSab.includes(code))return'thief_sabotage';
+  return'magic_offensive';
+},
+
+// ── FIRESTORE REST HELPERS ──
+async fbWrite(path, data){
+  // Convert JS object to Firestore REST format
+  function toFB(v){
+    if(v===null||v===undefined)return{nullValue:null};
+    if(typeof v==='boolean')return{booleanValue:v};
+    if(typeof v==='number')return Number.isInteger(v)?{integerValue:String(v)}:{doubleValue:v};
+    if(typeof v==='string')return{stringValue:v};
+    if(Array.isArray(v))return{arrayValue:{values:v.map(toFB)}};
+    if(typeof v==='object')return{mapValue:{fields:Object.fromEntries(Object.entries(v).map(([k,val])=>[k,toFB(val)]))}};
+    return{stringValue:String(v)};
+  }
+  const fields=Object.fromEntries(Object.entries(data).map(([k,v])=>[k,toFB(v)]));
+  const url=`${FB_BASE}/${path}?key=${FB_API_KEY}`;
+  return fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})}).catch(()=>null);
+},
+
+async fbGet(path){
+  const url=`${FB_BASE}/${path}?key=${FB_API_KEY}`;
+  const r=await fetch(url).catch(()=>null);
+  if(!r||!r.ok)return null;
+  return r.json();
+},
+
+async fbQuery(collection, filters=[]){
+  const url=`${FB_BASE}:runQuery?key=${FB_API_KEY}`;
+  const where=filters.map(f=>({fieldFilter:{field:{fieldPath:f.field},op:f.op||'EQUAL',value:{stringValue:f.value}}}));
+  const body={structuredQuery:{from:[{collectionId:collection}],where:filters.length===1?where[0]:{compositeFilter:{op:'AND',filters:where}},orderBy:[{field:{fieldPath:'opId'},direction:'DESCENDING'}],limit:500}};
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  if(!r||!r.ok)return[];
+  const data=await r.json();
+  return(data||[]).filter(d=>d.document).map(d=>{
+    const f=d.document.fields||{};
+    function fromFB(v){if(!v)return null;if('stringValue'in v)return v.stringValue;if('integerValue'in v)return parseInt(v.integerValue);if('doubleValue'in v)return v.doubleValue;if('booleanValue'in v)return v.booleanValue;if('arrayValue'in v)return(v.arrayValue.values||[]).map(fromFB);if('mapValue'in v)return Object.fromEntries(Object.entries(v.mapValue.fields||{}).map(([k,val])=>[k,fromFB(val)]));return null;}
+    return Object.fromEntries(Object.entries(f).map(([k,v])=>[k,fromFB(v)]));
+  });
+},
+
+// ── SILENT OP SYNC ──
+async syncOps(){
+  if(!S.own)return;
+  try{
+    const r=await fetch(`${BASE}/Kingdom/v1/KingdomOps?server=${S.server}`,{headers:H}).catch(()=>null);
+    if(!r||!r.ok)return;
+    const ops=await r.json();
+    if(!Array.isArray(ops)||!ops.length)return;
+
+    const kdId=S.own.location.replace(':','_');
+    const kdName=S.own.kingdomName||'';
+
+    // Ops without damage/gain to skip for leaderboard purposes but still log
+    const ESPIONAGE=['SPY_ON_THRONE','SPY_ON_MILITARY','SPY_ON_DEFENSE','SPY_ON_SCIENCES',
+      'INFILTRATE','SURVEY_BUILDINGS','SNATCH_NEWS','SPY_ON_EXPLORATION','SHADOW_LIGHT'];
+    const SELF_BUFF=['TREE_OF_GOLD','BUILDERS_BOON','MAGIC_SHIELD','LOVE_AND_PEACE',
+      'NATURES_BLESSING','FERTILE_LANDS','PATRIOTISM','MIND_FOCUS','GREATER_PROTECTION',
+      'MINOR_PROTECTION','INSPIRE_ARMY','ANIMATE_DEAD','FOUNTAIN_OF_KNOWLEDGE',
+      'MINERS_MYSTIQUE','GHOST_WORKERS','HEROES_INSPIRATION','SALVATION','REVELATION'];
+
+    let synced=0;
+    for(const op of ops){
+      if(!op.id||!op.provinceName)continue;
+      const path=`ops/${kdId}_${op.id}`;
+
+      // Use Firestore REST to check existence via GET
+      const existing=await this.fbGet(path);
+      if(existing&&!existing.error)continue; // already stored
+
+      const isSelf=op.provinceName===op.targetName;
+      const isEspionage=ESPIONAGE.includes(op.opType);
+      const isBuff=SELF_BUFF.includes(op.opType)||isSelf;
+      const category=isEspionage?'espionage':isBuff?'self_buff':
+        op.opType.startsWith('ROB_')||op.opType==='KIDNAP'||op.opType==='NIGHT_STRIKE'||
+        op.opType==='ARSON'||op.opType==='GREATER_ARSON'||op.opType==='ASSASSINATE_WIZARDS'||
+        op.opType==='PROPAGANDA'||op.opType==='SABOTAGE_WIZARDS'||op.opType==='DESTABILIZE_GUILDS'||
+        op.opType==='BRIBE_THIEVES'||op.opType==='BRIBE_GENERALS'||op.opType==='FREE_PRISONERS'||
+        op.opType==='STEAL_WAR_HORSES'?'thief_sabotage':'magic_offensive';
+
+      await this.fbWrite(path,{
+        uid: `${kdId}_${op.id}`,
+        opId: op.id,
+        kingdomId: kdId,
+        kingdomName: kdName,
+        server: S.server,
+        utoDate: op.utoDate||'',
+        lastUpdated: op.lastUpdated||'',
+        slot: op.slot||0,
+        provinceName: op.provinceName||'',
+        targetName: op.targetName||'',
+        opType: op.opType||'',
+        opName: op.name||op.opType||'',
+        category,
+        result: op.result||0,
+        success: op.result===1,
+        damage: op.damage||0,
+        gain: op.gain||0,
+        syncedAt: Date.now(),
+      });
+      synced++;
+    }
+    if(synced>0)console.log(`[WavePlanner] Synced ${synced} new ops to Firebase`);
+    else console.log('[WavePlanner] Op sync — no new ops to store');
+  }catch(e){
+    console.log('[WavePlanner] Op sync failed silently:',e.message);
+  }
+},
+
+// ── LEADERBOARD ──
+async leaderboard(){
+  const el=$id('__wpc_leaderboard');
+  el.innerHTML='<div class="wload"><div class="wspin"></div>LOADING LEADERBOARD...</div>';
+
+  try{
+    const kdId=S.own?.location.replace(':','_');
+    // Load all ops for this kingdom
+    const ops=await this.fbQuery('ops',[{field:'kingdomId',value:kdId}]);
+
+    if(!ops.length){
+      el.innerHTML=`<div style="color:#4a6a88;font-family:monospace;font-size:12px;padding:20px 0">// No op data yet — data accumulates automatically as players use the tool during war.</div>`;
+      return;
+    }
+
+    // Aggregate by province
+    const byProv={};
+    ops.forEach(op=>{
+      if(!op.provinceName)return;
+      if(!byProv[op.provinceName])byProv[op.provinceName]={
+        name:op.provinceName,totalOps:0,successOps:0,totalDamage:0,totalGain:0,
+        opCounts:{},lastSeen:''
+      };
+      const p=byProv[op.provinceName];
+      p.totalOps++;
+      if(op.success)p.successOps++;
+      p.totalDamage+=(op.damage||0);
+      p.totalGain+=(op.gain||0);
+      p.opCounts[op.opType]=(p.opCounts[op.opType]||0)+1;
+      if(!p.lastSeen||op.utoDate>p.lastSeen)p.lastSeen=op.utoDate;
+    });
+
+    const sorted=Object.values(byProv).sort((a,b)=>b.totalDamage-a.totalDamage);
+    const totalDmg=sorted.reduce((s,p)=>s+p.totalDamage,0);
+    const totalOps=sorted.reduce((s,p)=>s+p.totalOps,0);
+    const maxDmg=sorted[0]?.totalDamage||1;
+
+    // View toggle state
+    if(!S.lbView)S.lbView='damage';
+
+    let h=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase">Kingdom Op Leaderboard — ${ops.length} ops logged</div>
+      <div style="display:flex;gap:6px">
+        <button class="wb${S.lbView==='damage'?' g':''}" onclick="__wpA.lbView('damage')" style="font-size:10px;padding:3px 9px">Damage</button>
+        <button class="wb${S.lbView==='ops'?' g':''}" onclick="__wpA.lbView('ops')" style="font-size:10px;padding:3px 9px">Op Count</button>
+        <button class="wb${S.lbView==='gain'?' g':''}" onclick="__wpA.lbView('gain')" style="font-size:10px;padding:3px 9px">Gain</button>
+      </div>
+    </div>
+
+    <div class="wsum" style="margin-bottom:16px">
+      <div class="wscard"><div class="l">Total Ops Logged</div><div class="v">${fK(totalOps)}</div></div>
+      <div class="wscard"><div class="l">Total Damage</div><div class="v">${fK(totalDmg)}</div></div>
+      <div class="wscard"><div class="l">Active Provinces</div><div class="v">${sorted.length}</div></div>
+      <div class="wscard"><div class="l">Success Rate</div><div class="v">${totalOps>0?Math.round(sorted.reduce((s,p)=>s+p.successOps,0)/totalOps*100):0}%</div></div>
+    </div>
+
+    <table class="wtbl">
+      <thead><tr>
+        <th style="width:24px">#</th>
+        <th>Province</th>
+        <th style="text-align:right">Damage</th>
+        <th style="text-align:right">Ops</th>
+        <th style="text-align:right">Success%</th>
+        <th style="text-align:right">Gain</th>
+        <th>Top Op</th>
+        <th>Last seen</th>
+      </tr></thead><tbody>`;
+
+    const viewSorted=S.lbView==='ops'?[...sorted].sort((a,b)=>b.totalOps-a.totalOps):
+                     S.lbView==='gain'?[...sorted].sort((a,b)=>b.totalGain-a.totalGain):sorted;
+
+    viewSorted.forEach((p,i)=>{
+      const pct=p.totalOps>0?Math.round(p.successOps/p.totalOps*100):0;
+      const topOp=Object.entries(p.opCounts).sort((a,b)=>b[1]-a[1])[0];
+      const barW=Math.round(p.totalDamage/maxDmg*100);
+      const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':String(i+1);
+      h+=`<tr>
+        <td style="font-family:monospace;font-size:12px">${medal}</td>
+        <td style="font-weight:700">${esc(p.name)}</td>
+        <td style="text-align:right;font-family:monospace">
+          ${fK(p.totalDamage)}
+          <div style="height:3px;background:#1e2d3d;border-radius:2px;margin-top:2px"><div style="height:100%;width:${barW}%;background:#00d4ff;border-radius:2px"></div></div>
+        </td>
+        <td style="text-align:right;font-family:monospace">${p.totalOps}</td>
+        <td style="text-align:right;font-family:monospace;color:${pct>=70?'#00ff88':pct>=50?'#ffaa00':'#ff4455'}">${pct}%</td>
+        <td style="text-align:right;font-family:monospace">${fK(p.totalGain)}</td>
+        <td><span class="wtag" style="cursor:default;font-size:9px">${topOp?this.OP_NAMES[topOp[0]]||topOp[0]:''} ${topOp?'×'+topOp[1]:''}</span></td>
+        <td style="font-family:monospace;font-size:10px;color:#4a6a88">${esc(p.lastSeen||'')}</td>
+      </tr>`;
+    });
+
+    h+=`</tbody></table>
+
+    <div style="margin-top:20px;font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e2d3d">Op Breakdown by Type</div>
+    <table class="wtbl">
+      <thead><tr><th>Op</th><th>Full Name</th><th style="text-align:right">Count</th><th style="text-align:right">Total Damage</th><th style="text-align:right">Total Gain</th></tr></thead>
+      <tbody>`;
+
+    // Aggregate by op type across kingdom
+    const byOp={};
+    ops.forEach(op=>{
+      if(!byOp[op.opType])byOp[op.opType]={count:0,damage:0,gain:0,opName:op.opName||op.opType};
+      byOp[op.opType].count++;
+      byOp[op.opType].damage+=op.damage||0;
+      byOp[op.opType].gain+=op.gain||0;
+    });
+    Object.entries(byOp).sort((a,b)=>b[1].damage-a[1].damage||b[1].count-a[1].count).forEach(([code,d])=>{
+      h+=`<tr>
+        <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
+        <td style="color:#7a9ab8">${esc(this.OP_NAMES[code]||d.opName||code)}</td>
+        <td style="text-align:right;font-family:monospace">${d.count}</td>
+        <td style="text-align:right;font-family:monospace">${fK(d.damage)||'—'}</td>
+        <td style="text-align:right;font-family:monospace">${fK(d.gain)||'—'}</td>
+      </tr>`;
+    });
+    h+=`</tbody></table>`;
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<div style="color:#ff4455;font-family:monospace;font-size:12px;padding:20px 0">Error loading leaderboard: ${esc(e.message)}</div>`;
+  }
+},
+lbView(v){S.lbView=v;this.leaderboard();},
 };
 
 // Close ops on outside click
