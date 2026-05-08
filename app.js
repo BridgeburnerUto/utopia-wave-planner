@@ -1,5 +1,6 @@
 (function(){
 'use strict';
+console.log('[WavePlanner] app.js v2 loaded — role switcher + attack calculator');
 // Token passed from bookmarklet or read directly
 const TOKEN = window.__wp_token || sessionStorage.getItem('Utopia-Token');
 const SERVER = window.__wp_server || parseInt(JSON.parse(localStorage.getItem('IntelState')||'{}').server||'1');

@@ -8,110 +8,77 @@
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0c10;color:#c8d8e8;font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.box{background:#0f1218;border:1px solid #1e2d3d;border-radius:6px;padding:40px;max-width:560px;width:100%}
+.box{background:#0f1218;border:1px solid #1e2d3d;border-radius:6px;padding:40px;max-width:520px;width:100%}
 h1{font-family:'Share Tech Mono',monospace;font-size:22px;color:#00d4ff;letter-spacing:3px;margin-bottom:8px}
 .sub{color:#4a6a88;font-size:14px;margin-bottom:32px;line-height:1.7}
 .step{display:flex;gap:14px;margin-bottom:22px;align-items:flex-start}
 .num{background:#151a22;border:1px solid #2a3f55;color:#00d4ff;font-family:'Share Tech Mono',monospace;font-size:13px;width:28px;height:28px;border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
-.stxt{font-size:14px;line-height:1.7;color:#7a9ab8}
+.stxt{font-size:15px;line-height:1.7;color:#7a9ab8}
 .stxt b{color:#c8d8e8}
-.stxt code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#151a22;color:#00d4ff;padding:2px 6px;border-radius:2px;border:1px solid #1e2d3d}
-.input-row{display:flex;gap:8px;margin:12px 0}
-input{flex:1;background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:'Share Tech Mono',monospace;font-size:13px;padding:10px 12px;border-radius:3px;outline:none}
-input:focus{border-color:#00d4ff}
-input::placeholder{color:#4a6a88}
-.gen-btn{padding:10px 18px;background:#151a22;border:1px solid #2a3f55;color:#7a9ab8;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border-radius:3px;transition:all .15s;white-space:nowrap}
-.gen-btn:hover{border-color:#00d4ff;color:#00d4ff}
-#bm-area{display:none;margin-top:16px}
-.bm-link{display:block;background:rgba(0,212,255,.08);border:2px solid #00d4ff;color:#00d4ff;font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:700;padding:14px 24px;border-radius:4px;text-decoration:none;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:8px}
-.bm-link:hover{background:rgba(0,212,255,.15)}
-.hint{font-size:12px;color:#4a6a88;text-align:center;line-height:1.6}
-.note{background:#151a22;border:1px solid #1e2d3d;border-left:2px solid #00d4ff;border-radius:3px;padding:12px 16px;font-size:12px;color:#4a6a88;margin-top:24px;line-height:1.8}
-.note b{color:#7a9ab8}
+.bm-link{display:block;background:rgba(0,212,255,.08);border:2px solid #00d4ff;color:#00d4ff;font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:700;padding:16px 24px;border-radius:4px;text-decoration:none;text-align:center;cursor:grab;transition:all .2s;margin:16px 0 8px}
+.bm-link:hover{background:rgba(0,212,255,.18)}
+.hint{font-size:12px;color:#4a6a88;text-align:center;line-height:1.6;margin-bottom:28px}
 .divider{border:none;border-top:1px solid #1e2d3d;margin:28px 0}
+.note{background:#151a22;border:1px solid #1e2d3d;border-left:2px solid #00d4ff;border-radius:3px;padding:14px 16px;font-size:13px;color:#4a6a88;margin-top:24px;line-height:1.8}
+.note b{color:#7a9ab8}
 </style>
 </head>
 <body>
 <div class="box">
   <h1>⚔ WAVE PLANNER</h1>
-  <div class="sub">A live war planning tool for Utopia kingdoms.<br>Runs inside the Intel Site — no separate login needed.</div>
+  <div class="sub">Live war planning for Utopia kingdoms — runs directly inside the Intel Site.</div>
 
   <div class="step">
     <div class="num">1</div>
-    <div class="stxt">Enter your GitHub username and repo name (where you uploaded <code>app.js</code> and this <code>index.html</code>):</div>
+    <div class="stxt">Drag this button to your <b>bookmarks bar</b>:</div>
   </div>
 
-  <div class="input-row">
-    <input id="gh-user" placeholder="GitHub username" oninput="update()">
-    <input id="gh-repo" placeholder="repo name (e.g. utopia-wave-planner)" oninput="update()">
-    <button class="gen-btn" onclick="generate()">Generate →</button>
+  <a id="bm-link" class="bm-link">⚔ Wave Planner</a>
+  <div class="hint">Drag to bookmarks bar &nbsp;·&nbsp; or right-click → "Bookmark this link"</div>
+
+  <hr class="divider">
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="stxt">Open <b>intel.utopia.site</b> via your in-game link</div>
   </div>
-
-  <div id="bm-area">
-    <div class="step" style="margin-top:20px">
-      <div class="num">2</div>
-      <div class="stxt">Drag this button to your <b>bookmarks bar</b>:</div>
-    </div>
-    <a id="bm-link" class="bm-link">⚔ Wave Planner</a>
-    <div class="hint">Drag to bookmarks bar, or right-click → "Bookmark this link"</div>
-
-    <hr class="divider">
-
-    <div class="step">
-      <div class="num">3</div>
-      <div class="stxt">Open <b>intel.utopia.site</b> via your in-game link (so you're logged in)</div>
-    </div>
-    <div class="step">
-      <div class="num">4</div>
-      <div class="stxt">Click the <b>⚔ Wave Planner</b> bookmark — the tool opens as an overlay</div>
-    </div>
-    <div class="step">
-      <div class="num">5</div>
-      <div class="stxt">
-        <b>War leader:</b> WAR BOARD tab → drag enemy provinces into waves → assign ops → Save Plan<br><br>
-        <b>Players:</b> MY ORDERS tab → see targets and attack matchups for your attacker
-      </div>
+  <div class="step">
+    <div class="num">3</div>
+    <div class="stxt">Click the <b>⚔ Wave Planner</b> bookmark — the tool opens as an overlay on the IS</div>
+  </div>
+  <div class="step">
+    <div class="num">4</div>
+    <div class="stxt">
+      <b>War leader:</b> WAR BOARD → drag provinces into waves → assign ops → Save Plan<br><br>
+      <b>Players:</b> MY ORDERS → see your wave targets and attack matchups
     </div>
   </div>
 
   <div class="note">
-    <b>How sharing works:</b><br>
-    War leader saves the plan → stored on Kagge's Intel Site backend.<br>
-    All kingdom members click the same bookmark → everyone sees the same wave assignments.<br>
-    Hit ↻ Refresh inside the tool to pull fresh intel at any time.<br><br>
-    <b>Share this page URL with your whole kingdom</b> so they can all install the bookmark.
+    <b>Shared plan:</b> The war leader saves the plan to Kagge's Intel Site backend. All kingdom members see the same assignments when they load the tool.<br><br>
+    <b>Fresh intel:</b> Hit ↻ Refresh inside the tool at any time to pull the latest data.
   </div>
 </div>
 
 <script>
-function update(){
-  const u=document.getElementById('gh-user').value.trim();
-  const r=document.getElementById('gh-repo').value.trim();
-  if(u&&r) generate();
-}
-function generate(){
-  const u=document.getElementById('gh-user').value.trim();
-  const r=document.getElementById('gh-repo').value.trim()||'utopia-wave-planner';
-  if(!u){alert('Please enter your GitHub username');return;}
-  
-  const appUrl=`https://cdn.jsdelivr.net/gh/${u}/${r}@main/app.js`;
-  
-  const code=`(function(){var t=sessionStorage.getItem('Utopia-Token');if(!t){alert('Wave Planner\\n\\nPlease open the Intel Site via your in-game link first, then click this bookmark.');return;}if(window.__wpA){document.getElementById('__wp_overlay').style.display='flex';return;}window.__wp_token=t;window.__wp_server=parseInt(JSON.parse(localStorage.getItem('IntelState')||'{}').server||'1');var s=document.createElement('script');s.src='${appUrl}?v='+Date.now();s.onerror=function(){alert('Could not load Wave Planner app.\\n\\nCheck that ${u}/${r} is a public GitHub repo with app.js uploaded.');};document.head.appendChild(s);})();`;
-  
-  const link=document.getElementById('bm-link');
-  link.href='javascript:'+encodeURIComponent(code);
-  link.draggable=true;
-  document.getElementById('bm-area').style.display='block';
-}
-// Auto-detect if hosted on GitHub Pages
-const ghMatch=location.hostname.match(/^(.+)\.github\.io$/);
-if(ghMatch){
-  const user=ghMatch[1];
-  const repo=location.pathname.split('/')[1]||'';
-  if(user)document.getElementById('gh-user').value=user;
-  if(repo)document.getElementById('gh-repo').value=repo;
-  if(user)generate();
-}
+// Build app.js URL from this page's location
+// Works whether hosted at root (github.io/repo/) or subdirectory
+const base = location.href.replace(/\/[^/]*$/, '').replace(/\/$/, '');
+const appUrl = base + '/app.js';
+
+const code = `(function(){
+var t=sessionStorage.getItem('Utopia-Token');
+if(!t){alert('Wave Planner\\n\\nOpen the Intel Site via your in-game link first, then click this bookmark.');return;}
+if(window.__wpA){var o=document.getElementById('__wp_overlay');if(o)o.style.display='flex';return;}
+window.__wp_token=t;
+window.__wp_server=parseInt(JSON.parse(localStorage.getItem('IntelState')||'{}').server||'1');
+var s=document.createElement('script');
+s.src='${appUrl}?v='+Date.now();
+s.onerror=function(){alert('Wave Planner: Could not load.\\n\\nMake sure the GitHub Pages site is live and public.');};
+document.head.appendChild(s);
+})();`;
+
+document.getElementById('bm-link').href = 'javascript:' + encodeURIComponent(code);
 </script>
 </body>
 </html>
