@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-console.log('[WavePlanner] app.js v2 loaded — role switcher + attack calculator');
+console.log('[WavePlanner] app.js v3 loaded — resource alerts + attack calculator');
 // Token passed from bookmarklet or read directly
 const TOKEN = window.__wp_token || sessionStorage.getItem('Utopia-Token');
 const SERVER = window.__wp_server || parseInt(JSON.parse(localStorage.getItem('IntelState')||'{}').server||'1');
@@ -125,13 +125,23 @@ const CSS = `
 .wspin{display:inline-block;width:28px;height:28px;border:2px solid #1e2d3d;border-top-color:#00d4ff;border-radius:50%;animation:__wpspin .7s linear infinite}
 .wload{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;color:#4a6a88;font-family:monospace;font-size:12px;letter-spacing:1px}
 .wsech{font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e2d3d}
+.wthr{background:#0f1218;border:1px solid #1e2d3d;border-radius:4px;padding:14px 16px;margin-bottom:16px}
+.wthr-title{font-size:10px;font-weight:700;color:#4a6a88;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.wthr-title span{color:#ffaa00;font-size:10px;font-weight:400;letter-spacing:0;text-transform:none}
+.wthr-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.wthr-row:last-child{margin-bottom:0}
+.wthr-label{font-size:12px;font-weight:700;color:#c8d8e8;width:50px;flex-shrink:0}
+.wthr-input{background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:13px;padding:5px 8px;border-radius:3px;width:110px;outline:none}
+.wthr-input:focus{border-color:#ffaa00}
+.wthr-hint{font-size:11px;color:#4a6a88;flex:1}
+.wres-alert{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.2);border-radius:3px}
 @keyframes __wpspin{to{transform:rotate(360deg)}}
 `;
 
 const DOPS=[{c:'BLI',l:'Blizzard'},{c:'CHA',l:'Chaos'},{c:'DG',l:'Dragon'},{c:'DR',l:'Drought'},{c:'ET',l:'Exp Thieves'},{c:'EX',l:'Expose'},{c:'FOG',l:'Fog'},{c:'GL',l:'Gluttony'},{c:'GR',l:'Greed'},{c:'IR',l:'Inspire'},{c:'MW',l:'Mind Wipe'},{c:'MS',l:'Miser'},{c:'NF',l:'Night Fall'},{c:'PF',l:'Plague'},{c:'SW',l:'Shadow'},{c:'Slo',l:'Slow Burn'},{c:'Sto',l:'Storm'},{c:'Wra',l:'Wrath'}];
 const IOPS=[{c:'AR',l:'Arson'},{c:'AMN',l:'Amnesia'},{c:'ARS',l:'Gr.Arson'},{c:'AW',l:'Assassin'},{c:'FB',l:'Fireball'},{c:'GA',l:'Grab Army'},{c:'INF',l:'Infiltrate'},{c:'KN',l:'Kidnap'},{c:'LS',l:'Learn'},{c:'MV',l:'Massacre'},{c:'NM',l:'Nightmare'},{c:'NS',l:'Night Strike'},{c:'PROP',l:'Propaganda'},{c:'RG',l:'Raze'},{c:'RV',l:'Reveal'},{c:'RT',l:'Riot'},{c:'SB',l:'Spy Bldgs'},{c:'SWH',l:'Switcharoo'},{c:'TOR',l:'Tornado'},{c:'WRi',l:'War Ritual'}];
 
-const S={token:TOKEN,server:SERVER,own:null,enemy:null,wpId:null,cols:[],tab:'board',drag:null,openSlot:null,eLoc:'5:3',role:'leader',playerProv:null};
+const S={token:TOKEN,server:SERVER,own:null,enemy:null,wpId:null,cols:[],tab:'board',drag:null,openSlot:null,eLoc:'5:3',role:'leader',playerProv:null,thresholds:{food:0,gc:0,runes:0}};
 
 function fK(n){if(n==null)return'—';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return Math.round(n)+'';}
 function fA(s){if(s==null)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);if(h>=48)return Math.floor(h/24)+'d';if(h>0)return h+'h'+m+'m';return m+'m';}
@@ -194,7 +204,7 @@ async init(){
     const wr=await fetch(`${BASE}/WarPlan/v1/Post?server=${S.server}&location=${S.own.location}`,{method:'POST',headers:H,body:'{}'});
     if(wr.ok){const wd=await wr.json();S.wpId=wd.warPlanId;
       const gr=await fetch(`${BASE}/WarPlan/v1/Get?server=${S.server}&location=${S.own.location}&warPlanId=${S.wpId}`,{headers:H});
-      if(gr.ok){const gd=await gr.json();if(gd.json){try{const p=JSON.parse(gd.json);S.cols=p.columns||[];if(p.enemyLocation)S.eLoc=p.enemyLocation;}catch(e){}}}}
+      if(gr.ok){const gd=await gr.json();if(gd.json){try{const p=JSON.parse(gd.json);S.cols=p.columns||[];if(p.enemyLocation)S.eLoc=p.enemyLocation;if(p.thresholds)S.thresholds=p.thresholds;}catch(e){}}}}
     await this.loadEnemy(S.eLoc);
     if(!S.cols.length)this.initCols();
     this.meta();this.board();this.alerts();this.summary();this.player();this.setRole('leader');
@@ -217,6 +227,7 @@ meta(){
   if(S.own){$id('__wpown').textContent=S.own.kingdomName||S.own.location;const w=$id('__wpwar');if(S.own.war){w.textContent='⚔ WAR';w.style.color='#ff4455';}else{w.textContent='Peace';w.style.color='#7a9ab8';}}
 },
 board(){
+  try{
   const eb=`<div class="webar"><label>ENEMY:</label><input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3"><button class="wb" style="font-size:11px" onclick="__wpA.loadEnemy($id('__wpeloc').value);__wpA.initCols();__wpA.board();__wpA.alerts();__wpA.summary();__wpA.player()">LOAD</button><div style="color:#00d4ff;font-weight:700;font-size:13px">${esc(S.enemy?.kingdomName||'—')}</div><div style="font-size:11px;color:#4a6a88;margin-left:auto" id="__wpestats"></div></div>`;
   let b='<div class="weboard">';
   S.cols.forEach((col,ci)=>{
@@ -238,6 +249,7 @@ board(){
   $id('__wpc_board').innerHTML=eb+b;
   // Update enemy stats if enemy loaded
   if(S.enemy){const tl=S.enemy.provinces.reduce((s,p)=>s+(p.land||0),0);const es=$id('__wpestats');if(es)es.textContent=S.enemy.provinces.length+' provs · '+fK(tl)+' land';}
+  }catch(e){$id('__wpc_board').innerHTML=`<div class="wload" style="color:#ff4455">ERROR: ${esc(e.message)}</div>`;console.error('[WavePlanner] board error',e);}
 },
 ds(e,ci,ii){S.drag={ci,ii};e.currentTarget.classList.add('wdrag');e.dataTransfer.effectAllowed='move';},
 drop(e,ci){
@@ -286,7 +298,7 @@ setNote(v){if(S.openSlot)S.cols[S.openSlot.ci].items[S.openSlot.ii].province.not
 async save(){
   if(!S.wpId){setSav('No plan ID','err');return;}setSav('Saving...','ing');
   try{
-    const json=JSON.stringify({title:'Wave Plan',content:'',enemyLocation:S.eLoc,columns:S.cols});
+    const json=JSON.stringify({title:'Wave Plan',content:'',enemyLocation:S.eLoc,columns:S.cols,thresholds:S.thresholds});
     const r=await fetch(`${BASE}/WarPlan/v1/Post?server=${S.server}&location=${S.own.location}`,{method:'POST',headers:H,body:JSON.stringify({json,warPlanId:S.wpId})});
     setSav(r.ok?'Saved ✓':'Failed',r.ok?'ok':'err');if(r.ok)setTimeout(()=>setSav('',''),3000);
   }catch(e){setSav('Error','err');}
@@ -302,6 +314,10 @@ tab(t){
     const el=$id('__wpt_'+x);el.className='wt'+(x===t?(x==='player'?' on ong':' on'):'');
   });
   if(t==='player')this.player();if(t==='summary')this.summary();if(t==='alerts')this.alerts();
+},
+setThr(key,val){
+  S.thresholds[key]=parseInt(val)||0;
+  this.alerts();
 },
 setRole(role){
   S.role=role;
@@ -590,21 +606,67 @@ summary(){
   h+=`</tbody></table>`;el.innerHTML=h;
 },
 alerts(){
-  const el=$id('__wpc_alerts');const al=[];
-  if(S.enemy){S.enemy.provinces.forEach(p=>{
-    const opa=p.sot?.opa||0;
-    if(opa>80&&!p.som)al.push({c:'w',t:`Missing SoM: <b>${esc(p.name)}</b> — ${opa} OPA attacker`});
-    p.som?.armiesAway?.forEach(a=>{al.push({c:'i',t:`Army away: <b>${esc(p.name)}</b> — ${a.oSpecs||0} oSpecs, ${a.land||0} acres, ${a.secondsRemaining>0?fA(a.secondsRemaining)+' to return':'overdue'}`});});
-    if(p.sot?.food===0&&opa>0)al.push({c:'u',t:`No food: <b>${esc(p.name)}</b>`});
-    if((p.sot?.money||0)<1000&&p.som)al.push({c:'w',t:`Low GC: <b>${esc(p.name)}</b> — ${fK(p.sot.money)} gc`});
-    const da=p.calcs?.defPointsSummary?.ageSeconds;if(da!=null&&da>28800)al.push({c:'w',t:`Stale intel: <b>${esc(p.name)}</b> — ${fA(da)} old`});
-  });}
+  const el=$id('__wpc_alerts');
+  const thr=S.thresholds;
+  const isLeader=S.role==='leader';
+  let settingsHtml='';
+  if(isLeader){
+    settingsHtml=`<div class="wthr">
+      <div class="wthr-title">Resource Alert Thresholds <span>Flag enemy provinces with resources ABOVE these limits</span></div>
+      <div class="wthr-row">
+        <div class="wthr-label">Food</div>
+        <input class="wthr-input" type="number" min="0" placeholder="0 = off" value="${thr.food||''}" oninput="__wpA.setThr('food',this.value)">
+        <div class="wthr-hint">e.g. 50000 — flag rich food targets for TM/fireball</div>
+      </div>
+      <div class="wthr-row">
+        <div class="wthr-label">GC</div>
+        <input class="wthr-input" type="number" min="0" placeholder="0 = off" value="${thr.gc||''}" oninput="__wpA.setThr('gc',this.value)">
+        <div class="wthr-hint">e.g. 100000 — good robbery/plunder target</div>
+      </div>
+      <div class="wthr-row">
+        <div class="wthr-label">Runes</div>
+        <input class="wthr-input" type="number" min="0" placeholder="0 = off" value="${thr.runes||''}" oninput="__wpA.setThr('runes',this.value)">
+        <div class="wthr-hint">e.g. 5000 — rich magic target</div>
+      </div>
+    </div>`;
+  }
+  const al=[];
+  if(S.enemy){
+    S.enemy.provinces.forEach(p=>{
+      if(p.sot){
+        const food=p.sot.food||0,gc=p.sot.money||0,runes=p.sot.runes||0;
+        const da=p.calcs?.defPointsSummary?.ageSeconds;
+        const age=da!=null?` (intel ${fA(da)} old)`:'';
+        if(thr.food>0&&food>thr.food)al.push({c:'r',t:`<b>Food target:</b> ${esc(p.name)} has ${fK(food)} food (limit ${fK(thr.food)})${age} — TM/fireball`});
+        if(thr.gc>0&&gc>thr.gc)al.push({c:'r',t:`<b>GC target:</b> ${esc(p.name)} has ${fK(gc)} gc (limit ${fK(thr.gc)})${age} — robbery/plunder`});
+        if(thr.runes>0&&runes>thr.runes)al.push({c:'r',t:`<b>Runes target:</b> ${esc(p.name)} has ${fK(runes)} runes (limit ${fK(thr.runes)})${age} — magic drain`});
+      }
+      const opa=p.sot?.opa||0;
+      if(opa>80&&!p.som)al.push({c:'w',t:`Missing SoM: <b>${esc(p.name)}</b> — ${opa} OPA attacker`});
+      p.som?.armiesAway?.forEach(a=>{al.push({c:'i',t:`Army away: <b>${esc(p.name)}</b> — ${a.oSpecs||0} oSpecs, ${a.land||0} acres, ${a.secondsRemaining>0?fA(a.secondsRemaining)+' to return':'overdue'}`});});
+      if(p.sot&&(p.sot.food||1)===0&&opa>0)al.push({c:'u',t:`No food: <b>${esc(p.name)}</b>`});
+      if(p.sot&&p.som&&(p.sot.money||0)<1000)al.push({c:'w',t:`Low GC: <b>${esc(p.name)}</b> — ${fK(p.sot.money||0)} gc`});
+      const da=p.calcs?.defPointsSummary?.ageSeconds;if(da!=null&&da>28800)al.push({c:'w',t:`Stale intel: <b>${esc(p.name)}</b> — ${fA(da)} old`});
+    });
+  }
   if(S.own){S.own.provinces.forEach(p=>{
     p.som?.armiesAway?.forEach(a=>{al.push({c:'i',t:`Own army away: <b>${esc(p.name)}</b> — ${a.secondsRemaining>0?fA(a.secondsRemaining)+' to return':'overdue'}`});});
-    if((p.sot?.money||0)<500&&p.sot)al.push({c:'u',t:`Own low GC: <b>${esc(p.name)}</b> — ${fK(p.sot.money)} gc`});
+    if(p.sot&&(p.sot.money||0)<500)al.push({c:'u',t:`Own low GC: <b>${esc(p.name)}</b> — ${fK(p.sot.money||0)} gc`});
   });}
-  const ac=$id('__wpalc');if(ac){ac.textContent=al.length?' ('+al.length+')':'';ac.style.color=al.some(a=>a.c==='u')?'#ff4455':'#ffaa00';}
-  el.innerHTML=al.length?al.map(a=>`<div class="walt"><span class="wabg ${a.c==='u'?'wau':a.c==='w'?'waw2':'wai'}">${a.c==='u'?'URGENT':a.c==='w'?'WARN':'INFO'}</span><span>${a.t}</span></div>`).join(''):`<div style="color:#4a6a88;font-family:monospace;font-size:11px;padding:20px 0">// No active alerts</div>`;
+  const ac=$id('__wpalc');
+  if(ac){ac.textContent=al.length?' ('+al.length+')':'';ac.style.color=al.some(a=>a.c==='u')?'#ff4455':'#ffaa00';}
+  const resAl=al.filter(a=>a.c==='r'),otherAl=al.filter(a=>a.c!=='r');
+  let aHtml='';
+  if(resAl.length){
+    aHtml+=`<div style="font-family:monospace;font-size:10px;color:#ffaa00;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Resource Targets (${resAl.length})</div>`;
+    aHtml+=resAl.map(a=>`<div class="walt" style="background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.15);border-radius:3px;margin-bottom:4px"><span class="wabg" style="background:rgba(255,170,0,.2);color:#ffaa00;border:1px solid #cc8800;font-family:monospace;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;white-space:nowrap;flex-shrink:0;margin-top:1px">RESOURCE</span><span>${a.t}</span></div>`).join('');
+  }
+  if(otherAl.length){
+    if(resAl.length)aHtml+=`<div style="font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase;margin:12px 0 8px">Military / Intel</div>`;
+    aHtml+=otherAl.map(a=>`<div class="walt"><span class="wabg ${a.c==='u'?'wau':a.c==='w'?'waw2':'wai'}">${a.c==='u'?'URGENT':a.c==='w'?'WARN':'INFO'}</span><span>${a.t}</span></div>`).join('');
+  }
+  if(!al.length)aHtml=`<div style="color:#4a6a88;font-family:monospace;font-size:11px;padding:16px 0">// No active alerts${(thr.food||thr.gc||thr.runes)?'':' — set thresholds above to enable resource alerts'}</div>`;
+  el.innerHTML=settingsHtml+aHtml;
 }
 };
 
