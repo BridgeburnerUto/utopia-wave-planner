@@ -21,46 +21,67 @@ function _buildAlerts() {
         <span>Set to 0 to disable. Saved with war plan.</span>
       </div>
 
-      <div style="font-family:monospace;font-size:10px;color:#00d4ff;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:4px">Enemy Kingdom</div>
+      <div style="font-family:monospace;font-size:10px;color:#D4A017;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:4px">Enemy Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↑</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.enemyFoodRich || ''}" oninput="__wpA.setThr('enemyFoodRich',this.value)">
-        <div class="wthr-hint">Above X → <span style="color:#aa66ff">steal / vermin</span> target</div>
+          value="${thr.enemyFoodRich || ''}" onblur="__wpA.setThr('enemyFoodRich',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('enemyFoodRich',this.value)">
+        <div class="wthr-hint">Above X → <span style="color:#c87030">steal / vermin</span> target</div>
       </div>
       <div class="wthr-row">
         <div class="wthr-label">Food ↓</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.enemyFoodLow || ''}" oninput="__wpA.setThr('enemyFoodLow',this.value)">
-        <div class="wthr-hint">Below X → <span style="color:#ff4455">starvation risk</span> — vermin + drought + gluttony</div>
+          value="${thr.enemyFoodLow || ''}" onblur="__wpA.setThr('enemyFoodLow',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('enemyFoodLow',this.value)">
+        <div class="wthr-hint">Below X → <span style="color:#E05050">starvation risk</span> — vermin + drought + gluttony</div>
       </div>
       <div class="wthr-row">
         <div class="wthr-label">GC ↑</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.enemyGcRich || ''}" oninput="__wpA.setThr('enemyGcRich',this.value)">
-        <div class="wthr-hint">Above X → <span style="color:#aa66ff">fools gold / steal</span> target</div>
+          value="${thr.enemyGcRich || ''}" onblur="__wpA.setThr('enemyGcRich',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('enemyGcRich',this.value)">
+        <div class="wthr-hint">Above X → <span style="color:#c87030">fools gold / steal</span> target</div>
       </div>
       <div class="wthr-row">
         <div class="wthr-label">Runes ↑</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.enemyRunesRich || ''}" oninput="__wpA.setThr('enemyRunesRich',this.value)">
-        <div class="wthr-hint">Above X → <span style="color:#aa66ff">lightning strike / steal</span> target</div>
+          value="${thr.enemyRunesRich || ''}" onblur="__wpA.setThr('enemyRunesRich',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('enemyRunesRich',this.value)">
+        <div class="wthr-hint">Above X → <span style="color:#c87030">lightning strike / steal</span> target</div>
       </div>
 
-      <div style="font-family:monospace;font-size:10px;color:#00ff88;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:14px">Own Kingdom</div>
+      <div style="font-family:monospace;font-size:10px;color:#60C040;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:14px">Own Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↓</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.ownFoodLow || ''}" oninput="__wpA.setThr('ownFoodLow',this.value)">
-        <div class="wthr-hint">Below X → <span style="color:#ffaa00">send aid!</span></div>
+          value="${thr.ownFoodLow || ''}" onblur="__wpA.setThr('ownFoodLow',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('ownFoodLow',this.value)">
+        <div class="wthr-hint">Below X → <span style="color:#e09040">send aid!</span></div>
       </div>
       <div class="wthr-row">
         <div class="wthr-label">Peons ↓</div>
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
-          value="${thr.ownPeasLow || ''}" oninput="__wpA.setThr('ownPeasLow',this.value)">
-        <div class="wthr-hint">Below X → <span style="color:#ff4455">beware!</span> low peasant population</div>
+          value="${thr.ownPeasLow || ''}" onblur="__wpA.setThr('ownPeasLow',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('ownPeasLow',this.value)">
+        <div class="wthr-hint">Below X → <span style="color:#E05050">beware!</span> low peasant population</div>
+      </div>
+    </div>` : '';
+
+  // ── Discord settings (leader only) ───────────────────────────────────────
+  const discordHtml = isLeader ? `
+    <div class="wthr" style="border-color:#5865F233">
+      <div class="wthr-title" style="color:#5865F2">
+        Discord Alerts
+        <span>Sends alerts to a Discord channel when status changes</span>
+      </div>
+      <div class="wthr-row">
+        <div class="wthr-label" style="width:80px;font-size:11px">Webhook</div>
+        <input class="wthr-input" type="text" placeholder="https://discord.com/api/webhooks/..."
+          value="${esc(S.discordWebhook || '')}"
+          style="width:320px;font-size:11px"
+          onblur="__wpA.setDiscordWebhook(this.value)" onkeydown="if(event.key==='Enter')__wpA.setDiscordWebhook(this.value)">
+        <button class="wb" style="font-size:10px;padding:3px 9px;margin-left:8px" onclick="__wpA.testDiscord()">Test</button>
+      </div>
+      <div style="font-size:10px;color:#7a5a2a;margin-top:6px;line-height:1.6">
+        In Discord: Channel Settings → Integrations → Webhooks → New Webhook → Copy URL<br>
+        Alerts fire automatically on tool open when status changes. Save plan to persist URL.
       </div>
     </div>` : '';
 
@@ -83,21 +104,21 @@ function _buildAlerts() {
   const ac = $id('__wpalc');
   if (ac) {
     ac.textContent = totalCount ? ' (' + totalCount + ')' : '';
-    ac.style.color = al.some(a => a.c === 'u') ? '#ff4455' : '#ffaa00';
+    ac.style.color = al.some(a => a.c === 'u') ? '#E05050' : '#e09040';
   }
 
   if (!al.length && !snAlert) {
-    return settingsHtml + `<div style="color:#4a6a88;font-family:monospace;font-size:11px;padding:16px 0">
+    return settingsHtml + `<div style="color:#7a5a2a;font-family:monospace;font-size:11px;padding:16px 0">
       // No active alerts${_anyThresholdSet(thr) ? '' : ' — set thresholds above to enable resource alerts'}
     </div>`;
   }
 
   // ── Group and render alerts ────────────────────────────────────────────
   const sections = [
-    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#aa66ff' },
-    { key: 'enemy_low',  label: 'Enemy Starvation Risk',  color: '#ff4455' },
-    { key: 'own',        label: 'Own Kingdom',            color: '#ffaa00' },
-    { key: 'military',   label: 'Military / Intel',       color: '#4a6a88' },
+    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#c87030' },
+    { key: 'enemy_low',  label: 'Enemy Starvation Risk',  color: '#E05050' },
+    { key: 'own',        label: 'Own Kingdom',            color: '#e09040' },
+    { key: 'military',   label: 'Military / Intel',       color: '#7a5a2a' },
   ];
 
   let aHtml = '';
@@ -112,7 +133,7 @@ function _buildAlerts() {
       </div>`).join('');
   });
 
-  return settingsHtml + snHtml + aHtml;
+  return settingsHtml + discordHtml + snHtml + aHtml;
 }
 
 function _anyThresholdSet(thr) {
@@ -134,11 +155,26 @@ function _buildSnAlert() {
 function _gatherAlerts(thr) {
   const al = [];
 
+  // ── Dragon alerts ────────────────────────────────────────────────────────
+  const ownDragon = S.own?.kdEffects?.dragon || '';
+  const eneDragon = S.enemy?.kdEffects?.dragon || '';
+
+  if (ownDragon) {
+    al.push({ group: 'own', badge: 'DRAGON', cls: 'wau',
+      bg: 'background:rgba(255,68,85,.08);border:1px solid rgba(255,68,85,.3);',
+      t: `<b>🐉 ${esc(ownDragon)}</b> is ravaging our lands! Cast Dragon Slayer if available.` });
+  }
+  if (eneDragon) {
+    al.push({ group: 'military', badge: 'DRAGON', cls: 'wai',
+      bg: 'background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);',
+      t: `Enemy has a <b>🐉 ${esc(eneDragon)}</b> active on their lands.` });
+  }
+
   // ── Enemy province alerts ──────────────────────────────────────────────
   if (S.enemy) {
     S.enemy.provinces.forEach(p => {
       const da  = p.calcs?.defPointsSummary?.ageSeconds;
-      const age = da != null ? ` <span style="color:#4a6a88">(intel ${fA(da)} old)</span>` : '';
+      const age = da != null ? ` <span style="color:#7a5a2a">(intel ${fA(da)} old)</span>` : '';
 
       if (p.sot) {
         const food  = p.sot.food  || 0;
