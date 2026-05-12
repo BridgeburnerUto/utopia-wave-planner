@@ -41,7 +41,14 @@ const ENEMY_KD = _IS.enemyKd || '5:3';
 
 if (!TOKEN) { alert('Wave Planner: No token found. Open from intel.utopia.site.'); return; }
 if (document.getElementById('__wp_overlay')) {
+  // Tool already open — update enemy KD from IS in case it changed, then refresh
+  const _newEnemy = _IS.enemyKd || S.eLoc;
+  const _enemyChanged = _newEnemy && _newEnemy !== S.eLoc;
   document.getElementById('__wp_overlay').style.display = 'flex';
+  if (_enemyChanged) {
+    S.eLoc = _newEnemy;
+    window.__wpA.refresh();
+  }
   return;
 }
 
