@@ -198,4 +198,12 @@ const CSS = `
 .wthr-hint{font-size:11px;color:#4a6a88;flex:1}
 .wres-alert{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.2);border-radius:3px}
 @keyframes __wpspin{to{transform:rotate(360deg)}}
+.writ-badge{position:relative;cursor:pointer;transition:border-color .15s}
+.writ-badge:hover{border-color:#2a3f55!important}
+.writ-drop{position:absolute;top:100%;left:0;z-index:100;background:#0f1218;border:1px solid #2a3f55;border-radius:4px;padding:12px 14px;min-width:200px;margin-top:4px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
+.writ-drop-title{font-family:monospace;font-size:12px;color:#00d4ff;letter-spacing:1px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #1e2d3d}
+.writ-drop-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px}
+.writ-drop-row:last-child{margin-bottom:0}
+.writ-drop-l{color:#4a6a88;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+#__wprit{display:contents}
 `;

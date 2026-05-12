@@ -33,7 +33,9 @@ const S = {
   openSlot: null,   // {ci, ii} for ops panel
   role: 'leader',   // 'leader' | 'player'
   playerProv: null, // selected own province object
-  lbView: 'damage',  // leaderboard sort: 'damage'|'ops'|'gain'
+  lbView: 'damage',
+  currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
+  snLastAck: 0,          // real timestamp of last Snatch News acknowledgement  // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
     mode: 'all',       // 'all' | 'war' | 'custom'
     fromYear: null,    // in-game year number (e.g. 1 for YR1)

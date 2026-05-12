@@ -40,6 +40,7 @@ function buildOverlay() {
   <div class="wkb"><div class="l">Own KD</div><div class="v" id="__wpown">—</div></div>
   <div class="wkb"><div class="l">Enemy</div><div class="v va" id="__wpene">—</div></div>
   <div class="wkb"><div class="l">War</div><div class="v" id="__wpwar">—</div></div>
+  <div id="__wprit" style="display:contents"></div>
   <span class="wsav" id="__wpsav"></span>
 </div>
 
@@ -61,6 +62,16 @@ function buildOverlay() {
 </div>`;
 
   document.body.appendChild(ov);
+
+  // Close ritual dropdowns when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.writ-badge') && !e.target.closest('.writ-drop')) {
+      ['own','ene'].forEach(w => {
+        const d = $id('__wprit_' + w + '_drop');
+        if (d) d.style.display = 'none';
+      });
+    }
+  });
 
   // Close ops panel when clicking outside it
   $id('__wpbd').addEventListener('click', e => {

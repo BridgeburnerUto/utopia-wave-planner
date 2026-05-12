@@ -20,6 +20,7 @@ const ORDER = [
   'api.js',
   'firebase.js',
   'dom.js',
+  'ritual.js',
   'tabs/board.js',
   'tabs/player.js',
   'tabs/summary.js',
