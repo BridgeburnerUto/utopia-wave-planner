@@ -16,7 +16,16 @@ const S = {
   wpId: null,       // warPlanId from IS API
   cols: [],         // kanban columns [{title, items:[{id, province:{name,race,slot,requiredOps,notes}}]}]
   eLoc: '5:3',      // current enemy location string
-  thresholds: { food: 0, gc: 0, runes: 0 },
+  thresholds: {
+    // Enemy thresholds
+    enemyFoodRich:  0,   // above X → steal/vermin target
+    enemyFoodLow:   0,   // below X → starvation risk (vermin+drought+gluttony)
+    enemyGcRich:    0,   // above X → fools gold/steal target
+    enemyRunesRich: 0,   // above X → lightning strike/steal target
+    // Own kingdom thresholds
+    ownFoodLow:     0,   // below X → send aid alert
+    ownPeasLow:     0,   // below X → beware alert
+  },
 
   // UI state
   tab: 'board',
@@ -24,5 +33,12 @@ const S = {
   openSlot: null,   // {ci, ii} for ops panel
   role: 'leader',   // 'leader' | 'player'
   playerProv: null, // selected own province object
-  lbView: 'damage', // leaderboard sort: 'damage'|'ops'|'gain'
+  lbView: 'damage',  // leaderboard sort: 'damage'|'ops'|'gain'
+  lbFilter: {
+    mode: 'all',       // 'all' | 'war' | 'custom'
+    fromYear: null,    // in-game year number (e.g. 1 for YR1)
+    fromMonth: null,   // 1-12
+    toYear: null,
+    toMonth: null,
+  },
 };
