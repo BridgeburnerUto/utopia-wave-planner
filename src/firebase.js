@@ -54,6 +54,12 @@ async function fbGet(path) {
  * filters: [{field, op, value}] — op defaults to 'EQUAL', value must be a string.
  * Returns array of plain JS objects (fields unwrapped from Firestore format).
  */
+/** Delete a document at path */
+async function fbDelete(path) {
+  const r = await fetch(_fbUrl(path), { method: 'DELETE' }).catch(() => null);
+  return r?.ok || false;
+}
+
 async function fbQuery(collection, filters = []) {
   const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
   const where = filters.map(f => ({

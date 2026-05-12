@@ -35,7 +35,8 @@ const S = {
   playerProv: null, // selected own province object
   lbView: 'damage',
   currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
-  snLastAck: 0,          // real timestamp of last Snatch News acknowledgement  // leaderboard sort: 'damage'|'ops'|'gain'
+  snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
+  nwView: 'total',       // NW graph view: 'total'|'war'  // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
     mode: 'all',       // 'all' | 'war' | 'custom'
     fromYear: null,    // in-game year number (e.g. 1 for YR1)

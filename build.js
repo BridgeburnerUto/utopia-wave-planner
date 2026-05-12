@@ -25,6 +25,7 @@ const ORDER = [
   'tabs/player.js',
   'tabs/summary.js',
   'tabs/alerts.js',
+  'tabs/nwgraph.js',
   'tabs/leaderboard.js',
   'app.js',
 ];
