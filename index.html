@@ -64,7 +64,7 @@ h1{font-family:'Share Tech Mono',monospace;font-size:22px;color:#00d4ff;letter-s
 // Build app.js URL from this page's location
 // Works whether hosted at root (github.io/repo/) or subdirectory
 const base = location.href.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const appUrl = base + '/app.js';
+const appUrl = base + 'dist/app.js';
 
 const code = `(function(){
 var t=sessionStorage.getItem('Utopia-Token');
