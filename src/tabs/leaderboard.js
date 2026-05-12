@@ -297,6 +297,38 @@ function _buildFilterBar(f, warPeriod, totalCount, filteredCount) {
     </div>`;
 }
 
+// ── Backfill missing utoYear/utoMonth on old Firebase ops ───────────────────────
+// Run once — patches existing docs that were stored before date fields were added.
+// Safe to run multiple times; skips docs that already have utoYear set.
+
+async function backfillOpDates() {
+  const kdId = S.own?.location.replace(':', '_');
+  if (!kdId) return;
+  try {
+    const ops = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
+    const needsFill = ops.filter(op => !op.utoYear && op.utoDate);
+    if (!needsFill.length) {
+      console.log('[WavePlanner] Backfill: all ops already have date fields');
+      return;
+    }
+    console.log(`[WavePlanner] Backfill: patching ${needsFill.length} ops...`);
+    let patched = 0;
+    for (const op of needsFill) {
+      const d = _parseUtoDate(op.utoDate);
+      if (!d) continue;
+      await fbWrite(`ops/${kdId}_${op.opId}`, {
+        ...op,
+        utoYear:  d.year,
+        utoMonth: d.month,
+      });
+      patched++;
+    }
+    console.log(`[WavePlanner] Backfill: patched ${patched} ops`);
+  } catch(e) {
+    console.log('[WavePlanner] Backfill failed:', e.message);
+  }
+}
+
 // ── Silent op sync ───────────────────────────────────────────────────────────
 
 async function syncOps() {

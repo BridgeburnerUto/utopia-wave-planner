@@ -111,6 +111,31 @@ async function renderNwGraph() {
   }
 }
 
+/**
+ * Build solid polyline segments for contiguous runs of fresh enemy data points.
+ * Each unbroken run of eneFresh=true points becomes its own <polyline>.
+ * This correctly handles mixed fresh/stale sequences without index mapping bugs.
+ */
+function _buildFreshSegments(vals, points, xPos, yPos) {
+  const segments = [];
+  let current = [];
+
+  points.forEach((p, i) => {
+    if (p.eneFresh) {
+      current.push(`${xPos(i).toFixed(1)},${yPos(vals[i]).toFixed(1)}`);
+    } else {
+      if (current.length >= 2) segments.push(current.join(' '));
+      else if (current.length === 1) segments.push(current[0]); // isolated fresh point — dot handles it
+      current = [];
+    }
+  });
+  if (current.length >= 2) segments.push(current.join(' '));
+
+  return segments.map(pts =>
+    `<polyline points="${pts}" fill="none" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
+  ).join('\n      ');
+}
+
 function _buildGraph(points) {
   if (!S.nwView) S.nwView = 'total';
   const isTotal = S.nwView === 'total';
@@ -213,14 +238,10 @@ function _buildGraph(points) {
       <polyline points="${ownVals.map((v,i) => `${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')}"
         fill="none" stroke="#00ff88" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       ${buildDots(ownVals, points, '#00ff88', false)}
-      <!-- Enemy line — solid where fresh, dashed where stale -->
+      <!-- Enemy line — full dashed baseline, solid segments over fresh points -->
       <polyline points="${eneVals.map((v,i) => `${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')}"
-        fill="none" stroke="#00d4ff" stroke-width="2" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
-      <polyline points="${eneVals.filter((v,i) => points[i].eneFresh).map((v,i_) => {
-        const i = points.findIndex((p,idx) => p.eneFresh && eneVals.filter((v2,i2) => points[i2].eneFresh)[i_] === eneVals[idx]);
-        return `${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`;
-      }).join(' ')}"
-        fill="none" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        fill="none" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+      ${_buildFreshSegments(eneVals, points, xPos, yPos)}
       ${buildDots(eneVals, points, '#00d4ff', true)}
       <!-- Legend -->
       <circle cx="${PAD.left + 10}" cy="${PAD.top + 10}" r="4" fill="#00ff88"/>
