@@ -155,14 +155,13 @@ function renderRitualBadges() {
       <div class="wkb writ-badge" id="__wprit_own" onclick="__wpA.toggleRitual('own')" style="cursor:pointer;border-color:${col}22">
         <div class="l">Own Ritual</div>
         <div class="v" style="color:${col};font-family:monospace">${own.ritualDuration}t</div>
-      </div>
       <div class="writ-drop" id="__wprit_own_drop" style="display:none">
         <div class="writ-drop-title">${esc(own.ritual)}</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${own.ritualDuration}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Real hours</span><span style="font-family:monospace">${own.ritualDuration}h</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${own.ritualEff?.toFixed(1)}%</span></div>
         ${expiry ? `<div class="writ-drop-row"><span class="writ-drop-l">Expires</span><span style="font-family:monospace;color:#ffaa00">${esc(expiry.label)}</span></div>` : ''}
-      </div>`;
+      </div></div>`;
   }
 
   // Enemy ritual badge — active ritual OR casting in progress
@@ -184,7 +183,6 @@ function renderRitualBadges() {
       <div class="wkb writ-badge" id="__wprit_ene" onclick="__wpA.toggleRitual('ene')" style="cursor:pointer;border-color:${col}22">
         <div class="l">Enemy Ritual</div>
         <div class="v" style="color:${col};font-family:monospace">${enemy.ritualDuration}t</div>
-      </div>
       <div class="writ-drop" id="__wprit_ene_drop" style="display:none">
         <div class="writ-drop-title">${esc(enemy.ritual)}</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${enemy.ritualDuration}</span></div>
@@ -192,7 +190,7 @@ function renderRitualBadges() {
         <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${enemy.ritualEff?.toFixed(1)}%</span></div>
         ${expiry ? `<div class="writ-drop-row"><span class="writ-drop-l">Expires</span><span style="font-family:monospace;color:#ffaa00">${esc(expiry.label)}</span></div>` : ''}
         ${castingHtml}
-      </div>`;
+      </div></div>`;
   } else if (casting) {
     // No active ritual but casting detected — show amber badge
     const timeCol = casting.ticksUntilLaunch != null && casting.ticksUntilLaunch <= 12 ? '#ff4455' : '#ffaa00';
@@ -203,7 +201,6 @@ function renderRitualBadges() {
       <div class="wkb writ-badge" id="__wprit_ene" onclick="__wpA.toggleRitual('ene')" style="cursor:pointer;border-color:#ffaa0022">
         <div class="l">Enemy Casting</div>
         <div class="v" style="color:${timeCol};font-family:monospace">⚠ ${timeStr}</div>
-      </div>
       <div class="writ-drop" id="__wprit_ene_drop" style="display:none">
         <div class="writ-drop-title" style="color:#ffaa00">⚠ Ritual Being Cast</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ritual</span><span style="font-family:monospace">${esc(casting.name)}</span></div>
@@ -211,7 +208,7 @@ function renderRitualBadges() {
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
         ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${timeCol}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
         <div style="margin-top:8px;font-size:10px;color:#4a6a88">Source: Snatch News. Take another SN to confirm if it has launched.</div>
-      </div>`;
+      </div></div>`;
   }
 
   const container = $id('__wprit');
