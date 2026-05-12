@@ -76,11 +76,11 @@ async function checkAndSendDiscordAlerts() {
     toSend.push({
       content: '@everyone',
       embeds: [{
-        title: '🐉 DRAGON INCOMING',
+        title: '🐉 Dragon incoming',
         description: `A **${ownDragon}** is now ravaging our lands!`,
         color: DISCORD.COLORS.red,
-        fields: [{ name: 'Action', value: 'Prepare defences — cast Dragon Slayer if available', inline: false }],
         timestamp: new Date().toISOString(),
+        footer: { text: 'Wave Planner · War Planning Tool' },
       }],
     });
   }
@@ -93,11 +93,12 @@ async function checkAndSendDiscordAlerts() {
     toSend.push({
       content: `<@&${DISCORD.COUNCIL_ROLE}>`,
       embeds: [{
-        title: '⚔️ ENEMY DRAGON GONE',
-        description: `The enemy **${prevEneDragon}** is no longer active.`,
+        title: '⚔️ Enemy dragon gone',
+        description: `The enemy **${prevEneDragon}** is no longer active.
+Confirm via SoT.`,
         color: DISCORD.COLORS.red,
-        fields: [{ name: 'Action', value: 'Confirm via SoT — consider launching our own dragon', inline: false }],
         timestamp: new Date().toISOString(),
+        footer: { text: 'Wave Planner · War Planning Tool' },
       }],
     });
   }
@@ -110,18 +111,20 @@ async function checkAndSendDiscordAlerts() {
   const prevMissing = prev.missing_som || [];
   const newMissing  = missingSom.filter(n => !prevMissing.includes(n));
   if (newMissing.length) {
+    // Build bullet list of missing SoM provinces with OPA
+    const missingLines = newMissing.map(name => {
+      const p = S.enemy?.provinces?.find(p => p.name === name);
+      const opa = p?.sot?.opa || 0;
+      return `· ${name}${opa ? ' (' + opa + ' OPA)' : ''}`;
+    }).join('\n');
+
     toSend.push({
       content: `<@&${DISCORD.ATTACKER_ROLE}>`,
       embeds: [{
-        title: '⚠️ MISSING SoM',
-        description: `${newMissing.length} high-OPA province${newMissing.length > 1 ? 's are' : ' is'} missing SoM data`,
+        title: `⚠️ Missing SoM — ${newMissing.length} province${newMissing.length > 1 ? 's' : ''}`,
+        description: missingLines,
         color: DISCORD.COLORS.yellow,
-        fields: newMissing.map(name => ({
-          name: '📍 Province',
-          value: name,
-          inline: true,
-        })),
-        footer: { text: 'Take a SoM on these provinces before the next wave' },
+        footer: { text: 'Take a SoM on these before the next wave · Wave Planner' },
         timestamp: new Date().toISOString(),
       }],
     });
@@ -137,18 +140,14 @@ async function checkAndSendDiscordAlerts() {
     const prevLowFood = prev.own_food_low || [];
     const newLowFood  = lowFood.filter(p => !prevLowFood.includes(p.name));
     if (newLowFood.length) {
+      const foodLines = newLowFood.map(p => `· ${p.name} — ${fK(p.food)} food`).join('\n');
       toSend.push({
         content: '',
         embeds: [{
-          title: '🍞 OWN FOOD CRITICAL',
-          description: `${newLowFood.length} province${newLowFood.length > 1 ? 's are' : ' is'} below food threshold (${fK(foodThr)})`,
+          title: `🍞 Own food critical — ${newLowFood.length} province${newLowFood.length > 1 ? 's' : ''}`,
+          description: foodLines,
           color: DISCORD.COLORS.red,
-          fields: newLowFood.map(p => ({
-            name: p.name,
-            value: `${fK(p.food)} food`,
-            inline: true,
-          })),
-          footer: { text: 'Send aid immediately' },
+          footer: { text: 'Send aid immediately · Wave Planner' },
           timestamp: new Date().toISOString(),
         }],
       });
@@ -170,18 +169,14 @@ async function checkAndSendDiscordAlerts() {
     const prevLowPeas = prev.own_peas_low || [];
     const newLowPeas  = lowPeas.filter(p => !prevLowPeas.includes(p.name));
     if (newLowPeas.length) {
+      const peasLines = newLowPeas.map(p => `· ${p.name} — ${fK(p.peas)} peasants`).join('\n');
       toSend.push({
         content: '',
         embeds: [{
-          title: '👥 OWN POPULATION CRITICAL',
-          description: `${newLowPeas.length} province${newLowPeas.length > 1 ? 's are' : ' is'} below peasant threshold (${fK(peasThr)})`,
+          title: `👥 Own population critical — ${newLowPeas.length} province${newLowPeas.length > 1 ? 's' : ''}`,
+          description: peasLines,
           color: DISCORD.COLORS.red,
-          fields: newLowPeas.map(p => ({
-            name: p.name,
-            value: `${fK(p.peas)} peasants`,
-            inline: true,
-          })),
-          footer: { text: 'Check for starvation or hostile spells' },
+          footer: { text: 'Check for starvation or hostile spells · Wave Planner' },
           timestamp: new Date().toISOString(),
         }],
       });
@@ -212,7 +207,7 @@ async function testDiscordWebhook(webhookUrl) {
   return sendDiscordEmbed(webhookUrl, {
     content: '',
     embeds: [{
-      title: '✅ Wave Planner Connected',
+      title: '✅ Wave Planner connected',
       description: 'Discord alerts are working correctly.',
       color: 65280,
       timestamp: new Date().toISOString(),
