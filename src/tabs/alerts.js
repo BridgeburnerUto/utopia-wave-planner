@@ -21,7 +21,7 @@ function _buildAlerts() {
         <span>Set to 0 to disable. Saved with war plan.</span>
       </div>
 
-      <div style="font-family:monospace;font-size:10px;color:#D4A017;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:4px">Enemy Kingdom</div>
+      <div style="font-size:10px;font-weight:700;color:#D4A017;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:4px;border-left:2px solid #8B6914;padding-left:8px;">Enemy Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↑</div>
@@ -48,7 +48,7 @@ function _buildAlerts() {
         <div class="wthr-hint">Above X → <span style="color:#c87030">lightning strike / steal</span> target</div>
       </div>
 
-      <div style="font-family:monospace;font-size:10px;color:#60C040;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:14px">Own Kingdom</div>
+      <div style="font-size:10px;font-weight:700;color:#60C040;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:16px;border-left:2px solid #2a6614;padding-left:8px;">Own Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↓</div>
@@ -67,10 +67,7 @@ function _buildAlerts() {
   // ── Discord settings (leader only) ───────────────────────────────────────
   const discordHtml = isLeader ? `
     <div class="wthr" style="border-color:#5865F233">
-      <div class="wthr-title" style="color:#5865F2">
-        Discord Alerts
-        <span>Sends alerts to a Discord channel when status changes</span>
-      </div>
+      <div style="font-size:10px;font-weight:700;color:#7075c0;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-left:2px solid #5055a0;padding-left:8px;">Discord Alerts <span style="color:#7a5a2a;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">— fires on state change</span></div>
       <div class="wthr-row">
         <div class="wthr-label" style="width:80px;font-size:11px">Webhook</div>
         <input class="wthr-input" type="text" placeholder="https://discord.com/api/webhooks/..."
@@ -107,33 +104,40 @@ function _buildAlerts() {
     ac.style.color = al.some(a => a.c === 'u') ? '#E05050' : '#e09040';
   }
 
-  if (!al.length && !snAlert) {
-    return settingsHtml + `<div style="color:#7a5a2a;font-family:monospace;font-size:11px;padding:16px 0">
-      // No active alerts${_anyThresholdSet(thr) ? '' : ' — set thresholds above to enable resource alerts'}
-    </div>`;
-  }
-
-  // ── Group and render alerts ────────────────────────────────────────────
+  // ── Build alert list HTML ─────────────────────────────────────────────
   const sections = [
-    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#c87030' },
+    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#D4A017' },
     { key: 'enemy_low',  label: 'Enemy Starvation Risk',  color: '#E05050' },
     { key: 'own',        label: 'Own Kingdom',            color: '#e09040' },
     { key: 'military',   label: 'Military / Intel',       color: '#7a5a2a' },
   ];
 
   let aHtml = '';
-  sections.forEach(sec => {
-    const group = al.filter(a => a.group === sec.key);
-    if (!group.length) return;
-    aHtml += `<div style="font-family:monospace;font-size:10px;color:${sec.color};letter-spacing:2px;text-transform:uppercase;margin-bottom:8px${aHtml ? ';margin-top:16px' : ''}">${sec.label} (${group.length})</div>`;
-    aHtml += group.map(a => `
-      <div class="walt" style="margin-bottom:4px;border-radius:3px;${a.bg || ''}">
-        <span class="wabg ${a.cls}">${a.badge}</span>
-        <span>${a.t}</span>
-      </div>`).join('');
-  });
+  if (!al.length && !snAlert) {
+    aHtml = `<div style="color:#7a5a2a;font-size:12px;padding:20px 0;font-style:italic;">
+      No active alerts${_anyThresholdSet(thr) ? '.' : ' — set thresholds on the left to enable resource alerts.'}
+    </div>`;
+  } else {
+    if (snHtml) aHtml += snHtml;
+    sections.forEach(sec => {
+      const group = al.filter(a => a.group === sec.key);
+      if (!group.length) return;
+      aHtml += `<div style="font-size:10px;font-weight:700;color:${sec.color};letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;margin-top:${aHtml?'16':'0'}px;padding-bottom:6px;border-bottom:1px solid #3a2810;display:flex;align-items:center;gap:8px;">
+        ${sec.label} <span style="background:#1a1208;border:1px solid #3a2810;color:#7a5a2a;font-size:10px;padding:1px 7px;border-radius:2px;">${group.length}</span>
+      </div>`;
+      aHtml += group.map(a => `
+        <div class="walt" style="${a.bg || 'background:#1a1208;border-color:#3a2810;'}">
+          <span class="wabg ${a.cls}">${a.badge}</span>
+          <span>${a.t}</span>
+        </div>`).join('');
+    });
+  }
 
-  return settingsHtml + discordHtml + snHtml + aHtml;
+  // Two-column layout: settings+discord left, live alerts right
+  return `<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start;">
+    <div>${settingsHtml}${discordHtml}</div>
+    <div>${aHtml}</div>
+  </div>`;
 }
 
 function _anyThresholdSet(thr) {

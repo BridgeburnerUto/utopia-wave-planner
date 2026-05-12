@@ -75,22 +75,22 @@ const TRACKED_OPS = new Set([...OP_SETS.THIEF_SAB, ...OP_SETS.OFFENSIVE_SPELL]);
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#120d04;color:#c8a060;font-family:Rajdhani,sans-serif;display:flex;flex-direction:column;overflow:hidden}
 #__wp_overlay *{box-sizing:border-box;margin:0;padding:0}
-#__wph{background:#1a1208;border-bottom:1px solid #8B6914;height:48px;display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0}
+#__wph{background:#1a1208;border-bottom:1px solid #8B6914;height:52px;display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0}
 #__wph .logo{font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:#D4A017;letter-spacing:2px;flex:1}
-.wb{padding:4px 11px;background:#1a1510;border:1px solid #4a3a1a;color:#907050;font-size:12px;font-weight:700;cursor:pointer;border-radius:3px;transition:all .15s}
+.wb{padding:6px 14px;background:#1a1510;border:1px solid #4a3a1a;color:#907050;font-size:12px;font-weight:700;cursor:pointer;border-radius:3px;transition:all .15s}
 .wb:hover{border-color:#D4A017;color:#D4A017}
 .wb.g{border-color:#2a6614;color:#60C040}.wb.g:hover{background:rgba(96,192,64,.1)}
 .wb.r{border-color:#8B1414;color:#E05050}.wb.r:hover{background:rgba(224,80,80,.1)}
-#__wptb{background:#120d04;border-bottom:1px solid #4a3010;display:flex;padding:0 20px;flex-shrink:0}
-.wt{padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7a5a2a;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+#__wptb{background:#120d04;border-bottom:1px solid #4a3010;display:flex;padding:0 20px;flex-shrink:0;gap:4px}
+.wt{padding:12px 20px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#7a5a2a;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
 .wt:hover{color:#c8a060}.wt.on{color:#D4A017;border-bottom-color:#D4A017}.wt.ong{color:#60C040;border-bottom-color:#60C040}
-#__wptl{background:#150f05;border-bottom:1px solid #3a2810;padding:6px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0}
-.wkb{background:#1a1208;border:1px solid #3a2810;border-radius:3px;padding:4px 10px;font-size:11px}
-.wkb .l{color:#7a5a2a;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
-.wkb .v{color:#c8a060;font-weight:600}.wkb .va{color:#D4A017;font-family:monospace}
+#__wptl{background:#150f05;border-bottom:1px solid #3a2810;padding:8px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;flex-shrink:0}
+.wkb{background:#1a1208;border:1px solid #3a2810;border-radius:3px;padding:6px 12px;font-size:12px}
+.wkb .l{color:#7a5a2a;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:1px}
+.wkb .v{color:#c8a060;font-weight:600;font-size:13px}.wkb .va{color:#D4A017;font-size:13px}
 .wsav{font-family:monospace;font-size:11px;color:#7a5a2a}
 .wsav.ok{color:#60C040}.wsav.err{color:#E05050}.wsav.ing{color:#e09040}
-#__wpbd{flex:1;overflow-y:auto;padding:16px 20px;position:relative}
+#__wpbd{flex:1;overflow-y:auto;padding:20px 24px;position:relative}
 .webar{display:flex;align-items:center;gap:10px;margin-bottom:14px;background:#1a1208;border:1px solid #3a2810;border-radius:4px;padding:10px 14px}
 .webar label{font-size:10px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
 .webar input{background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:13px;padding:5px 8px;border-radius:3px;width:70px;outline:none}
@@ -134,7 +134,7 @@ const CSS = `
 .wsb .l{font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase}
 .wsb .v{font-size:16px;color:#D4A017}
 .waf{color:#60C040}.was{color:#D4A017}.waw{color:#e09040}.wao{color:#E05050}
-.walt{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid #3a2810;font-size:12px}
+.walt{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:3px;border:1px solid #3a2810;margin-bottom:4px;font-size:12px}
 .wabg{font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;white-space:nowrap;flex-shrink:0;margin-top:1px}
 .wau{background:rgba(160,30,30,.2);color:#f08080;border:1px solid #8B1414}
 .waw2{background:rgba(180,100,20,.2);color:#e09040;border:1px solid #c87030}
@@ -186,7 +186,7 @@ const CSS = `
 .watk-notarget{background:#1a1208;border:1px solid #3a2810;border-radius:4px;padding:24px;text-align:center;color:#7a5a2a;font-size:12px}
 .wspin{display:inline-block;width:28px;height:28px;border:2px solid #3a2810;border-top-color:#D4A017;border-radius:50%;animation:__wpspin .7s linear infinite}
 .wload{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;color:#7a5a2a;font-size:12px;letter-spacing:1px}
-.wsech{font-size:10px;color:#7a5a2a;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #3a2810}
+.wsech{font-size:10px;color:#7a5a2a;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;margin-top:20px;padding-bottom:6px;border-bottom:1px solid #3a2810}
 .wthr{background:#1a1208;border:1px solid #3a2810;border-radius:4px;padding:14px 16px;margin-bottom:16px}
 .wthr-title{font-size:10px;font-weight:700;color:#7a5a2a;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
 .wthr-title span{color:#e09040;font-size:10px;font-weight:400;letter-spacing:0;text-transform:none}
@@ -197,7 +197,7 @@ const CSS = `
 .wthr-input:focus{border-color:#D4A017}
 .wthr-hint{font-size:11px;color:#7a5a2a;flex:1}
 .wres-alert{background:rgba(180,100,20,.08);border:1px solid rgba(180,100,20,.2);border-radius:3px}
-.writ-badge{position:relative;cursor:pointer;transition:border-color .15s}
+.writ-badge{position:relative;cursor:pointer;transition:border-color .15s;padding:5px 12px;border-radius:3px;border:1px solid}
 .writ-badge:hover{border-color:#8B6914!important}
 .writ-drop{position:absolute;top:calc(100% + 6px);left:0;z-index:99999;background:#1a1208;border:1px solid #8B6914;border-radius:4px;padding:12px 14px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.8)}
 .writ-drop-title{font-size:12px;color:#D4A017;letter-spacing:1px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #3a2810}
