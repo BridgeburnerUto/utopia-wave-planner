@@ -32,25 +32,45 @@ const IOPS = [
   {c:'TOR',l:'Tornado'},{c:'WRi',l:'War Ritual'},
 ];
 
-// Op type classification sets used by syncOps
+// Op type classification sets used by syncOps and leaderboard filtering
 const OP_SETS = {
+  // Intel / espionage ops — never tracked on leaderboard
   ESPIONAGE: new Set([
     'SPY_ON_THRONE','SPY_ON_MILITARY','SPY_ON_DEFENSE','SPY_ON_SCIENCES',
     'INFILTRATE','SURVEY_BUILDINGS','SNATCH_NEWS','SPY_ON_EXPLORATION','SHADOW_LIGHT',
+    'ILLUMINATE_SHADOWS',
   ]),
+
+  // Self-buff spells — never tracked on leaderboard
   SELF_BUFF: new Set([
     'TREE_OF_GOLD','BUILDERS_BOON','MAGIC_SHIELD','LOVE_AND_PEACE',
     'NATURES_BLESSING','FERTILE_LANDS','PATRIOTISM','MIND_FOCUS','GREATER_PROTECTION',
     'MINOR_PROTECTION','INSPIRE_ARMY','ANIMATE_DEAD','FOUNTAIN_OF_KNOWLEDGE',
     'MINERS_MYSTIQUE','GHOST_WORKERS','HEROES_INSPIRATION','SALVATION','REVELATION',
+    'WRATH',
   ]),
+
+  // Thievery sabotage ops — tracked on leaderboard
   THIEF_SAB: new Set([
     'ROB_THE_GRANARIES','ROB_THE_VAULTS','ROB_THE_TOWERS',
-    'KIDNAP','NIGHT_STRIKE','ARSON','GREATER_ARSON','ASSASSINATE_WIZARDS',
-    'PROPAGANDA','SABOTAGE_WIZARDS','DESTABILIZE_GUILDS','BRIBE_THIEVES',
-    'BRIBE_GENERALS','FREE_PRISONERS','STEAL_WAR_HORSES',
+    'KIDNAP','ARSON','GREATER_ARSON','NIGHT_STRIKE','INCITE_RIOTS',
+    'STEAL_WAR_HORSES','BRIBE_THIEVES','BRIBE_GENERALS','FREE_PRISONERS',
+    'ASSASSINATE_WIZARDS','PROPAGANDA','SABOTAGE_WIZARDS','DESTABILIZE_GUILDS',
+  ]),
+
+  // Offensive spells — tracked on leaderboard
+  OFFENSIVE_SPELL: new Set([
+    'FIREBALL','LIGHTNING_STRIKE','LAND_LUST','TORNADOES','METEOR_SHOWERS',
+    'DROUGHTS','STORMS','GLUTTONY','GREED','EXPOSE_THIEVES','BLIZZARD',
+    'EXPLOSIONS','MYSTIC_VORTEX','NIGHTMARES','FOOLS_GOLD','PITFALLS',
+    'CHASTITY','VERMIN','ABOLISH_RITUAL','SOUL_BLIGHT','MAGIC_WARD',
+    'SLOTH','NIGHTFALL','AMNESIA',
   ]),
 };
+
+// Combined set of all ops we want to track on the leaderboard
+// Anything NOT in this set gets skipped during syncOps
+const TRACKED_OPS = new Set([...OP_SETS.THIEF_SAB, ...OP_SETS.OFFENSIVE_SPELL]);
 
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#0a0c10;color:#c8d8e8;font-family:Rajdhani,sans-serif;display:flex;flex-direction:column;overflow:hidden}

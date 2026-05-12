@@ -110,29 +110,45 @@ function _buildLeaderboard(ops) {
       <tbody>${provRows}</tbody>
     </table>`;
 
-  // Op breakdown table
+  // Op breakdown table — grouped by category
   const byOp = {};
   ops.forEach(op => {
-    if (!byOp[op.opType]) byOp[op.opType] = { count: 0, damage: 0, gain: 0, opName: op.opName || op.opType };
+    if (!byOp[op.opType]) byOp[op.opType] = {
+      count: 0, damage: 0, gain: 0,
+      opName: op.opName || op.opType,
+      category: op.category || (OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive'),
+    };
     byOp[op.opType].count++;
     byOp[op.opType].damage += op.damage || 0;
     byOp[op.opType].gain   += op.gain   || 0;
   });
+
+  // Sort: thievery first then spells, within each by damage desc
   const opRows = Object.entries(byOp)
-    .sort((a, b) => b[1].damage - a[1].damage || b[1].count - a[1].count)
-    .map(([code, d]) => `<tr>
-      <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
-      <td style="color:#7a9ab8">${esc(d.opName || code)}</td>
-      <td style="text-align:right;font-family:monospace">${d.count}</td>
-      <td style="text-align:right;font-family:monospace">${fK(d.damage) || '—'}</td>
-      <td style="text-align:right;font-family:monospace">${fK(d.gain) || '—'}</td>
-    </tr>`).join('');
+    .sort((a, b) => {
+      if (a[1].category !== b[1].category) return a[1].category === 'thief_sabotage' ? -1 : 1;
+      return b[1].damage - a[1].damage || b[1].count - a[1].count;
+    })
+    .map(([code, d]) => {
+      const isThief = d.category === 'thief_sabotage';
+      const catLabel = isThief
+        ? `<span style="font-family:monospace;font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.2)">THIEF</span>`
+        : `<span style="font-family:monospace;font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(170,102,255,.12);color:#aa66ff;border:1px solid rgba(170,102,255,.2)">SPELL</span>`;
+      return `<tr>
+        <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
+        <td style="color:#7a9ab8">${esc(d.opName || code)}</td>
+        <td>${catLabel}</td>
+        <td style="text-align:right;font-family:monospace">${d.count}</td>
+        <td style="text-align:right;font-family:monospace">${fK(d.damage) || '—'}</td>
+        <td style="text-align:right;font-family:monospace">${fK(d.gain) || '—'}</td>
+      </tr>`;
+    }).join('');
 
   const opTable = `
     <div style="margin-top:20px" class="wsech">Op Breakdown by Type</div>
     <table class="wtbl">
       <thead><tr>
-        <th>Op</th><th>Full Name</th>
+        <th>Op</th><th>Full Name</th><th>Type</th>
         <th style="text-align:right">Count</th>
         <th style="text-align:right">Total Damage</th>
         <th style="text-align:right">Total Gain</th>
@@ -172,13 +188,19 @@ async function syncOps() {
 
     for (const op of newOps) {
       if (!op.provinceName) continue;
+
+      // Classify the op
       const isSelf      = op.provinceName === op.targetName;
       const isEspionage = OP_SETS.ESPIONAGE.has(op.opType);
       const isBuff      = OP_SETS.SELF_BUFF.has(op.opType) || isSelf;
-      const category    = isEspionage ? 'espionage'
-                        : isBuff      ? 'self_buff'
-                        : OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage'
-                        : 'magic_offensive';
+      const isTracked   = TRACKED_OPS.has(op.opType);
+
+      // Always advance the watermark so we don't re-process, but only
+      // write to Firestore for ops we actually want on the leaderboard
+      if (op.id > maxId) maxId = op.id;
+      if (!isTracked) continue;
+
+      const category = OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive';
 
       const written = await fbWrite(`ops/${kdId}_${op.id}`, {
         opId:         op.id,
@@ -202,7 +224,6 @@ async function syncOps() {
 
       if (written && !written.error) {
         synced++;
-        if (op.id > maxId) maxId = op.id;
       }
     }
 
