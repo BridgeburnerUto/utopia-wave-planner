@@ -21,6 +21,7 @@ const ORDER = [
   'firebase.js',
   'dom.js',
   'ritual.js',
+  'discord.js',
   'tabs/board.js',
   'tabs/player.js',
   'tabs/summary.js',

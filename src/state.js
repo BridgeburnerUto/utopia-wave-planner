@@ -36,7 +36,8 @@ const S = {
   lbView: 'damage',
   currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
   snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
-  nwView: 'total',       // NW graph view: 'total'|'war'  // leaderboard sort: 'damage'|'ops'|'gain'
+  nwView: 'total',       // NW graph view: 'total'|'war'
+  discordWebhook: '',    // Discord webhook URL — saved with war plan  // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
     mode: 'all',       // 'all' | 'war' | 'custom'
     fromYear: null,    // in-game year number (e.g. 1 for YR1)
