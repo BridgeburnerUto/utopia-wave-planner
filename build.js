@@ -34,8 +34,10 @@ const VERSION = process.env.VERSION || 'dev-' + new Date().toISOString().slice(0
 const BOOTSTRAP = `
 // ── BOOTSTRAP ───────────────────────────────────────────────────────────────
 // Reads auth from the Intel Site's sessionStorage (same-origin access from bookmarklet)
-const TOKEN  = window.__wp_token  || sessionStorage.getItem('Utopia-Token');
-const SERVER = window.__wp_server || parseInt(JSON.parse(localStorage.getItem('IntelState') || '{}').server || '1');
+const TOKEN    = window.__wp_token  || sessionStorage.getItem('Utopia-Token');
+const _IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
+const SERVER   = window.__wp_server || parseInt(_IS.server || '1');
+const ENEMY_KD = _IS.enemyKd || '5:3';
 
 if (!TOKEN) { alert('Wave Planner: No token found. Open from intel.utopia.site.'); return; }
 if (document.getElementById('__wp_overlay')) {
@@ -46,6 +48,7 @@ if (document.getElementById('__wp_overlay')) {
 // Inject into state before any other code runs
 S.token  = TOKEN;
 S.server = SERVER;
+S.eLoc   = ENEMY_KD;
 
 // Build the DOM then start
 injectStyles();
