@@ -7,7 +7,15 @@
  * Returns {attacks, totalGenerals, gensHome, best, reason}
  */
 function calcAttacks(prov) {
-  const waveTargets = S.cols.slice(1).flatMap(c => c.items.map(item => ({ ...item, waveName: c.title })));
+  // Wave targets: all provinces assigned to current wave or pre-plan
+  const waveTargets = S.enemy ? S.enemy.provinces
+    .filter(p => S.provinces[p.slot]?.wave)
+    .map(p => ({
+      province: { slot: '['+p.slot+']', name: p.name, race: p.race,
+                  requiredOps: S.provinces[p.slot]?.requiredOps || [],
+                  notes: S.provinces[p.slot]?.notes || '' },
+      waveName: S.provinces[p.slot]?.wave === 'current' ? 'Current Wave' : 'Pre-Plan',
+    })) : [];
   if (!waveTargets.length) return { attacks: [], reason: 'no_targets' };
 
   const aOff        = prov.som?.offPointsHome || 0;
@@ -95,7 +103,14 @@ function _buildPlayer() {
 
   const prov = S.playerProv;
   const { attacks, totalGenerals, gensHome, reason } = calcAttacks(prov);
-  const waveTargets = S.cols.slice(1).flatMap(c => c.items);
+  const waveTargets = S.enemy ? S.enemy.provinces
+    .filter(p => S.provinces[p.slot]?.wave)
+    .map(p => ({
+      province: { slot: '['+p.slot+']', name: p.name, race: p.race,
+                  requiredOps: S.provinces[p.slot]?.requiredOps || [],
+                  notes: S.provinces[p.slot]?.notes || '' },
+      waveName: S.provinces[p.slot]?.wave === 'current' ? 'Current Wave' : 'Pre-Plan',
+    })) : [];
   const aOff        = prov.som?.offPointsHome || 0;
 
   let h = _playerHeader(prov, aOff, gensHome, totalGenerals, waveTargets.length);
@@ -126,7 +141,7 @@ function _buildPlayer() {
     h += _buildAttackCard(wave, list, aOff, totalGenerals);
   });
 
-  h += _buildContextTable(waveTargets, prov, aOff);
+  h += _buildContextTable(waveTargets2 || waveTargets, prov, aOff);
   return h;
 }
 
@@ -139,16 +154,16 @@ function _buildProvPicker() {
           const off  = p.som?.offPointsHome || p.sot?.offPoints || 0;
           const gens = p.som?.standingArmy?.generals ?? '?';
           return `<div onclick="__wpA.pickProv(${p.slot})"
-            style="background:#151a22;border:1px solid #1e2d3d;border-radius:3px;padding:12px 14px;cursor:pointer;
+            style="background:#120d04;border:1px solid #3a2810;border-radius:3px;padding:12px 14px;cursor:pointer;
                    display:flex;align-items:center;justify-content:space-between;transition:border-color .15s"
-            onmouseover="this.style.borderColor='#2a3f55'" onmouseout="this.style.borderColor='#1e2d3d'">
+            onmouseover="this.style.borderColor='#4a3010'" onmouseout="this.style.borderColor='#3a2810'">
             <div>
               <div style="font-size:14px;font-weight:700">${esc(p.name)}</div>
-              <div style="font-family:monospace;font-size:10px;color:#4a6a88">${esc(p.race || '')} · ${esc(p.sot?.personality || '')}</div>
+              <div style="font-family:monospace;font-size:10px;color:#7a5a2a">${esc(p.race || '')} · ${esc(p.sot?.personality || '')}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:monospace;font-size:13px;color:#00d4ff">${fK(off)} off</div>
-              <div style="font-family:monospace;font-size:10px;color:#4a6a88">${gens} gens home · ${fK(p.networth)} NW</div>
+              <div style="font-family:monospace;font-size:13px;color:#D4A017">${fK(off)} off</div>
+              <div style="font-family:monospace;font-size:10px;color:#7a5a2a">${gens} gens home · ${fK(p.networth)} NW</div>
             </div>
           </div>`;
         }).join('')}
@@ -157,24 +172,24 @@ function _buildProvPicker() {
 }
 
 function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
-  const genColor = gensHome >= 3 ? '#00ff88' : gensHome >= 1 ? '#ffaa00' : '#ff4455';
+  const genColor = gensHome >= 3 ? '#60C040' : gensHome >= 1 ? '#e09040' : '#E05050';
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div>
         <div style="font-size:18px;font-weight:700">${esc(prov.name)}</div>
-        <div style="font-family:monospace;font-size:11px;color:#4a6a88">
+        <div style="font-family:monospace;font-size:11px;color:#7a5a2a">
           ${esc(prov.race || '')} · ${esc(prov.sot?.personality || '')} · ${fK(prov.networth)} NW
         </div>
       </div>
       <button onclick="__wpA.pickProv('')"
-        style="padding:5px 10px;background:#151a22;border:1px solid #2a3f55;color:#7a9ab8;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px">
+        style="padding:5px 10px;background:#120d04;border:1px solid #4a3010;color:#c8a060;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px">
         ↩ Change
       </button>
     </div>
     <div class="watk-summary">
       <div class="watk-sstat"><div class="l">Off Home</div><div class="v">${fK(aOff)}</div></div>
       <div class="watk-sstat"><div class="l">Generals Home</div>
-        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:12px;color:#4a6a88"> / ${totalGenerals}</span></div>
+        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:12px;color:#7a5a2a"> / ${totalGenerals}</span></div>
       </div>
       <div class="watk-sstat"><div class="l">Own NW</div><div class="v">${fK(prov.networth)}</div></div>
       <div class="watk-sstat"><div class="l">Targets Set</div><div class="v">${targetCount}</div><div class="s">by war leader</div></div>
@@ -186,7 +201,7 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     <div class="watk-card">
       <div class="watk-header">
         <span class="watk-wave">// ${esc(wave.toUpperCase())}</span>
-        <span style="font-family:monospace;font-size:10px;color:#4a6a88">${atkList.length} attack${atkList.length > 1 ? 's' : ''}</span>
+        <span style="font-family:monospace;font-size:10px;color:#7a5a2a">${atkList.length} attack${atkList.length > 1 ? 's' : ''}</span>
       </div>
       <div class="watk-body">`;
 
@@ -195,26 +210,26 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     const away      = t.tp?.som?.armiesAway?.length > 0;
     const ops       = t.item.province.requiredOps || [];
     const da        = t.dAge;
-    const genColor  = atk.gens <= 2 ? '#00ff88' : atk.gens <= 3 ? '#ffaa00' : '#c8d8e8';
+    const genColor  = atk.gens <= 2 ? '#60C040' : atk.gens <= 3 ? '#e09040' : '#c8a060';
     const resCls    = atk.result === 'yes' ? 'watk-yes' : atk.result === 'close' ? 'watk-cl' : 'watk-no';
     const resLabel  = atk.result === 'yes' ? 'BREAKS' : atk.result === 'close' ? 'CLOSE' : 'RISKY';
     const sentOff   = atk.scaledOff || aOff * (atk.gens / totalGenerals);
 
     h += `
       <div class="watk-row">
-        <div class="watk-num" style="color:#4a6a88">${atk.n}</div>
+        <div class="watk-num" style="color:#7a5a2a">${atk.n}</div>
         <div class="watk-main">
           <div class="watk-target">
             ${esc(t.item.province.name)}
-            ${away ? ' <span style="color:#00ff88;font-size:11px">↗ army away</span>' : ''}
+            ${away ? ' <span style="color:#60C040;font-size:11px">↗ army away</span>' : ''}
           </div>
           <div class="watk-detail">
             ${fK(t.tDef)} def · ${fK(sentOff)} off sent · ${atk.pct}% ratio
             ${da != null ? ` · intel <span class="${aC(da)}">${fA(da)}</span> old` : ''}
-            ${atk.note ? `<br><span style="color:#ffaa00">⚠ ${esc(atk.note)}</span>` : ''}
+            ${atk.note ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
           </div>
           ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
-          ${t.item.province.notes ? `<div style="margin-top:4px;font-size:10px;color:#7a9ab8;background:#151a22;padding:4px 6px;border-radius:2px;border-left:2px solid #00d4ff">${esc(t.item.province.notes)}</div>` : ''}
+          ${t.item.province.notes ? `<div style="margin-top:4px;font-size:10px;color:#c8a060;background:#120d04;padding:4px 6px;border-radius:2px;border-left:2px solid #D4A017">${esc(t.item.province.notes)}</div>` : ''}
         </div>
         <div class="watk-gen">
           <div class="watk-gen-num" style="color:${genColor}">${atk.gens}</div>
@@ -237,13 +252,13 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const pct   = tDef > 0 ? Math.round(aOff / tDef * 100) : 0;
     const away  = tp?.som?.armiesAway?.length > 0;
     const cls   = !nwOk ? 'wmno' : aOff > tDef * 1.01 ? 'wmyes' : 'wmcl';
-    return `<tr style="border-bottom:1px solid #1e2d3d">
+    return `<tr style="border-bottom:1px solid #3a2810">
       <td style="padding:6px 8px;font-weight:600">${esc(item.province.name)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tDef)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tNW)}</td>
       <td style="padding:6px 8px"><span class="wmatch ${cls}">${pct}%</span></td>
       <td style="padding:6px 8px"><span class="wmatch ${nwOk ? 'wmyes' : 'wmno'}">${nwOk ? '✓ in range' : '✗ out'}</span></td>
-      <td style="padding:6px 8px">${away ? '<span style="color:#00ff88;font-family:monospace;font-size:10px">AWAY</span>' : '—'}</td>
+      <td style="padding:6px 8px">${away ? '<span style="color:#60C040;font-family:monospace;font-size:10px">AWAY</span>' : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -251,12 +266,12 @@ function _buildContextTable(waveTargets, prov, aOff) {
     <div style="margin-top:20px" class="wsech">// ALL WAVE TARGETS (context)</div>
     <table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">Province</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">Def Home</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">NW</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">Off/Def</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">NW Range</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#4a6a88;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1e2d3d">Army</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Province</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Def Home</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">NW</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Off/Def</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">NW Range</th>
+        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Army</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

@@ -14,7 +14,9 @@ const S = {
 
   // War plan
   wpId: null,       // warPlanId from IS API
-  cols: [],         // kanban columns [{title, items:[{id, province:{name,race,slot,requiredOps,notes}}]}]
+  cols: [],         // LEGACY kanban columns (kept for migration only)
+  provinces: {},    // war plan per province: {[slot]: {wave, needsRaze, needsMassacre, requiredOps, notes}}
+                    // wave: null | 'current' | 'preplan'
   eLoc: '5:3',      // current enemy location string
   thresholds: {
     // Enemy thresholds
@@ -38,6 +40,7 @@ const S = {
   snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
   nwView: 'total',
   intelSort:     { col: 'slot', dir: 1 },
+  boardSort:     { col: 'slot', dir: 1 },
   intelInterval: 24,       // NW graph view: 'total'|'war'
   discordWebhook: '',    // Discord webhook URL — saved with war plan  // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {

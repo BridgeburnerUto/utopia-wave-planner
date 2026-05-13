@@ -7,8 +7,14 @@ function renderSummary() {
 function _buildSummary() {
   if (!S.own || !S.enemy) return '';
 
-  const waveTargets = S.cols.slice(1).flatMap(c => c.items);
-  const unassigned  = S.cols[0]?.items.length || 0;
+  const waveTargets = S.enemy ? S.enemy.provinces
+    .filter(p => S.provinces[p.slot]?.wave)
+    .map(p => ({
+      province: { slot: '['+p.slot+']', name: p.name, race: p.race,
+                  requiredOps: S.provinces[p.slot]?.requiredOps || [],
+                  notes: S.provinces[p.slot]?.notes || '' },
+    })) : [];
+  const unassigned = S.enemy ? S.enemy.provinces.filter(p => !S.provinces[p.slot]?.wave).length : 0;
   const attackers   = S.own.provinces.filter(p => (p.som?.offPointsHome || 0) > 0);
   const totalOff    = attackers.reduce((s, p) => s + (p.som?.offPointsHome || 0), 0);
   const totalDef    = S.enemy.provinces.reduce((s, p) => s + (p.calcs?.defPointsSummary?.defPointsHome || 0), 0);
@@ -29,16 +35,16 @@ function _buildSummary() {
     const away  = p?.som?.armiesAway?.length > 0;
     const brk   = attackers.filter(a => canHit(a.networth, p?.networth || 1) && (a.som?.offPointsHome || 0) > def * 1.01).length;
     const pct   = attackers.length > 0 ? Math.round(brk / attackers.length * 100) : 0;
-    const pctColor = pct >= 50 ? '#00ff88' : pct > 0 ? '#ffaa00' : '#ff4455';
+    const pctColor = pct >= 50 ? '#60C040' : pct > 0 ? '#e09040' : '#E05050';
 
     return `<tr>
       <td style="font-weight:700">${esc(item.province.name)}</td>
-      <td style="color:#4a6a88">${esc(item.province.race || '')}</td>
+      <td style="color:#7a5a2a">${esc(item.province.race || '')}</td>
       <td>${fK(def)}</td>
       <td>${ops.map(o => `<span class="wtag" style="cursor:default;font-size:8px">${o}</span>`).join('') || '—'}</td>
       <td>${brk}/${attackers.length} <span style="color:${pctColor}">(${pct}%)</span></td>
       <td><span class="${aC(da)}">${fA(da)}</span></td>
-      <td>${away ? '<span style="color:#00ff88">AWAY</span>' : '—'}</td>
+      <td>${away ? '<span style="color:#60C040">AWAY</span>' : '—'}</td>
     </tr>`;
   }).join('');
 
