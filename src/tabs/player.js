@@ -141,7 +141,7 @@ function _buildPlayer() {
     h += _buildAttackCard(wave, list, aOff, totalGenerals);
   });
 
-  h += _buildContextTable(waveTargets2 || waveTargets, prov, aOff);
+  h += _buildContextTable(waveTargets, prov, aOff);
   return h;
 }
 

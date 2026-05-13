@@ -65,19 +65,22 @@ async function snapshotNW() {
 
 /** Delete nw_snapshots older than 30 real days — runs silently on init */
 async function cleanOldSnapshots() {
-  const kdId    = S.own?.location.replace(':', '_');
+  const kdId = S.own?.location.replace(':', '_');
   if (!kdId) return;
   try {
-    const cutoff  = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const docs    = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const docs   = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
+    if (!docs?.length) return; // no snapshots yet — nothing to clean
+    let deleted = 0;
     for (const doc of docs) {
-      if ((doc.storedAt || 0) < cutoff) {
-        const tick = doc.tick;
-        if (tick) await fbDelete(`nw_snapshots/${kdId}_${tick}`);
+      if ((doc.storedAt || 0) < cutoff && doc.tick) {
+        const ok = await fbDelete(`nw_snapshots/${kdId}_${doc.tick}`);
+        if (ok) deleted++;
       }
     }
+    if (deleted) console.log(`[WavePlanner] Cleaned ${deleted} old NW snapshots`);
   } catch(e) {
-    console.log('[WavePlanner] Snapshot cleanup failed:', e.message);
+    console.log('[WavePlanner] Snapshot cleanup skipped:', e.message);
   }
 }
 
@@ -92,10 +95,10 @@ async function renderNwGraph() {
     const docs  = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
 
     if (!docs.length) {
-      el.innerHTML = `<div style="color:#4a6a88;font-family:monospace;font-size:12px;padding:30px 0;text-align:center">
+      el.innerHTML = `<div style="color:#7a5a2a;font-family:monospace;font-size:12px;padding:30px 0;text-align:center">
         // No NW data yet.<br>
         <span style="font-size:11px">Data is collected automatically each time the tool is opened during war.</span>
-        ${!S.own?.war ? '<br><br><span style="color:#ff4455">Not currently at war — showing historical data only.</span>' : ''}
+        ${!S.own?.war ? '<br><br><span style="color:#E05050">Not currently at war — showing historical data only.</span>' : ''}
       </div>`;
       return;
     }
@@ -105,7 +108,7 @@ async function renderNwGraph() {
     el.innerHTML = _buildGraph(points);
 
   } catch(e) {
-    el.innerHTML = `<div style="color:#ff4455;font-family:monospace;font-size:12px;padding:20px 0">
+    el.innerHTML = `<div style="color:#E05050;font-family:monospace;font-size:12px;padding:20px 0">
       Error loading NW data: ${esc(e.message)}
     </div>`;
   }
@@ -132,7 +135,7 @@ function _buildFreshSegments(vals, points, xPos, yPos) {
   if (current.length >= 2) segments.push(current.join(' '));
 
   return segments.map(pts =>
-    `<polyline points="${pts}" fill="none" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
+    `<polyline points="${pts}" fill="none" stroke="#D4A017" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
   ).join('\n      ');
 }
 
@@ -144,7 +147,7 @@ function _buildGraph(points) {
   const eneVals = points.map(p => isTotal ? p.eneTotal : p.eneWarNW);
   const allVals = [...ownVals, ...eneVals].filter(v => v > 0);
 
-  if (!allVals.length) return '<div style="color:#4a6a88;font-family:monospace;font-size:12px;padding:20px 0">// No valid data points.</div>';
+  if (!allVals.length) return '<div style="color:#7a5a2a;font-family:monospace;font-size:12px;padding:20px 0">// No valid data points.</div>';
 
   const minV  = Math.min(...allVals) * 0.95;
   const maxV  = Math.max(...allVals) * 1.05;
@@ -174,8 +177,8 @@ function _buildGraph(points) {
   for (let i = 0; i <= yTicks; i++) {
     const v = minV + (range * i / yTicks);
     const y = yPos(v);
-    yAxisHtml += `<text x="${PAD.left - 8}" y="${y.toFixed(1)}" text-anchor="end" fill="#4a6a88" font-size="10" dominant-baseline="middle">${fK(v)}</text>`;
-    yAxisHtml += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W - PAD.right}" y2="${y.toFixed(1)}" stroke="#1e2d3d" stroke-width="1"/>`;
+    yAxisHtml += `<text x="${PAD.left - 8}" y="${y.toFixed(1)}" text-anchor="end" fill="#7a5a2a" font-size="10" dominant-baseline="middle">${fK(v)}</text>`;
+    yAxisHtml += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W - PAD.right}" y2="${y.toFixed(1)}" stroke="#3a2810" stroke-width="1"/>`;
   }
 
   // X axis labels — show every Nth tick label to avoid crowding
@@ -185,7 +188,7 @@ function _buildGraph(points) {
     if (i % step !== 0 && i !== n - 1) return;
     const x = xPos(i);
     const label = p.tickName ? p.tickName.replace(', YR', '/YR') : `T${p.tick}`;
-    xAxisHtml += `<text x="${x.toFixed(1)}" y="${H - PAD.bottom + 14}" text-anchor="middle" fill="#4a6a88" font-size="9">${esc(label)}</text>`;
+    xAxisHtml += `<text x="${x.toFixed(1)}" y="${H - PAD.bottom + 14}" text-anchor="middle" fill="#7a5a2a" font-size="9">${esc(label)}</text>`;
   });
 
   // Stale enemy points — dashed line + dim dots
@@ -222,40 +225,40 @@ function _buildGraph(points) {
   const eneFirst = isTotal ? points[0].eneTotal : points[0].eneWarNW;
   const ownDiff  = ownLast - ownFirst;
   const eneDiff  = eneLast - eneFirst;
-  const diffColor = (v) => v >= 0 ? '#00ff88' : '#ff4455';
+  const diffColor = (v) => v >= 0 ? '#60C040' : '#E05050';
   const diffSign  = (v) => v >= 0 ? '+' : '';
 
   const svg = `
     <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
-      style="width:100%;height:auto;background:#0f1218;border-radius:4px;border:1px solid #1e2d3d">
+      style="width:100%;height:auto;background:#1a1208;border-radius:4px;border:1px solid #3a2810">
       <!-- Grid -->
       ${yAxisHtml}
       ${xAxisHtml}
       <!-- Axis lines -->
-      <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H - PAD.bottom}" stroke="#2a3f55" stroke-width="1"/>
-      <line x1="${PAD.left}" y1="${H - PAD.bottom}" x2="${W - PAD.right}" y2="${H - PAD.bottom}" stroke="#2a3f55" stroke-width="1"/>
+      <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H - PAD.bottom}" stroke="#4a3010" stroke-width="1"/>
+      <line x1="${PAD.left}" y1="${H - PAD.bottom}" x2="${W - PAD.right}" y2="${H - PAD.bottom}" stroke="#4a3010" stroke-width="1"/>
       <!-- Own line (always solid green) -->
       <polyline points="${ownVals.map((v,i) => `${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')}"
-        fill="none" stroke="#00ff88" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      ${buildDots(ownVals, points, '#00ff88', false)}
+        fill="none" stroke="#60C040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${buildDots(ownVals, points, '#60C040', false)}
       <!-- Enemy line — full dashed baseline, solid segments over fresh points -->
       <polyline points="${eneVals.map((v,i) => `${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')}"
-        fill="none" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+        fill="none" stroke="#D4A017" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
       ${_buildFreshSegments(eneVals, points, xPos, yPos)}
-      ${buildDots(eneVals, points, '#00d4ff', true)}
+      ${buildDots(eneVals, points, '#D4A017', true)}
       <!-- Legend -->
-      <circle cx="${PAD.left + 10}" cy="${PAD.top + 10}" r="4" fill="#00ff88"/>
-      <text x="${PAD.left + 18}" y="${PAD.top + 10}" fill="#00ff88" font-size="10" dominant-baseline="middle">Own KD</text>
-      <circle cx="${PAD.left + 80}" cy="${PAD.top + 10}" r="4" fill="#00d4ff"/>
-      <text x="${PAD.left + 88}" y="${PAD.top + 10}" fill="#00d4ff" font-size="10" dominant-baseline="middle">Enemy (● fresh ○ stale)</text>
+      <circle cx="${PAD.left + 10}" cy="${PAD.top + 10}" r="4" fill="#60C040"/>
+      <text x="${PAD.left + 18}" y="${PAD.top + 10}" fill="#60C040" font-size="10" dominant-baseline="middle">Own KD</text>
+      <circle cx="${PAD.left + 80}" cy="${PAD.top + 10}" r="4" fill="#D4A017"/>
+      <text x="${PAD.left + 88}" y="${PAD.top + 10}" fill="#D4A017" font-size="10" dominant-baseline="middle">Enemy (● fresh ○ stale)</text>
     </svg>`;
 
   // View toggle + summary stats
   const header = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase">
+      <div style="font-family:monospace;font-size:10px;color:#7a5a2a;letter-spacing:2px;text-transform:uppercase">
         ${points.length} snapshots · ${esc(points[0].tickName||'')} → ${esc(last.tickName||'')}
-        ${!S.own?.war ? ' · <span style="color:#ffaa00">War ended</span>' : ''}
+        ${!S.own?.war ? ' · <span style="color:#e09040">War ended</span>' : ''}
       </div>
       <div style="display:flex;gap:6px">
         <button class="wb${isTotal ? ' g' : ''}" style="font-size:10px;padding:3px 9px" onclick="__wpA.nwView('total')">Total NW</button>
