@@ -18,11 +18,11 @@ function _buildBoard() {
       <label>ENEMY:</label>
       <input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3">
       <button class="wb" style="font-size:11px"
-        onclick="__wpA.loadEnemy($id('__wpeloc').value);__wpA.initCols();renderBoard();renderAlerts();renderSummary();renderPlayer()">
+        onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);__wpA.initCols();renderBoard();renderAlerts();renderSummary();renderPlayer()">
         LOAD
       </button>
-      <div style="color:#00d4ff;font-weight:700;font-size:13px">${esc(S.enemy?.kingdomName || '—')}</div>
-      <div style="font-size:11px;color:#4a6a88;margin-left:auto" id="__wpestats"></div>
+      <div style="color:#D4A017;font-weight:700;font-size:13px">${esc(S.enemy?.kingdomName || '—')}</div>
+      <div style="font-size:11px;color:#7a5a2a;margin-left:auto" id="__wpestats"></div>
     </div>`;
 
   let board = '<div class="weboard">';
@@ -120,11 +120,11 @@ function openOps(ci, ii) {
   const html = `
     <div class="wopsh">
       <h3>// OPS</h3>
-      <button onclick="__wpA.closeOps()" style="background:none;border:none;color:#4a6a88;cursor:pointer;font-size:16px">✕</button>
+      <button onclick="__wpA.closeOps()" style="background:none;border:none;color:#7a5a2a;cursor:pointer;font-size:16px">✕</button>
     </div>
     <div class="wopsb">
       <div style="font-size:15px;font-weight:700;margin-bottom:3px">${esc(item.province.name)}</div>
-      <div style="font-family:monospace;font-size:10px;color:#4a6a88;margin-bottom:12px">
+      <div style="font-family:monospace;font-size:10px;color:#7a5a2a;margin-bottom:12px">
         ${esc(item.province.race || '')} · ${esc(p?.sot?.personality || '')} · Slot ${esc(item.province.slot)}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
@@ -133,8 +133,8 @@ function openOps(ci, ii) {
         <div class="wsb"><div class="l">Def Home</div><div class="v">${fK(def)}</div></div>
         <div class="wsb"><div class="l">Intel Age</div><div class="v"><span class="${aC(da)}">${fA(da)}</span></div></div>
       </div>
-      ${p?.sot?.badSpells?.length ? `<div style="font-size:10px;color:#ff4455;margin-bottom:8px">⚠ ${p.sot.badSpells.map(s => s.name).join(', ')}</div>` : ''}
-      ${p?.som?.armiesAway?.length ? `<div style="font-size:10px;color:#00ff88;margin-bottom:8px">↗ Army away — ${fA(p.som.armiesAway[0].secondsRemaining)} to return</div>` : ''}
+      ${p?.sot?.badSpells?.length ? `<div style="font-size:10px;color:#E05050;margin-bottom:8px">⚠ ${p.sot.badSpells.map(s => s.name).join(', ')}</div>` : ''}
+      ${p?.som?.armiesAway?.length ? `<div style="font-size:10px;color:#60C040;margin-bottom:8px">↗ Army away — ${fA(p.som.armiesAway[0].secondsRemaining)} to return</div>` : ''}
       <div class="wopsec">Duration Ops</div>
       <div class="wopsg">
         ${DOPS.map(o => `<div class="wop${ops.includes(o.c) ? ' sel' : ''}" onclick="__wpA.togOp('${o.c}')" title="${esc(o.l)}">${esc(o.c)}</div>`).join('')}
@@ -144,7 +144,7 @@ function openOps(ci, ii) {
         ${IOPS.map(o => `<div class="wop i${ops.includes(o.c) ? ' sel' : ''}" onclick="__wpA.togOp('${o.c}')" title="${esc(o.l)}">${esc(o.c)}</div>`).join('')}
       </div>
       <div class="wopsec">Notes</div>
-      <textarea style="width:100%;background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:10px;padding:6px;border-radius:2px;resize:vertical;min-height:50px;outline:none"
+      <textarea style="width:100%;background:#120d04;border:1px solid #4a3010;color:#c8a060;font-family:monospace;font-size:10px;padding:6px;border-radius:2px;resize:vertical;min-height:50px;outline:none"
         onchange="__wpA.setNote(this.value)">${esc(item.province.notes || '')}</textarea>
     </div>`;
 
