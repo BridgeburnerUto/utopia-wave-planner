@@ -224,7 +224,7 @@ function _buildIntel() {
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razeAcres>0?'#E05050':'#7a5a2a'};">${totals.razeAcres > 0 ? '-'+fK(totals.razeAcres) : '—'}</td>
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.massacres>0?'#E05050':'#7a5a2a'};">${totals.massacres > 0 ? totals.massacres+'×' : '—'}</td>
     <td></td>
-  </tr>\`;
+  </tr>`;
 
   const table = `
     <div style="overflow-x:auto;">
