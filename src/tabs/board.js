@@ -52,7 +52,7 @@ function _buildBoard() {
       <label>ENEMY:</label>
       <input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3">
       <button class="wb" style="font-size:11px"
-        onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);renderBoard();renderAlerts();renderSummary();renderPlayer()">
+        onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);__wpA.refresh()">
         LOAD
       </button>
     </div>
@@ -188,7 +188,7 @@ function _buildBoard() {
       <label>ENEMY:</label>
       <input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3">
       <button class="wb" style="font-size:11px"
-        onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);renderBoard();renderAlerts();renderSummary();renderPlayer()">
+        onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);__wpA.refresh()">
         LOAD
       </button>
       <div style="color:#D4A017;font-weight:700;font-size:13px">${esc(S.enemy?.kingdomName || '—')}</div>
