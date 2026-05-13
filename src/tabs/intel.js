@@ -46,11 +46,12 @@ function parseCombatEvents(tickInterval) {
         return;
       }
 
-      // Massacre: "X - Name (anyLoc) invaded SLOT - Name (eLoc) and massacred"
-      const massacre = text.match(new RegExp(`invaded (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\) and massacred`));
-      if (massacre) {
-        getOrCreate(parseInt(massacre[1])).massacres++;
-      }
+      // Massacre format 1: "X - Name (oLoc) killed N people within SLOT - Name (eLoc)"
+      const mass1 = text.match(new RegExp(`killed \\d+ people within (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)`));
+      if (mass1) { getOrCreate(parseInt(mass1[1])).massacres++; return; }
+      // Massacre format 2: "X - Name (oLoc) invaded SLOT - Name (eLoc) and killed N people"
+      const mass2 = text.match(new RegExp(`invaded (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\) and killed`));
+      if (mass2) { getOrCreate(parseInt(mass2[1])).massacres++; }
     });
 
     return events;
