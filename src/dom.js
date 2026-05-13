@@ -19,14 +19,14 @@ function buildOverlay() {
   ov.innerHTML = `
 <div id="__wph">
   <div class="logo">⚔ WAVE PLANNER</div>
-  <div id="__wptick" style="font-family:monospace;font-size:11px;color:#4a6a88;display:none"></div>
+  <div id="__wptick" style="font-family:monospace;font-size:11px;color:#7a5a2a;display:none"></div>
   <div class="wrole">
     <span>View as:</span>
-    <button class="wb" id="__wprole_leader" onclick="__wpA.setRole('leader')" style="border-color:#00d4ff;color:#00d4ff">⚔ Leader</button>
+    <button class="wb" id="__wprole_leader" onclick="__wpA.setRole('leader')" style="border-color:#D4A017;color:#D4A017">⚔ Leader</button>
     <button class="wb" id="__wprole_player" onclick="__wpA.setRole('player')">🗡 Player</button>
   </div>
   <div id="__wpprovpick" style="display:none;align-items:center;gap:8px">
-    <span style="font-size:10px;color:#4a6a88;font-weight:700;letter-spacing:1px;text-transform:uppercase">My Province:</span>
+    <span style="font-size:10px;color:#7a5a2a;font-weight:700;letter-spacing:1px;text-transform:uppercase">My Province:</span>
     <select class="wpick" id="__wpprovsel" onchange="__wpA.pickProv(this.value)">
       <option value="">— select —</option>
     </select>
@@ -47,6 +47,7 @@ function buildOverlay() {
 <div id="__wptb">
   <div class="wt on"  id="__wpt_board"       onclick="__wpA.tab('board')">WAR BOARD</div>
   <div class="wt"     id="__wpt_player"      onclick="__wpA.tab('player')">MY ORDERS</div>
+  <div class="wt"     id="__wpt_intel"       onclick="__wpA.tab('intel')">INTEL</div>
   <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">SUMMARY</div>
   <div class="wt"     id="__wpt_nwgraph"     onclick="__wpA.tab('nwgraph')">NW GRAPH</div>
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
@@ -56,6 +57,7 @@ function buildOverlay() {
 <div id="__wpbd">
   <div id="__wpc_board"></div>
   <div id="__wpc_player"      style="display:none"></div>
+  <div id="__wpc_intel"       style="display:none"></div>
   <div id="__wpc_summary"     style="display:none"></div>
   <div id="__wpc_nwgraph"     style="display:none"></div>
   <div id="__wpc_alerts"      style="display:none"></div>
