@@ -3099,8 +3099,8 @@ window.__wpA = {
               // Migrate old kanban cols format
               S.cols = parsed.columns || [];
             }
-            // Enemy location: IS is always source of truth
-            if (!S.eLoc) S.eLoc = parsed.enemyLocation || '';
+            // Saved plan enemy is the fallback when IS doesn't supply one
+            if (!S.eLoc && parsed.enemyLocation) S.eLoc = parsed.enemyLocation;
             // Merge saved thresholds — also migrate old format {food,gc,runes} to new keys
             if (parsed.thresholds) {
               const t = parsed.thresholds;
@@ -3119,9 +3119,13 @@ window.__wpA = {
         }
       }
 
-      // Always use IS current enemy - re-read after plan load to ensure it wasn't overwritten
+      // IS enemy overrides only when IS explicitly has one set
       const _isAfterLoad = JSON.parse(localStorage.getItem('IntelState') || '{}');
-      if (_isAfterLoad.enemyKd) S.eLoc = _isAfterLoad.enemyKd;
+      if (_isAfterLoad.enemyKd) {
+        if (_isAfterLoad.enemyKd !== S.eLoc)
+          console.log(`[WavePlanner] IS enemy override: ${S.eLoc} → ${_isAfterLoad.enemyKd}`);
+        S.eLoc = _isAfterLoad.enemyKd;
+      }
 
       // Load enemy and seed cols if needed
       await this.loadEnemy(S.eLoc);
@@ -3351,7 +3355,7 @@ window.__wpA = {
 const TOKEN    = window.__wp_token  || sessionStorage.getItem('Utopia-Token');
 const _IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
 const SERVER   = window.__wp_server || parseInt(_IS.server || '1');
-const ENEMY_KD = _IS.enemyKd || '5:3';
+const ENEMY_KD = _IS.enemyKd || '';
 
 if (!TOKEN) { alert('Wave Planner: No token found. Open from intel.utopia.site.'); return; }
 if (document.getElementById('__wp_overlay')) {
