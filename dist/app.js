@@ -2055,8 +2055,16 @@ function _enemyFresh(provinces) {
 
 // ── Firebase snapshot helpers ────────────────────────────────────────────────
 
+/** True when IS kingdomNews has a startDate but no endDate (i.e. war is ongoing) */
+function _atWar() {
+  try {
+    const news = JSON.parse(localStorage.getItem('IntelState') || '{}').kingdomNews;
+    return !!(news?.startDate) && !news?.endDate;
+  } catch(e) { return false; }
+}
+
 async function snapshotNW() {
-  if (!S.own?.war)   return; // only during war
+  if (!_atWar()) return; // only during war
   if (!S.own || !S.enemy) return;
 
   const kdId    = S.own.location.replace(':', '_');
@@ -2121,7 +2129,7 @@ async function renderNwGraph() {
       el.innerHTML = `<div style="color:#7a5a2a;font-family:monospace;font-size:12px;padding:30px 0;text-align:center">
         // No NW data yet.<br>
         <span style="font-size:11px">Data is collected automatically each time the tool is opened during war.</span>
-        ${!S.own?.war ? '<br><br><span style="color:#E05050">Not currently at war — showing historical data only.</span>' : ''}
+        ${!_atWar() ? '<br><br><span style="color:#E05050">Not currently at war — showing historical data only.</span>' : ''}
       </div>`;
       return;
     }
@@ -2281,7 +2289,7 @@ function _buildGraph(points) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-family:monospace;font-size:10px;color:#7a5a2a;letter-spacing:2px;text-transform:uppercase">
         ${points.length} snapshots · ${esc(points[0].tickName||'')} → ${esc(last.tickName||'')}
-        ${!S.own?.war ? ' · <span style="color:#e09040">War ended</span>' : ''}
+        ${!_atWar() ? ' · <span style="color:#e09040">War ended</span>' : ''}
       </div>
       <div style="display:flex;gap:6px">
         <button class="wb${isTotal ? ' g' : ''}" style="font-size:10px;padding:3px 9px" onclick="__wpA.nwView('total')">Total NW</button>
@@ -3222,8 +3230,8 @@ window.__wpA = {
     if (!S.own) return;
     $id('__wpown').textContent = S.own.kingdomName || S.own.location;
     const w = $id('__wpwar');
-    if (S.own.war) { w.textContent = '⚔ WAR'; w.style.color = '#E05050'; }
-    else           { w.textContent = 'Peace'; w.style.color = '#c8a060'; }
+    if (_atWar()) { w.textContent = '⚔ WAR'; w.style.color = '#E05050'; }
+    else          { w.textContent = 'Peace'; w.style.color = '#c8a060'; }
   },
 
   // ── Tab switching ───────────────────────────────────────────────────────
