@@ -2349,7 +2349,7 @@ function parseCombatEvents(tickInterval) {
       }
 
       // Massacre format 1: "X - Name (oLoc) killed N people within SLOT - Name (eLoc)"
-      const mass1 = text.match(new RegExp(`killed \\d+ people within (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)`));
+      const mass1 = text.match(new RegExp(`killed [\\d,]+ people within (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)`));
       if (mass1) { getOrCreate(parseInt(mass1[1])).massacres++; return; }
       // Massacre format 2: "X - Name (oLoc) invaded SLOT - Name (eLoc) and killed N people"
       const mass2 = text.match(new RegExp(`invaded (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\) and killed`));
@@ -2421,12 +2421,21 @@ function parseNewsActivity(tickInterval) {
       }
 
       // Pattern 2: Someone captures land FROM enemy province
-      // "[slot] - [name] (anyLoc) captured N acres from [slot] - [name] (eLoc)"
-      const defLoss = text.match(new RegExp(`captured (\\d+) acres from (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)`));
+      // "[slot] - [name] (anyLoc) captured N acres [of land] from [slot] - [name] (eLoc)"
+      const defLoss = text.match(new RegExp(`captured ([\\d,]+) acres(?:\\s+of\\s+land)?\\s+from (\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)`));
       if (defLoss) {
-        const acres = parseInt(defLoss[1]);
+        const acres = parseInt(defLoss[1].replace(/,/g, ''));
         const slot  = parseInt(defLoss[2]);
         getOrCreate(slot).acresLost += acres;
+        continue;
+      }
+
+      // Pattern 3: Ambush — enemy province ambushed and took acres
+      // "[slot] - [name] (eLoc) ambushed armies from ... and took N acres"
+      const ambush = text.match(new RegExp(`^(\\d+)\\s*-\\s*.+?\\(${eLocPat}\\)\\s+ambushed armies from .+? and took (\\d+) acres`));
+      if (ambush) {
+        getOrCreate(parseInt(ambush[1])).acresGained += parseInt(ambush[2]);
+        getOrCreate(parseInt(ambush[1])).attacksMade += 1;
         continue;
       }
     }
@@ -2471,6 +2480,7 @@ function _buildIntel() {
   const rows = S.enemy.provinces.map(p => {
     const sot  = p.sot || {};
     const act  = activity[p.slot] || { acresGained: 0, acresLost: 0, attacksMade: 0 };
+    const ce   = combatEvents[p.slot] || { razes: 0, razeAcres: 0, massacres: 0 };
     const nwpa = p.land > 0 ? Math.round((p.networth || 0) / p.land) : 0;
     const da   = p.calcs?.defPointsSummary?.ageSeconds;
     return {
@@ -2486,6 +2496,9 @@ function _buildIntel() {
       acresGained:  act.acresGained,
       acresLost:    act.acresLost,
       attacksMade:  act.attacksMade,
+      razes:        ce.razes,
+      razeAcres:    ce.razeAcres,
+      massacres:    ce.massacres,
       intelAge:     da,
       stale:        da != null && da > 28800,
     };
@@ -3093,6 +3106,7 @@ window.__wpA = {
                 ownPeasLow:     t.ownPeasLow     ?? 0,
               };
             }
+            S.discordWebhook = parsed.discordWebhook || '';
           } catch (e) { /* malformed saved plan — start fresh */ }
         }
       }
@@ -3189,6 +3203,7 @@ window.__wpA = {
         title:         'Wave Plan',
         content:       '',
         enemyLocation:   S.eLoc,
+        provinces:       S.provinces,
         columns:         S.cols,
         thresholds:      S.thresholds,
         discordWebhook:  S.discordWebhook || '',
