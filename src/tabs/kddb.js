@@ -268,34 +268,30 @@ function _kddbBuildIdRows() {
 
   if (!filtered.length) {
     return q
-      ? `<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities match "${esc(q)}".</div>`
-      : `<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities yet. Save &amp; Analyze an enemy KD to start building the database.</div>`;
+      ? `<div style="padding:20px 16px;color:#7a9090;font-style:italic;font-size:13px">No identities match &ldquo;${esc(q)}&rdquo;.</div>`
+      : `<div style="padding:20px 16px;color:#7a9090;font-style:italic;font-size:13px">No identities yet. Save &amp; Analyze an enemy kingdom to start building the database.</div>`;
   }
 
   return filtered.map(identity => {
     const rulers  = (identity.rulersSeen || []).join(', ');
-    const races   = Object.entries(identity.raceCounts || {})
-      .sort((a, b) => b[1] - a[1])
-      .map(([r, c]) => `${r}\xd7${c}`)
-      .join('  ');
     const history = (identity.kdHistory || [])
-      .map(h => `<span style="font-size:10px;color:#7a5a2a;background:#120d04;border:1px solid #2a1a08;border-radius:2px;padding:1px 5px">${esc(h.kdName)} (${esc(h.age)})</span>`)
+      .map(h => `<span style="font-size:11px;color:#ffd400;background:#7a6500;border-radius:3px;padding:2px 7px;font-weight:700;letter-spacing:.3px">${esc(h.kdName || h.location)} (${esc(h.age)})</span>`)
       .join(' ');
     return `
-      <div style="padding:12px 14px;border-bottom:1px solid #2a1a08;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${history || rulers || races ? '6px' : '0'}">
-          <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(identity.label)}</span>
-          ${identity.typicalProvinceCount ? `<span style="font-size:10px;color:#4a3010">~${identity.typicalProvinceCount} provs</span>` : ''}
+      <div style="padding:14px 16px;border-bottom:1px solid rgba(97,112,112,.3);"
+           onmouseover="this.style.background='rgba(255,212,0,.07)'" onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${history || rulers ? '8px' : '0'}">
+          <span style="font-size:15px;font-weight:700;color:#ffffff">${esc(identity.label)}</span>
+          ${identity.typicalProvinceCount ? `<span style="font-size:11px;color:#7a9090">~${identity.typicalProvinceCount} provs</span>` : ''}
           <button onclick="__wpA.kddbRename('${esc(identity.id)}')"
-            style="background:none;border:none;color:#4a3010;cursor:pointer;font-size:11px;padding:2px 6px"
+            style="background:none;border:1px solid #617070;color:#b8c8c8;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;margin-left:auto"
             title="Rename identity">&#x270e; Rename</button>
           <button onclick="__wpA.kddbDelete('${esc(identity.id)}')"
-            style="margin-left:auto;background:none;border:none;color:#4a3010;cursor:pointer;font-size:12px;padding:2px 6px"
+            style="background:none;border:1px solid rgba(255,80,80,.4);color:#ff8888;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px"
             title="Delete identity">&#x2715;</button>
         </div>
-        ${history ? `<div style="margin-bottom:5px;display:flex;flex-wrap:wrap;gap:4px">${history}</div>` : ''}
-        ${rulers   ? `<div style="font-size:11px;color:#7a5a2a;margin-bottom:3px">Rulers: ${esc(rulers)}</div>` : ''}
-        ${races    ? `<div style="font-size:11px;color:#4a3010">${esc(races)}</div>` : ''}
+        ${history ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px">${history}</div>` : ''}
+        ${rulers  ? `<div style="font-size:12px;color:#7a9090;line-height:1.6"><b style="color:#b8c8c8">Rulers:</b> ${esc(rulers)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -311,60 +307,67 @@ async function renderKddb() {
 }
 
 function _buildMainView() {
-  // Preserve whatever the user has typed in the age field across re-renders
   const age      = $id('__wpkddb_age')?.value.trim() || _kddbGetAge();
   const hasEnemy = !!S.enemy;
   const kdName   = hasEnemy ? (S.enemy.kingdomName || S.eLoc) : '—';
   const snapId   = _kddbSnapId;
-  const canSave  = hasEnemy; // age is validated with an alert inside the save function
+  const canSave  = hasEnemy;
 
+  // ── Toolbar ──
   const toolbar = `
-    <div class="webar">
-      <label>Age</label>
-      <input id="__wpkddb_age" value="${esc(age)}" placeholder="a114" style="width:70px"
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#2b3333;border:1px solid #617070;border-radius:6px;margin-bottom:16px;flex-wrap:wrap">
+      <label style="font-size:10px;font-weight:700;color:#7a9090;letter-spacing:1.5px;text-transform:uppercase">AGE</label>
+      <input id="__wpkddb_age" value="${esc(age)}" placeholder="a114"
+        style="width:68px;background:#323d3d;border:1px solid #617070;color:#ffd400;font-size:14px;font-weight:700;padding:6px 10px;border-radius:4px;outline:none"
         onblur="__wpA.kddbSetAge(this.value)"
         onkeydown="if(event.key==='Enter')__wpA.kddbSetAge(this.value)">
-      <div style="flex:1;font-size:12px;color:#7a5a2a;">
+      <div style="flex:1;min-width:120px">
         ${hasEnemy
-          ? `<b style="color:#c8a060">${esc(kdName)}</b> <span style="color:#4a3010">${esc(S.eLoc)}</span> · ${S.enemy.provinces.length} provinces`
-          : '<i>No enemy loaded</i>'}
+          ? `<span style="font-size:15px;font-weight:700;color:#ffd400">${esc(kdName)}</span>
+             <span style="font-size:13px;color:#7a9090;margin-left:8px">${esc(S.eLoc)}</span>
+             <span style="font-size:12px;color:#7a9090;margin-left:4px">· ${S.enemy.provinces.length} provinces</span>`
+          : '<i style="color:#7a9090;font-size:13px">No enemy loaded</i>'}
       </div>
-      <button class="wb g" onclick="__wpA.kddbSave()" ${canSave ? '' : 'disabled style="opacity:.5"'}>💾 Save &amp; Analyze</button>
-      <button class="wb" onclick="__wpA.kddbTagAll()" ${age ? '' : 'disabled style="opacity:.5"'}>⚑ Tag untagged this age</button>
+      <button style="background:#ffd400;color:#1e2828;border:none;padding:8px 16px;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer;${canSave ? '' : 'opacity:.4;cursor:not-allowed'}"
+        onclick="__wpA.kddbSave()" ${canSave ? '' : 'disabled'}>&#x1f4be; Save &amp; Analyze</button>
+      <button style="background:none;border:1px solid #617070;color:#b8c8c8;padding:8px 14px;border-radius:4px;font-size:13px;cursor:pointer;${age ? '' : 'opacity:.4;cursor:not-allowed'}"
+        onclick="__wpA.kddbTagAll()" ${age ? '' : 'disabled'}>&#x2691; Tag untagged this age</button>
     </div>`;
 
-  // ── Current enemy province list ──
+  // ── Province table ──
   let provinceHtml = '';
   if (hasEnemy) {
-    const rulerIdx  = _kddbBuildRulerIdx();
-    const provRows  = (S.enemy.provinces || []).map(p => {
-      const ruler = p.sot?.ruler || '—';
-      const known = ruler !== '—' && rulerIdx[ruler.toLowerCase()];
+    const rulerIdx = _kddbBuildRulerIdx();
+    const TH = 'padding:8px 14px;text-align:left;font-size:10px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070';
+    const provRows = (S.enemy.provinces || []).map(p => {
+      const ruler    = p.sot?.ruler || '—';
+      const known    = ruler !== '—' && rulerIdx[ruler.toLowerCase()];
       const identity = known ? _kddbIdentities.find(i => i.id === known) : null;
       return `
-        <tr style="border-bottom:1px solid #1e1208;">
-          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${p.slot}</td>
-          <td style="padding:4px 10px;color:#c8a060;font-size:12px">${esc(p.name || '—')}</td>
-          <td style="padding:4px 10px;font-size:12px;color:${identity ? '#60C040' : '#c8a060'};font-weight:${identity ? '700' : '400'}">${esc(ruler)}</td>
-          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${esc(p.race || '—')}</td>
-          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${esc(p.sot?.personality || '—')}</td>
-          <td style="padding:4px 10px;font-size:10px;color:#4a3010">${identity ? esc(identity.label) : ''}</td>
+        <tr onmouseover="this.style.background='rgba(255,212,0,.07)'" onmouseout="this.style.background=''">
+          <td style="padding:9px 14px;color:#7a9090;font-size:12px;border-bottom:1px solid rgba(97,112,112,.25)">${p.slot}</td>
+          <td style="padding:9px 14px;color:#ffffff;font-size:13px;font-weight:500;border-bottom:1px solid rgba(97,112,112,.25)">${esc(p.name || '—')}</td>
+          <td style="padding:9px 14px;font-size:13px;font-weight:600;color:${identity ? '#ffd400' : '#b8c8c8'};border-bottom:1px solid rgba(97,112,112,.25)">${esc(ruler)}</td>
+          <td style="padding:9px 14px;color:#b8c8c8;font-size:13px;border-bottom:1px solid rgba(97,112,112,.25)">${esc(p.race || '—')}</td>
+          <td style="padding:9px 14px;color:#b8c8c8;font-size:13px;border-bottom:1px solid rgba(97,112,112,.25)">${esc(p.sot?.personality || '—')}</td>
+          <td style="padding:9px 14px;font-size:12px;font-weight:700;color:#60d060;border-bottom:1px solid rgba(97,112,112,.25)">${identity ? esc(identity.label) : ''}</td>
         </tr>`;
     }).join('');
     provinceHtml = `
-      <div style="margin-bottom:16px;border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
-        <div style="padding:8px 14px;background:#120d04;border-bottom:1px solid #3a2810;font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
-          ${esc(kdName)} — Provinces &amp; Rulers
+      <div style="margin-bottom:16px;border:1px solid #617070;border-radius:6px;background:#3c4545;overflow:hidden">
+        <div style="padding:10px 16px;background:#2b3333;border-bottom:1px solid #617070;font-size:11px;font-weight:700;color:#7a9090;letter-spacing:1.5px;text-transform:uppercase">
+          ${esc(kdName)} &mdash; Provinces &amp; Rulers
+          <span style="font-weight:400;color:#617070;margin-left:8px;letter-spacing:0">· gold rulers are already indexed</span>
         </div>
         <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="border-bottom:1px solid #2a1a08">
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">#</th>
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Province</th>
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Ruler</th>
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Race</th>
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Personality</th>
-              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Known as</th>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>
+              <th style="${TH}">#</th>
+              <th style="${TH}">Province</th>
+              <th style="${TH}">Ruler</th>
+              <th style="${TH}">Race</th>
+              <th style="${TH}">Personality</th>
+              <th style="${TH}">Known As</th>
             </tr></thead>
             <tbody>${provRows}</tbody>
           </table>
@@ -372,33 +375,33 @@ function _buildMainView() {
       </div>`;
   }
 
-  // ── Match results — always shown after Save & Analyze ──
+  // ── Match results ──
   let matchHtml = '';
   if (snapId) {
     const matchRows = _kddbMatches.map((m, i) => {
       const identity = _kddbIdentities.find(id => id.id === m.identityId);
       if (!identity) return '';
       const conf   = _kddbConfidence(m.rulerHits);
-      const rulers = (m.matchedRulers || []).map(r => `<span class="wtag">${esc(r)} &#x2713;</span>`).join('');
+      const rulers = (m.matchedRulers || []).map(r => `<span style="display:inline-block;background:#7a6500;color:#ffd400;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;margin:1px">${esc(r)} &#x2713;</span>`).join(' ');
       const last   = (identity.kdHistory || []).slice(-1)[0];
       const hist   = last
-        ? `<span style="font-size:10px;color:#7a5a2a">Was: <b>${esc(last.kdName)}</b> @ ${esc(last.location)} (${esc(last.age)})</span>`
+        ? `<div style="font-size:11px;color:#7a9090;margin-top:4px">Was: <b style="color:#b8c8c8">${esc(last.kdName || last.location)}</b> @ ${esc(last.location)} (${esc(last.age)})</div>`
         : '';
       return `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2a1a08;${i === 0 ? 'background:#1e1508' : ''}">
-          <div style="min-width:22px;font-weight:700;color:#7a5a2a;font-size:12px">${i + 1}.</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(97,112,112,.3);${i === 0 ? 'background:#323d3d' : ''}">
+          <div style="min-width:22px;font-weight:700;color:#7a9090;font-size:13px">${i + 1}.</div>
           <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-              <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(identity.label)}</span>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="font-size:15px;font-weight:700;color:#ffffff">${esc(identity.label)}</span>
               <span style="font-size:11px;font-weight:700;color:${conf.color};font-family:monospace">${conf.bar} ${conf.label}</span>
             </div>
-            <div style="margin-bottom:4px">${rulers}</div>
+            <div style="margin-bottom:2px">${rulers}</div>
             ${hist}
           </div>
           <div style="display:flex;flex-direction:column;gap:5px">
-            <button class="wb g" style="font-size:11px;padding:4px 10px"
+            <button style="background:#ffd400;color:#1e2828;border:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer"
               onclick="__wpA.kddbConfirm('${esc(snapId)}','${esc(identity.id)}')">&#x2713; Confirm</button>
-            <button class="wb r" style="font-size:11px;padding:4px 10px"
+            <button style="background:none;border:1px solid rgba(255,80,80,.4);color:#ff8888;padding:6px 12px;border-radius:4px;font-size:12px;cursor:pointer"
               onclick="__wpA.kddbWrong('${esc(m.identityId)}')">&#x2717; Wrong</button>
           </div>
         </div>`;
@@ -409,42 +412,41 @@ function _buildMainView() {
       .join('');
 
     matchHtml = `
-      <div style="margin-bottom:20px;border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
-        <div style="padding:10px 14px;background:#120d04;border-bottom:1px solid #3a2810;font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
-          Match Results — ${esc(kdName)}
+      <div style="margin-bottom:16px;border:1px solid #617070;border-radius:6px;background:#3c4545;overflow:hidden">
+        <div style="padding:10px 16px;background:#2b3333;border-bottom:1px solid #617070;font-size:11px;font-weight:700;color:#7a9090;letter-spacing:1.5px;text-transform:uppercase">
+          Match Results &mdash; ${esc(kdName)}
         </div>
-        ${matchRows || '<div style="padding:12px 14px;color:#4a3010;font-style:italic;font-size:12px">No ruler matches found — this may be a new kingdom or one not yet in the database.</div>'}
-        <div style="padding:10px 14px;border-top:1px solid #2a1a08;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${matchRows || '<div style="padding:14px 16px;color:#7a9090;font-style:italic;font-size:13px">No ruler matches found &mdash; this may be a new kingdom not yet in the database.</div>'}
+        <div style="padding:12px 16px;border-top:1px solid rgba(97,112,112,.4);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#2b3333">
           <input id="__wpkddb_newlabel" placeholder="New identity name (real name)..."
-            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:13px;padding:6px 10px;border-radius:3px;flex:1;min-width:160px;outline:none">
-          <button class="wb g" onclick="__wpA.kddbCreate(document.getElementById('__wpkddb_newlabel').value,'${esc(snapId)}')">
-            + Create &amp; Tag
-          </button>
-          <span style="font-size:11px;color:#4a3010">or link to existing:</span>
+            style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:13px;padding:7px 10px;border-radius:4px;flex:1;min-width:150px;outline:none">
+          <button style="background:#ffd400;color:#1e2828;border:none;padding:8px 14px;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap"
+            onclick="__wpA.kddbCreate(document.getElementById('__wpkddb_newlabel').value,'${esc(snapId)}')">+ Create &amp; Tag</button>
+          <span style="font-size:12px;color:#7a9090;white-space:nowrap">or link:</span>
           <select id="__wpkddb_linksel"
-            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:12px;padding:5px 8px;border-radius:3px;outline:none">
+            style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:13px;padding:7px 8px;border-radius:4px;outline:none;flex:1;min-width:140px">
             <option value="">— select identity —</option>
             ${idOptions}
           </select>
-          <button class="wb" onclick="__wpA.kddbConfirm('${esc(snapId)}',document.getElementById('__wpkddb_linksel').value)">
-            Link
-          </button>
+          <button style="background:none;border:1px solid #617070;color:#b8c8c8;padding:8px 14px;border-radius:4px;font-size:13px;cursor:pointer"
+            onclick="__wpA.kddbConfirm('${esc(snapId)}',document.getElementById('__wpkddb_linksel').value)">Link</button>
         </div>
       </div>`;
   }
 
   // ── Identity browser ──
   const browser = `
-    <div style="border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
-      <div style="padding:10px 14px;background:#120d04;border-bottom:1px solid #3a2810;display:flex;align-items:center;gap:10px">
-        <span style="font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
+    <div style="border:1px solid #617070;border-radius:6px;background:#3c4545;overflow:hidden">
+      <div style="padding:10px 16px;background:#2b3333;border-bottom:1px solid #617070;display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;font-weight:700;color:#7a9090;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap">
           Known Identities (${_kddbIdentities.length})
         </span>
         <input id="__wpkddb_search" placeholder="Search by name or ruler..."
           value="${esc(_kddbSearch)}"
           oninput="__wpA.kddbSearch(this.value)"
-          style="flex:1;background:#1a1208;border:1px solid #2a1a08;color:#c8a060;font-size:12px;padding:4px 8px;border-radius:3px;outline:none">
-        <button class="wb" style="font-size:11px;padding:4px 10px" onclick="__wpA.kddbCreateNew()">+ New Identity</button>
+          style="flex:1;background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:13px;padding:7px 10px;border-radius:4px;outline:none">
+        <button style="background:#ffd400;color:#1e2828;border:none;padding:7px 13px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"
+          onclick="__wpA.kddbCreateNew()">+ New Identity</button>
       </div>
       <div id="__wpkddb_idlist">${_kddbBuildIdRows()}</div>
     </div>`;
@@ -465,39 +467,41 @@ function _buildTagView() {
       .map(id => `<option value="${esc(id.id)}" ${identity && id.id === identity.id ? 'selected' : ''}>${esc(id.label)}</option>`)
       .join('');
     return `
-      <div style="padding:12px 14px;border-bottom:1px solid #2a1a08;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:7px">
+      <div style="padding:14px 16px;border-bottom:1px solid rgba(97,112,112,.3);"
+           onmouseover="this.style.background='rgba(255,212,0,.07)'" onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <div style="flex:1">
-            <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(snap.kdName || snap.location)}</span>
-            <span style="font-size:11px;color:#4a3010;margin-left:8px">${esc(snap.location)}</span>
-            <span style="font-size:11px;color:#4a3010;margin-left:8px">${(snap.provinces || []).length} provs</span>
+            <span style="font-size:14px;font-weight:700;color:#ffffff">${esc(snap.kdName || snap.location)}</span>
+            <span style="font-size:12px;color:#7a9090;margin-left:8px">${esc(snap.location)}</span>
+            <span style="font-size:12px;color:#7a9090;margin-left:4px">· ${(snap.provinces || []).length} provs</span>
           </div>
           ${conf ? `<span style="font-size:11px;font-weight:700;color:${conf.color};font-family:monospace">${conf.bar} ${conf.label}</span>` : ''}
         </div>
-        ${rulers ? `<div style="font-size:11px;color:#7a5a2a;margin-bottom:8px">Rulers: ${esc(rulers)}</div>` : ''}
+        ${rulers ? `<div style="font-size:12px;color:#7a9090;margin-bottom:10px"><b style="color:#b8c8c8">Rulers:</b> ${esc(rulers)}</div>` : ''}
         <div style="display:flex;align-items:center;gap:8px">
           <select id="__wpkddb_ts_${i}"
-            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:12px;padding:4px 8px;border-radius:3px;flex:1;outline:none">
+            style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:13px;padding:6px 8px;border-radius:4px;flex:1;outline:none">
             <option value="">— select identity —</option>
             ${idOptions}
           </select>
-          <button class="wb g" style="font-size:11px;padding:4px 10px"
+          <button style="background:#ffd400;color:#1e2828;border:none;padding:7px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"
             onclick="__wpA.kddbTagConfirm('${esc(snapId)}',document.getElementById('__wpkddb_ts_${i}').value)">
-            ✓ Confirm
+            &#x2713; Confirm
           </button>
         </div>
       </div>`;
   }).join('');
 
   return `
-    <div class="webar" style="justify-content:space-between;margin-bottom:16px">
-      <span style="font-size:13px;font-weight:700;color:#D4A017">⚑ Tag Untagged KDs — ${esc(age)}</span>
-      <span style="font-size:11px;color:#7a5a2a">${_kddbTagData.length} untagged</span>
-      <button class="wb" onclick="__wpA.kddbTagBack()">← Back</button>
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#2b3333;border:1px solid #617070;border-radius:6px;margin-bottom:16px">
+      <span style="font-size:13px;font-weight:700;color:#ffd400">&#x2691; Tag Untagged KDs &mdash; ${esc(age)}</span>
+      <span style="font-size:12px;color:#7a9090">${_kddbTagData.length} untagged</span>
+      <button style="background:none;border:1px solid #617070;color:#b8c8c8;padding:6px 14px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:auto"
+        onclick="__wpA.kddbTagBack()">&#x2190; Back</button>
     </div>
-    <div style="border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
+    <div style="border:1px solid #617070;border-radius:6px;background:#3c4545;overflow:hidden">
       ${_kddbTagData.length === 0
-        ? '<div style="padding:16px;color:#4a3010;font-style:italic;font-size:12px">All kingdoms for this age are tagged — or no snapshots recorded yet.</div>'
+        ? '<div style="padding:20px 16px;color:#7a9090;font-style:italic;font-size:13px">All kingdoms for this age are tagged &mdash; or no snapshots recorded yet.</div>'
         : rows}
     </div>`;
 }
