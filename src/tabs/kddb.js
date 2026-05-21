@@ -23,7 +23,7 @@ function _kddbSetAge(age) {
   const clean = age.trim().toLowerCase();
   S.kddbAge = clean;
   localStorage.setItem('wp_kddb_age', clean);
-  renderKddb();
+  setTimeout(() => renderKddb(), 0);
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────

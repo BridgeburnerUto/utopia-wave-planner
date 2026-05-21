@@ -2,7 +2,7 @@
 
 function setThr(key, val) {
   S.thresholds[key] = parseInt(val) || 0;
-  renderAlerts();
+  setTimeout(() => renderAlerts(), 0);
 }
 
 function renderAlerts() {
