@@ -185,6 +185,94 @@ Confirm via SoT.`,
     next.own_peas_low = [];
   }
 
+  // ── 6. Enemy food rich ────────────────────────────────────────────────
+  const foodRichThr = S.thresholds.enemyFoodRich || 0;
+  if (foodRichThr > 0) {
+    const richFood = (S.enemy.provinces || [])
+      .filter(p => p.sot && (p.sot.food || 0) > foodRichThr)
+      .map(p => ({ name: p.name, food: p.sot.food || 0 }));
+    next.enemy_food_rich = richFood.map(p => p.name);
+    const newRichFood = richFood.filter(p => !(prev.enemy_food_rich || []).includes(p.name));
+    if (newRichFood.length) {
+      toSend.push({
+        content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+        embeds: [{
+          title: `🍞 Enemy food target — ${newRichFood.length} province${newRichFood.length > 1 ? 's' : ''}`,
+          description: newRichFood.map(p => `· ${p.name} — ${fK(p.food)} food`).join('\n') + '\nUse steal food / vermin.',
+          color: DISCORD.COLORS.yellow,
+          footer: { text: `Threshold: ${fK(foodRichThr)} · Wave Planner` },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    }
+  } else { next.enemy_food_rich = []; }
+
+  // ── 7. Enemy food low / starvation risk ───────────────────────────────
+  const foodLowThr = S.thresholds.enemyFoodLow || 0;
+  if (foodLowThr > 0) {
+    const starveProv = (S.enemy.provinces || [])
+      .filter(p => p.sot && (p.sot.food || 0) < foodLowThr)
+      .map(p => ({ name: p.name, food: p.sot.food || 0 }));
+    next.enemy_food_low = starveProv.map(p => p.name);
+    const newStarve = starveProv.filter(p => !(prev.enemy_food_low || []).includes(p.name));
+    if (newStarve.length) {
+      toSend.push({
+        content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+        embeds: [{
+          title: `💀 Enemy starvation risk — ${newStarve.length} province${newStarve.length > 1 ? 's' : ''}`,
+          description: newStarve.map(p => `· ${p.name} — only ${fK(p.food)} food`).join('\n') + '\nUse vermin + drought + gluttony.',
+          color: DISCORD.COLORS.red,
+          footer: { text: `Threshold: ${fK(foodLowThr)} · Wave Planner` },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    }
+  } else { next.enemy_food_low = []; }
+
+  // ── 8. Enemy GC rich ──────────────────────────────────────────────────
+  const gcRichThr = S.thresholds.enemyGcRich || 0;
+  if (gcRichThr > 0) {
+    const richGc = (S.enemy.provinces || [])
+      .filter(p => p.sot && (p.sot.money || 0) > gcRichThr)
+      .map(p => ({ name: p.name, gc: p.sot.money || 0 }));
+    next.enemy_gc_rich = richGc.map(p => p.name);
+    const newRichGc = richGc.filter(p => !(prev.enemy_gc_rich || []).includes(p.name));
+    if (newRichGc.length) {
+      toSend.push({
+        content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+        embeds: [{
+          title: `💰 Enemy GC target — ${newRichGc.length} province${newRichGc.length > 1 ? 's' : ''}`,
+          description: newRichGc.map(p => `· ${p.name} — ${fK(p.gc)} GC`).join('\n') + '\nUse fools gold / steal gold.',
+          color: DISCORD.COLORS.yellow,
+          footer: { text: `Threshold: ${fK(gcRichThr)} · Wave Planner` },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    }
+  } else { next.enemy_gc_rich = []; }
+
+  // ── 9. Enemy runes rich ───────────────────────────────────────────────
+  const runesRichThr = S.thresholds.enemyRunesRich || 0;
+  if (runesRichThr > 0) {
+    const richRunes = (S.enemy.provinces || [])
+      .filter(p => p.sot && (p.sot.runes || 0) > runesRichThr)
+      .map(p => ({ name: p.name, runes: p.sot.runes || 0 }));
+    next.enemy_runes_rich = richRunes.map(p => p.name);
+    const newRichRunes = richRunes.filter(p => !(prev.enemy_runes_rich || []).includes(p.name));
+    if (newRichRunes.length) {
+      toSend.push({
+        content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+        embeds: [{
+          title: `🔮 Enemy runes target — ${newRichRunes.length} province${newRichRunes.length > 1 ? 's' : ''}`,
+          description: newRichRunes.map(p => `· ${p.name} — ${fK(p.runes)} runes`).join('\n') + '\nUse lightning strike / steal runes.',
+          color: DISCORD.COLORS.yellow,
+          footer: { text: `Threshold: ${fK(runesRichThr)} · Wave Planner` },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    }
+  } else { next.enemy_runes_rich = []; }
+
   // ── Send all queued alerts ─────────────────────────────────────────────
   for (const msg of toSend) {
     await sendDiscordEmbed(webhookUrl, msg);
