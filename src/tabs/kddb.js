@@ -213,6 +213,18 @@ async function _kddbDeleteIdentity(identityId) {
   renderKddb();
 }
 
+async function _kddbRenameIdentity(identityId) {
+  const identity = _kddbIdentities.find(i => i.id === identityId);
+  if (!identity) return;
+  const newLabel = prompt(`Rename "${identity.label}" to:`, identity.label);
+  if (!newLabel || !newLabel.trim() || newLabel.trim() === identity.label) return;
+  const updated = { ...identity, label: newLabel.trim() };
+  await fbWrite(`kd_identities/${identityId}`, updated);
+  const idx = _kddbIdentities.findIndex(i => i.id === identityId);
+  if (idx >= 0) _kddbIdentities[idx] = updated;
+  renderKddb();
+}
+
 // ── Tag view ──────────────────────────────────────────────────────────────────
 
 async function _kddbOpenTagView() {
@@ -257,6 +269,9 @@ function _kddbBuildIdRows() {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:${history || rulers || races ? '6px' : '0'}">
           <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(identity.label)}</span>
           ${identity.typicalProvinceCount ? `<span style="font-size:10px;color:#4a3010">~${identity.typicalProvinceCount} provs</span>` : ''}
+          <button onclick="__wpA.kddbRename('${esc(identity.id)}')"
+            style="background:none;border:none;color:#4a3010;cursor:pointer;font-size:11px;padding:2px 6px"
+            title="Rename identity">&#x270e; Rename</button>
           <button onclick="__wpA.kddbDelete('${esc(identity.id)}')"
             style="margin-left:auto;background:none;border:none;color:#4a3010;cursor:pointer;font-size:12px;padding:2px 6px"
             title="Delete identity">&#x2715;</button>
@@ -339,14 +354,14 @@ function _buildMainView() {
       </div>`;
   }
 
-  // ── Match results ──
+  // ── Match results — always shown after Save & Analyze ──
   let matchHtml = '';
-  if (_kddbMatches.length && snapId) {
+  if (snapId) {
     const matchRows = _kddbMatches.map((m, i) => {
       const identity = _kddbIdentities.find(id => id.id === m.identityId);
       if (!identity) return '';
       const conf   = _kddbConfidence(m.rulerHits);
-      const rulers = (m.matchedRulers || []).map(r => `<span class="wtag">${esc(r)} ✓</span>`).join('');
+      const rulers = (m.matchedRulers || []).map(r => `<span class="wtag">${esc(r)} &#x2713;</span>`).join('');
       const last   = (identity.kdHistory || []).slice(-1)[0];
       const hist   = last
         ? `<span style="font-size:10px;color:#7a5a2a">Was: <b>${esc(last.kdName)}</b> @ ${esc(last.location)} (${esc(last.age)})</span>`
@@ -364,24 +379,37 @@ function _buildMainView() {
           </div>
           <div style="display:flex;flex-direction:column;gap:5px">
             <button class="wb g" style="font-size:11px;padding:4px 10px"
-              onclick="__wpA.kddbConfirm('${esc(snapId)}','${esc(identity.id)}')">✓ Confirm</button>
+              onclick="__wpA.kddbConfirm('${esc(snapId)}','${esc(identity.id)}')">&#x2713; Confirm</button>
             <button class="wb r" style="font-size:11px;padding:4px 10px"
-              onclick="__wpA.kddbWrong('${esc(m.identityId)}')">✗ Wrong</button>
+              onclick="__wpA.kddbWrong('${esc(m.identityId)}')">&#x2717; Wrong</button>
           </div>
         </div>`;
     }).join('');
+
+    const idOptions = _kddbIdentities
+      .map(id => `<option value="${esc(id.id)}">${esc(id.label)}</option>`)
+      .join('');
 
     matchHtml = `
       <div style="margin-bottom:20px;border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
         <div style="padding:10px 14px;background:#120d04;border-bottom:1px solid #3a2810;font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
           Match Results — ${esc(kdName)}
         </div>
-        ${matchRows || '<div style="padding:12px 14px;color:#4a3010;font-style:italic;font-size:12px">No ruler matches found in database yet.</div>'}
-        <div style="padding:10px 14px;border-top:1px solid #2a1a08;display:flex;align-items:center;gap:8px">
-          <input id="__wpkddb_newlabel" placeholder="New identity name..."
-            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:13px;padding:6px 10px;border-radius:3px;flex:1;outline:none">
-          <button class="wb" onclick="__wpA.kddbCreate(document.getElementById('__wpkddb_newlabel').value,'${esc(snapId)}')">
-            + Create &amp; Confirm
+        ${matchRows || '<div style="padding:12px 14px;color:#4a3010;font-style:italic;font-size:12px">No ruler matches found — this may be a new kingdom or one not yet in the database.</div>'}
+        <div style="padding:10px 14px;border-top:1px solid #2a1a08;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input id="__wpkddb_newlabel" placeholder="New identity name (real name)..."
+            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:13px;padding:6px 10px;border-radius:3px;flex:1;min-width:160px;outline:none">
+          <button class="wb g" onclick="__wpA.kddbCreate(document.getElementById('__wpkddb_newlabel').value,'${esc(snapId)}')">
+            + Create &amp; Tag
+          </button>
+          <span style="font-size:11px;color:#4a3010">or link to existing:</span>
+          <select id="__wpkddb_linksel"
+            style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:12px;padding:5px 8px;border-radius:3px;outline:none">
+            <option value="">— select identity —</option>
+            ${idOptions}
+          </select>
+          <button class="wb" onclick="__wpA.kddbConfirm('${esc(snapId)}',document.getElementById('__wpkddb_linksel').value)">
+            Link
           </button>
         </div>
       </div>`;
