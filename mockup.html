@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>KD Database — Design Mockups</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1e2828; color: #fff; }
+
+/* ── Palette ───────────────────────────────────────────────────────────────
+   Base    100% : #3c4545   (dark teal-grey panel)
+   Base     40% : #617070   (mid teal — borders, secondary bg)
+   Base     10% : #323d3d   (deep bg)
+   Accent  100% : #ffd400   (gold — headlines, CTA, key data)
+   Accent   40% : #7a6500   (muted gold — tags, badges)
+   Accent   10% : rgba(255,212,0,.10)  (hover wash)
+   Text primary  : #ffffff
+   Text secondary: #b8c8c8
+   Text muted    : #7a9090
+*/
+
+/* ── Nav bar ── */
+.nav { display:flex; gap:4px; padding:12px 16px; background:#1e2828; border-bottom:2px solid #ffd400; }
+.nav button { background:none; border:1px solid #617070; color:#b8c8c8; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:13px; font-weight:600; letter-spacing:.5px; }
+.nav button.active { background:#ffd400; color:#1e2828; border-color:#ffd400; }
+.nav h2 { color:#ffd400; font-size:15px; font-weight:700; letter-spacing:1px; margin-right:auto; align-self:center; }
+
+/* ── Panels ── */
+.panel { display:none; padding:20px; }
+.panel.active { display:block; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   VARIANT A — "Structured Dark"
+   Refined version of the current look: bigger text, higher contrast,
+   accent-yellow for all key data, white for secondary info.
+────────────────────────────────────────────────────────────────────────── */
+#a { --bg: #3c4545; --bg-deep: #2b3333; --bg-mid: #323d3d; --border: #617070;
+     --text: #ffffff; --text2: #b8c8c8; --text3: #7a9090;
+     --accent: #ffd400; --accent-dim: #7a6500; --accent-wash: rgba(255,212,0,.10); }
+
+#a .toolbar { display:flex; align-items:center; gap:12px; padding:12px 16px;
+  background:var(--bg-deep); border:1px solid var(--border); border-radius:6px; margin-bottom:16px; }
+#a label { font-size:11px; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; }
+#a input.age { background:var(--bg-mid); border:1px solid var(--border); color:var(--accent);
+  font-size:14px; font-weight:700; padding:6px 10px; border-radius:4px; width:72px; }
+#a .kd-name { font-size:15px; font-weight:700; color:var(--accent); }
+#a .kd-loc  { font-size:13px; color:var(--text3); margin-left:6px; }
+#a .kd-info { font-size:12px; color:var(--text3); margin-left:4px; }
+#a .spacer  { flex:1; }
+#a .btn     { padding:8px 16px; border-radius:4px; font-size:13px; font-weight:700; cursor:pointer; border:none; }
+#a .btn-gold { background:var(--accent); color:#1e2828; }
+#a .btn-outline { background:none; border:1px solid var(--border); color:var(--text2); }
+
+#a .section { background:var(--bg); border:1px solid var(--border); border-radius:6px; margin-bottom:16px; overflow:hidden; }
+#a .section-head { padding:10px 16px; background:var(--bg-deep); border-bottom:1px solid var(--border);
+  font-size:11px; font-weight:700; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase;
+  display:flex; align-items:center; gap:8px; }
+#a .section-head span.hl { color:var(--accent); }
+
+#a table { width:100%; border-collapse:collapse; }
+#a th { padding:8px 14px; text-align:left; font-size:10px; font-weight:700; color:var(--text3);
+  letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border); }
+#a td { padding:9px 14px; font-size:13px; border-bottom:1px solid rgba(97,112,112,.3); }
+#a tr:last-child td { border-bottom:none; }
+#a tr:hover td { background:var(--accent-wash); }
+#a td.slot { color:var(--text3); font-size:11px; width:32px; }
+#a td.prov { color:var(--text); font-weight:500; }
+#a td.ruler { color:var(--accent); font-weight:600; }
+#a td.known { color:#60d060; font-size:11px; font-weight:700; }
+#a td.race  { color:var(--text2); }
+#a td.pers  { color:var(--text2); }
+
+#a .search-bar { display:flex; align-items:center; gap:10px; padding:10px 16px;
+  background:var(--bg-deep); border-bottom:1px solid var(--border); }
+#a .search-bar input { flex:1; background:var(--bg-mid); border:1px solid var(--border);
+  color:var(--text); font-size:14px; padding:8px 12px; border-radius:4px; }
+#a .search-bar input::placeholder { color:var(--text3); }
+#a .count { font-size:12px; font-weight:700; color:var(--text3); white-space:nowrap; }
+
+#a .identity { padding:14px 16px; border-bottom:1px solid rgba(97,112,112,.3); }
+#a .identity:last-child { border-bottom:none; }
+#a .identity:hover { background:var(--accent-wash); }
+#a .id-name { font-size:15px; font-weight:700; color:var(--text); }
+#a .id-tags  { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 4px; }
+#a .tag { background:var(--accent-dim); color:var(--accent); font-size:10px; font-weight:700;
+  padding:2px 7px; border-radius:3px; letter-spacing:.5px; }
+#a .id-rulers { font-size:12px; color:var(--text3); line-height:1.6; }
+#a .id-rulers b { color:var(--text2); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   VARIANT B — "Bold Yellow"
+   Yellow is the dominant foreground. Larger font sizes throughout.
+   More aggressive use of the accent to highlight what matters.
+────────────────────────────────────────────────────────────────────────── */
+#b { --bg: #3c4545; --bg-deep: #252e2e; --bg-row: #323d3d;
+     --border: rgba(255,212,0,.25); --border-hard: rgba(255,212,0,.5);
+     --text: #ffffff; --text2: #c8d8d8; --text3: #7a9090;
+     --accent: #ffd400; --accent-dim: rgba(255,212,0,.15); --accent-wash: rgba(255,212,0,.07); }
+
+#b .toolbar { display:flex; align-items:center; gap:14px; padding:14px 18px;
+  background:var(--bg-deep); border-bottom:2px solid var(--border-hard); margin-bottom:16px; border-radius:6px; }
+#b label { font-size:10px; font-weight:800; color:var(--accent); letter-spacing:2px; text-transform:uppercase; }
+#b input.age { background:transparent; border:none; border-bottom:2px solid var(--accent);
+  color:var(--accent); font-size:18px; font-weight:800; padding:2px 4px; width:72px; }
+#b .kd-name { font-size:18px; font-weight:800; color:var(--accent); }
+#b .kd-loc  { font-size:13px; color:var(--text3); }
+#b .kd-info { font-size:12px; color:var(--text3); }
+#b .spacer  { flex:1; }
+#b .btn-gold { background:var(--accent); color:#1a2020; padding:10px 20px; border:none;
+  border-radius:4px; font-size:13px; font-weight:800; cursor:pointer; letter-spacing:.5px; }
+#b .btn-outline { background:transparent; border:1px solid var(--border-hard); color:var(--text2);
+  padding:10px 16px; border-radius:4px; font-size:13px; cursor:pointer; }
+
+#b .section { background:var(--bg); border:1px solid var(--border); border-radius:6px;
+  margin-bottom:16px; overflow:hidden; }
+#b .section-head { padding:12px 18px; background:var(--bg-deep); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:10px; }
+#b .section-head h3 { font-size:12px; font-weight:800; color:var(--accent);
+  letter-spacing:2px; text-transform:uppercase; }
+
+#b table { width:100%; border-collapse:collapse; }
+#b th { padding:10px 18px; text-align:left; font-size:10px; font-weight:800; color:var(--accent);
+  letter-spacing:1.5px; text-transform:uppercase; background:var(--accent-dim);
+  border-bottom:1px solid var(--border); }
+#b td { padding:11px 18px; font-size:14px; border-bottom:1px solid var(--border); }
+#b tr:hover td { background:var(--accent-wash); }
+#b td.slot { color:var(--text3); font-size:12px; width:36px; }
+#b td.prov { color:var(--text); font-weight:500; }
+#b td.ruler { color:var(--accent); font-weight:700; font-size:14px; }
+#b td.known { color:#50e050; font-size:12px; font-weight:700; }
+#b td.race  { color:var(--text2); }
+#b td.pers  { color:var(--text2); }
+
+#b .search-bar { display:flex; align-items:center; gap:12px; padding:12px 18px;
+  background:var(--bg-deep); border-bottom:1px solid var(--border); }
+#b .search-bar input { flex:1; background:transparent; border:none; border-bottom:2px solid var(--border-hard);
+  color:var(--text); font-size:15px; padding:6px 2px; border-radius:0; }
+#b .search-bar input::placeholder { color:var(--text3); }
+#b .count { font-size:13px; font-weight:800; color:var(--accent); white-space:nowrap; }
+
+#b .identity { padding:16px 18px; border-bottom:1px solid var(--border); }
+#b .identity:hover { background:var(--accent-wash); }
+#b .id-name { font-size:16px; font-weight:700; color:var(--text); }
+#b .id-tags { display:flex; flex-wrap:wrap; gap:5px; margin:8px 0 6px; }
+#b .tag { background:var(--accent-dim); border:1px solid var(--border-hard);
+  color:var(--accent); font-size:11px; font-weight:700; padding:3px 8px; border-radius:3px; }
+#b .id-rulers { font-size:13px; color:var(--text2); line-height:1.7; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   VARIANT C — "Card & Breathe"
+   More vertical rhythm, each identity is a distinct card with a coloured
+   left border. Province table uses alternating bands.
+────────────────────────────────────────────────────────────────────────── */
+#c { --bg: #3c4545; --bg-deep: #2b3333; --bg-alt: #303b3b;
+     --border: #4e5e5e; --accent: #ffd400; --accent-muted: #c8a800;
+     --text: #f0f0f0; --text2: #a8bcbc; --text3: #6a8888;
+     --green: #5cd65c; --accent-wash: rgba(255,212,0,.08); }
+
+#c .toolbar { display:flex; align-items:center; gap:16px; padding:16px 20px;
+  background:var(--bg-deep); border-radius:8px; margin-bottom:20px;
+  border-left:4px solid var(--accent); }
+#c label { font-size:10px; font-weight:700; color:var(--accent); letter-spacing:2px; text-transform:uppercase; }
+#c input.age { background:var(--bg); border:1px solid var(--border); color:var(--accent);
+  font-size:16px; font-weight:800; padding:7px 10px; border-radius:4px; width:80px; }
+#c .kd-block { flex:1; }
+#c .kd-name { font-size:16px; font-weight:700; color:var(--text); }
+#c .kd-sub  { font-size:12px; color:var(--text3); margin-top:2px; }
+#c .btn-gold { background:var(--accent); color:#1a2020; padding:10px 20px; border:none;
+  border-radius:6px; font-size:13px; font-weight:800; cursor:pointer; }
+#c .btn-outline { background:none; border:1px solid var(--border); color:var(--text2);
+  padding:10px 16px; border-radius:6px; font-size:13px; cursor:pointer; }
+
+#c .section { border-radius:8px; margin-bottom:20px; overflow:hidden;
+  border:1px solid var(--border); }
+#c .section-head { padding:12px 20px; background:var(--bg-deep); border-bottom:1px solid var(--border);
+  font-size:11px; font-weight:700; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase;
+  display:flex; gap:8px; align-items:center; }
+#c .section-head .hl { color:var(--accent); }
+
+#c table { width:100%; border-collapse:collapse; }
+#c th { padding:10px 20px; text-align:left; font-size:11px; font-weight:700; color:var(--text3);
+  letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid var(--border); }
+#c tr:nth-child(even) td { background:var(--bg-alt); }
+#c td { padding:10px 20px; font-size:14px; border-bottom:1px solid rgba(78,94,94,.3); }
+#c tr:hover td { background:var(--accent-wash); }
+#c td.slot { color:var(--text3); font-size:12px; width:36px; font-weight:600; }
+#c td.prov { color:var(--text); font-weight:500; }
+#c td.ruler { color:var(--accent); font-weight:700; }
+#c td.known { color:var(--green); font-size:12px; font-weight:700; }
+#c td.race  { color:var(--text2); font-size:13px; }
+#c td.pers  { color:var(--text2); font-size:13px; }
+
+#c .search-bar { display:flex; align-items:center; gap:12px; padding:12px 20px;
+  background:var(--bg-deep); border-bottom:1px solid var(--border); }
+#c .search-bar input { flex:1; background:var(--bg); border:1px solid var(--border);
+  color:var(--text); font-size:14px; padding:9px 14px; border-radius:6px; }
+#c .search-bar input::placeholder { color:var(--text3); }
+#c .count { font-size:12px; font-weight:700; color:var(--text3); white-space:nowrap; }
+#c .btn-new { background:var(--accent); color:#1a2020; padding:8px 14px; border:none;
+  border-radius:5px; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
+
+#c .id-card { padding:16px 20px; border-bottom:1px solid var(--border);
+  border-left:3px solid transparent; transition:border-color .15s; }
+#c .id-card:hover { border-left-color:var(--accent); background:var(--accent-wash); }
+#c .id-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+#c .id-name { font-size:16px; font-weight:700; color:var(--text); }
+#c .id-pcount { font-size:11px; color:var(--text3); background:var(--bg-alt);
+  border:1px solid var(--border); padding:2px 7px; border-radius:10px; }
+#c .id-tags { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px; }
+#c .tag { background:rgba(255,212,0,.12); border:1px solid rgba(255,212,0,.3);
+  color:var(--accent-muted); font-size:11px; font-weight:600; padding:3px 8px; border-radius:4px; }
+#c .id-rulers { font-size:12px; color:var(--text3); line-height:1.8; }
+#c .id-rulers em { color:var(--text2); font-style:normal; }
+
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <h2>KD DATABASE — MOCKUPS</h2>
+  <button class="active" onclick="show('a',this)">A — Structured Dark</button>
+  <button onclick="show('b',this)">B — Bold Yellow</button>
+  <button onclick="show('c',this)">C — Card &amp; Breathe</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ VARIANT A ══ -->
+<div id="a" class="panel active">
+  <div class="toolbar">
+    <label>AGE</label>
+    <input class="age" value="a114" readonly>
+    <span class="kd-name">Wild Crown Syndicate</span>
+    <span class="kd-loc">4:11</span>
+    <span class="kd-info">· 15 provinces</span>
+    <span class="spacer"></span>
+    <button class="btn btn-gold">💾 Save &amp; Analyze</button>
+    <button class="btn btn-outline">⚑ Tag untagged this age</button>
+  </div>
+
+  <div class="section">
+    <div class="section-head">Wild Crown Syndicate — Provinces &amp; Rulers &nbsp;<span class="hl">· rulers in gold are already in database</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Province</th><th>Ruler</th><th>Race</th><th>Personality</th><th>Known As</th></tr></thead>
+      <tbody>
+        <tr><td class="slot">1</td><td class="prov">Freya</td><td class="ruler">Valhalla</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">4</td><td class="prov">Avian Artsian Female</td><td class="ruler">Avian Artsian Female</td><td class="race">Avian</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">5</td><td class="prov">Minas Margul</td><td class="ruler">Birth</td><td class="race">Orc</td><td class="pers">Paladin</td><td class="known"></td></tr>
+        <tr><td class="slot">6</td><td class="prov">Vale of flames</td><td class="ruler">Val</td><td class="race">Halfling</td><td class="pers">Rogue</td><td class="known"></td></tr>
+        <tr><td class="slot">7</td><td class="prov">teal yellow blue</td><td class="ruler">Matt</td><td class="race">Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">8</td><td class="prov">Wildsquirts</td><td class="ruler">Cumquart</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">9</td><td class="prov">jorja</td><td class="ruler" style="color:#ffd400">Bakerman</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known">The core ✓</td></tr>
+        <tr><td class="slot">10</td><td class="prov">The avian</td><td class="ruler">Zone</td><td class="race">Dark Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">11</td><td class="prov">Pocketlandia</td><td class="ruler">Pocket</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">12</td><td class="prov">stabby mc stab stab</td><td class="ruler">sharpy</td><td class="race">Elf</td><td class="pers">Necromancer</td><td class="known"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="search-bar">
+      <span class="count">KNOWN IDENTITIES (8)</span>
+      <input placeholder="Search by name or ruler..." value="">
+      <button class="btn btn-gold" style="padding:7px 13px;font-size:12px;">+ New Identity</button>
+    </div>
+    <div class="identity">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="id-name">Evil habits</span>
+        <span style="font-size:11px;color:#7a9090">~22 provs</span>
+        <button style="margin-left:auto;background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✎ Rename</button>
+        <button style="background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✕</button>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span></div>
+      <div class="id-rulers"><b>Rulers:</b> Arn, Be your idol, Billy Hill, Corgi, Evil Me Ag, Frank, Freya, Gaar, Golden Co, Gotanymo, John, Kayla, Kleptoma, Lay the Dr, Livera, Mr Doggy, SIR WASN, Solomon, Vile, Yukkie, bei, borat</div>
+    </div>
+    <div class="identity">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="id-name">The core</span>
+        <span style="font-size:11px;color:#7a9090">~24 provs</span>
+        <button style="margin-left:auto;background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✎ Rename</button>
+        <button style="background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✕</button>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">One Piece (a114)</span><span class="tag">a115</span></div>
+      <div class="id-rulers"><b>Rulers:</b> Angel, Bakerman, Beer, Biermiester, Big Balls, Big Mugs, Boozer, Cheers, Colossal Battleship, Cork, Devious, Dr Reed Richards, Drunk, Edward, Falco, Happy Be, Imu, Issho, James Be, James Ford, Jinbe, Jtm, Kingsman 07, Lightbringer, Lmnop, Luffy, MaL…</div>
+    </div>
+    <div class="identity">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="id-name">Pinoy Vengeance</span>
+        <span style="font-size:11px;color:#7a9090">~23 provs</span>
+        <button style="margin-left:auto;background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✎ Rename</button>
+        <button style="background:none;border:none;color:#617070;cursor:pointer;font-size:12px;">✕</button>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">Defense of the Ancients (a114)</span></div>
+      <div class="id-rulers"><b>Rulers:</b> Al Capone, Alleria, BETONG, Baby hit y, Bee, Betong, Chet, Don, Ethreain, Ezalor, Fun, Fuzzy wuzzy, Healer, Keno, Kukurikapoo, Maesher, Marks, MorQ, Pulse, Purist Thunderwrath, Reinor, Rumpelstilskin, Sapphire, Sarah, Taytay mo, Washi, Yahya Khan…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ VARIANT B ══ -->
+<div id="b" class="panel">
+  <div class="toolbar">
+    <div>
+      <label>AGE</label>
+      <div><input class="age" value="a114" readonly></div>
+    </div>
+    <div style="width:1px;height:40px;background:rgba(255,212,0,.2)"></div>
+    <div>
+      <label>ENEMY KINGDOM</label>
+      <div class="kd-name">Wild Crown Syndicate</div>
+    </div>
+    <div class="kd-loc">4:11 · 15 provinces</div>
+    <div class="spacer"></div>
+    <button class="btn-gold">💾 Save &amp; Analyze</button>
+    <button class="btn-outline">⚑ Tag untagged this age</button>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h3>Provinces &amp; Rulers</h3>
+      <span style="font-size:12px;color:#b8c8c8;font-weight:400">Gold rulers are already indexed in the database</span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Province</th><th>Ruler</th><th>Race</th><th>Personality</th><th>Known As</th></tr></thead>
+      <tbody>
+        <tr><td class="slot">1</td><td class="prov">Freya</td><td class="ruler">Valhalla</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">4</td><td class="prov">Avian Artsian Female</td><td class="ruler">Avian Artsian Female</td><td class="race">Avian</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">5</td><td class="prov">Minas Margul</td><td class="ruler">Birth</td><td class="race">Orc</td><td class="pers">Paladin</td><td class="known"></td></tr>
+        <tr><td class="slot">6</td><td class="prov">Vale of flames</td><td class="ruler">Val</td><td class="race">Halfling</td><td class="pers">Rogue</td><td class="known"></td></tr>
+        <tr><td class="slot">7</td><td class="prov">teal yellow blue</td><td class="ruler">Matt</td><td class="race">Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">8</td><td class="prov">Wildsquirts</td><td class="ruler">Cumquart</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">9</td><td class="prov">jorja</td><td class="ruler">Bakerman</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known">✓ The core</td></tr>
+        <tr><td class="slot">10</td><td class="prov">The avian</td><td class="ruler">Zone</td><td class="race">Dark Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">11</td><td class="prov">Pocketlandia</td><td class="ruler">Pocket</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">12</td><td class="prov">stabby mc stab stab</td><td class="ruler">sharpy</td><td class="race">Elf</td><td class="pers">Necromancer</td><td class="known"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="search-bar">
+      <span class="count">8 Identities</span>
+      <input placeholder="Search by name or ruler…">
+      <button class="btn-gold" style="padding:9px 14px;font-size:12px;border-radius:4px;">+ New</button>
+    </div>
+
+    <div class="identity" style="border-left:3px solid #ffd400">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span class="id-name">Evil habits</span>
+        <span style="font-size:11px;color:#7a9090;background:rgba(255,212,0,.1);padding:2px 7px;border-radius:3px;">22 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <button style="background:none;border:1px solid rgba(255,212,0,.3);color:#ffd400;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✎ Rename</button>
+          <button style="background:none;border:1px solid rgba(255,100,100,.3);color:#ff8080;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span></div>
+      <div class="id-rulers">Arn, Be your idol, Billy Hill, Corgi, Evil Me Ag, Frank, Freya, Gaar, Golden Co, Gotanymo, John, Kayla, Kleptoma, Lay the Dr, Livera, Mr Doggy, SIR WASN, Solomon, Vile, Yukkie, bei, borat</div>
+    </div>
+
+    <div class="identity" style="border-left:3px solid #ffd400">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span class="id-name">The core</span>
+        <span style="font-size:11px;color:#7a9090;background:rgba(255,212,0,.1);padding:2px 7px;border-radius:3px;">24 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <button style="background:none;border:1px solid rgba(255,212,0,.3);color:#ffd400;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✎ Rename</button>
+          <button style="background:none;border:1px solid rgba(255,100,100,.3);color:#ff8080;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">One Piece (a114)</span><span class="tag">a115</span></div>
+      <div class="id-rulers">Angel, Bakerman, Beer, Biermiester, Big Balls, Big Mugs, Boozer, Cheers, Colossal Battleship, Cork, Devious, Dr Reed Richards, Drunk, Edward, Falco, Happy Be, Imu, Issho, James Be, Jinbe, Jtm, Kingsman 07, Lightbringer, Lmnop, Luffy, MaL, MaoQi, Machine man…</div>
+    </div>
+
+    <div class="identity" style="border-left:3px solid #617070">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span class="id-name">Pinoy Vengeance</span>
+        <span style="font-size:11px;color:#7a9090;background:rgba(255,212,0,.1);padding:2px 7px;border-radius:3px;">23 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <button style="background:none;border:1px solid rgba(255,212,0,.3);color:#ffd400;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✎ Rename</button>
+          <button style="background:none;border:1px solid rgba(255,100,100,.3);color:#ff8080;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:3px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">Defense of the Ancients (a114)</span></div>
+      <div class="id-rulers">Al Capone, Alleria, BETONG, Baby hit y, Bee, Betong, Chet, Don, Ethreain, Ezalor, Fun, Fuzzy wuzzy, Healer, Keno, Kukurikapoo, Marks, MorQ, Pulse, Purist Thunderwrath, Rumpelstilskin, Sapphire, Taytay mo, Washi, nico, wawa…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ VARIANT C ══ -->
+<div id="c" class="panel">
+  <div class="toolbar">
+    <div>
+      <label>AGE</label>
+      <input class="age" value="a114" readonly>
+    </div>
+    <div class="kd-block">
+      <div class="kd-name">Wild Crown Syndicate</div>
+      <div class="kd-sub">Location 4:11 · 15 provinces · Age 114</div>
+    </div>
+    <button class="btn-gold">💾 Save &amp; Analyze</button>
+    <button class="btn-outline">⚑ Tag untagged</button>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      Wild Crown Syndicate — Provinces &amp; Rulers
+      <span class="hl" style="margin-left:auto;font-size:11px;font-weight:400">Gold = ruler in database</span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Province</th><th>Ruler</th><th>Race</th><th>Personality</th><th>Known As</th></tr></thead>
+      <tbody>
+        <tr><td class="slot">1</td><td class="prov">Freya</td><td class="ruler">Valhalla</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">4</td><td class="prov">Avian Artsian Female</td><td class="ruler">Avian Artsian Female</td><td class="race">Avian</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">5</td><td class="prov">Minas Margul</td><td class="ruler">Birth</td><td class="race">Orc</td><td class="pers">Paladin</td><td class="known"></td></tr>
+        <tr><td class="slot">6</td><td class="prov">Vale of flames</td><td class="ruler">Val</td><td class="race">Halfling</td><td class="pers">Rogue</td><td class="known"></td></tr>
+        <tr><td class="slot">7</td><td class="prov">teal yellow blue</td><td class="ruler">Matt</td><td class="race">Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">8</td><td class="prov">Wildsquirts</td><td class="ruler">Cumquart</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">9</td><td class="prov">jorja</td><td class="ruler">Bakerman</td><td class="race">Fairy</td><td class="pers">Mystic</td><td class="known">✓ The core</td></tr>
+        <tr><td class="slot">10</td><td class="prov">The avian</td><td class="ruler">Zone</td><td class="race">Dark Elf</td><td class="pers">Mystic</td><td class="known"></td></tr>
+        <tr><td class="slot">11</td><td class="prov">Pocketlandia</td><td class="ruler">Pocket</td><td class="race">Dwarf</td><td class="pers">Artisan</td><td class="known"></td></tr>
+        <tr><td class="slot">12</td><td class="prov">stabby mc stab stab</td><td class="ruler">sharpy</td><td class="race">Elf</td><td class="pers">Necromancer</td><td class="known"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="search-bar">
+      <span class="count">Known Identities (8)</span>
+      <input placeholder="Search by name or ruler…">
+      <button class="btn-new">+ New Identity</button>
+    </div>
+
+    <div class="id-card">
+      <div class="id-top">
+        <span class="id-name">Evil habits</span>
+        <span class="id-pcount">~22 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px;">
+          <button style="background:none;border:1px solid #4e5e5e;color:#a8bcbc;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✎ Rename</button>
+          <button style="background:none;border:1px solid #4e5e5e;color:#888;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span></div>
+      <div class="id-rulers"><em>Arn, Be your idol, Billy Hill, Corgi, Evil Me Ag, Frank, Freya, Gaar, Golden Co, Gotanymo, John, Kayla, Kleptoma, Lay the Dr, Livera, Mr Doggy, SIR WASN, Solomon, Vile, Yukkie, bei, borat</em></div>
+    </div>
+
+    <div class="id-card">
+      <div class="id-top">
+        <span class="id-name">The core</span>
+        <span class="id-pcount">~24 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px;">
+          <button style="background:none;border:1px solid #4e5e5e;color:#a8bcbc;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✎ Rename</button>
+          <button style="background:none;border:1px solid #4e5e5e;color:#888;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">One Piece (a114)</span><span class="tag">a115</span></div>
+      <div class="id-rulers"><em>Angel, Bakerman, Beer, Biermiester, Big Balls, Big Mugs, Boozer, Cheers, Colossal Battleship, Cork, Devious, Dr Reed Richards, Drunk, Edward, Falco, Happy Be, Imu, Issho, James Be, Jinbe, Jtm, Kingsman 07, Lightbringer, Lmnop, Luffy, MaL, MaoQi…</em></div>
+    </div>
+
+    <div class="id-card">
+      <div class="id-top">
+        <span class="id-name">Pinoy Vengeance</span>
+        <span class="id-pcount">~23 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px;">
+          <button style="background:none;border:1px solid #4e5e5e;color:#a8bcbc;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✎ Rename</button>
+          <button style="background:none;border:1px solid #4e5e5e;color:#888;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span><span class="tag">Defense of the Ancients (a114)</span></div>
+      <div class="id-rulers"><em>Al Capone, Alleria, BETONG, Baby hit y, Bee, Betong, Chet, Don, Ethreain, Ezalor, Fun, Fuzzy wuzzy, Healer, Keno, Kukurikapoo, Marks, MorQ, Pulse, Purist Thunderwrath, Rumpelstilskin, Sapphire, Taytay mo, Washi, nico, wawa…</em></div>
+    </div>
+
+    <div class="id-card">
+      <div class="id-top">
+        <span class="id-name">Not decided yet</span>
+        <span class="id-pcount">~19 provs</span>
+        <span style="margin-left:auto;display:flex;gap:8px;">
+          <button style="background:none;border:1px solid #4e5e5e;color:#a8bcbc;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✎ Rename</button>
+          <button style="background:none;border:1px solid #4e5e5e;color:#888;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:4px;">✕</button>
+        </span>
+      </div>
+      <div class="id-tags"><span class="tag">a113</span></div>
+      <div class="id-rulers"><em>Ben, Bill Petrie, Dream, Echo, Mik, Monkey M, Netami Se, Neurosis, Purple, Ratel, Rip, Roger, Sectr, Slayer, Snake In D, Stank, Wessel, leo, solido</em></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
