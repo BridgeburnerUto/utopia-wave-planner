@@ -259,6 +259,45 @@ function _buildMainView() {
       <button class="wb" onclick="__wpA.kddbTagAll()" ${age ? '' : 'disabled style="opacity:.5"'}>⚑ Tag untagged this age</button>
     </div>`;
 
+  // ── Current enemy province list ──
+  let provinceHtml = '';
+  if (hasEnemy) {
+    const rulerIdx  = _kddbBuildRulerIdx();
+    const provRows  = (S.enemy.provinces || []).map(p => {
+      const ruler = p.sot?.ruler || '—';
+      const known = ruler !== '—' && rulerIdx[ruler.toLowerCase()];
+      const identity = known ? _kddbIdentities.find(i => i.id === known) : null;
+      return `
+        <tr style="border-bottom:1px solid #1e1208;">
+          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${p.slot}</td>
+          <td style="padding:4px 10px;color:#c8a060;font-size:12px">${esc(p.name || '—')}</td>
+          <td style="padding:4px 10px;font-size:12px;color:${identity ? '#60C040' : '#c8a060'};font-weight:${identity ? '700' : '400'}">${esc(ruler)}</td>
+          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${esc(p.race || '—')}</td>
+          <td style="padding:4px 10px;color:#7a5a2a;font-size:11px">${esc(p.sot?.personality || '—')}</td>
+          <td style="padding:4px 10px;font-size:10px;color:#4a3010">${identity ? esc(identity.label) : ''}</td>
+        </tr>`;
+    }).join('');
+    provinceHtml = `
+      <div style="margin-bottom:16px;border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
+        <div style="padding:8px 14px;background:#120d04;border-bottom:1px solid #3a2810;font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
+          ${esc(kdName)} — Provinces &amp; Rulers
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="border-bottom:1px solid #2a1a08">
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">#</th>
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Province</th>
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Ruler</th>
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Race</th>
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Personality</th>
+              <th style="padding:5px 10px;text-align:left;font-size:9px;font-weight:700;color:#4a3010;letter-spacing:1px;text-transform:uppercase">Known as</th>
+            </tr></thead>
+            <tbody>${provRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
   // ── Match results ──
   let matchHtml = '';
   if (_kddbMatches.length && snapId) {
@@ -354,7 +393,7 @@ function _buildMainView() {
       ${idRows || '<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities yet. Save &amp; Analyze an enemy KD to start building the database.</div>'}
     </div>`;
 
-  return `${toolbar}${matchHtml}${browser}`;
+  return `${toolbar}${provinceHtml}${matchHtml}${browser}`;
 }
 
 function _buildTagView() {
