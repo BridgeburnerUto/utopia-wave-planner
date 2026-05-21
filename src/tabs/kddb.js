@@ -45,11 +45,14 @@ async function _kddbLoadAll() {
 }
 
 async function _kddbSaveSnapshot() {
-  const age = _kddbGetAge();
+  // Read age from DOM input directly (in case user typed but didn't blur)
+  const ageInput = $id('__wpkddb_age');
+  const age = (ageInput?.value.trim()) || _kddbGetAge();
+  const loc = S.eLoc || '';
+  console.log('[WavePlanner] kddb save: age=', age, 'loc=', loc, 'enemy=', !!S.enemy);
+
   if (!age)     { alert('Enter the current age first (e.g. a114)'); return; }
   if (!S.enemy) { alert('No enemy kingdom loaded'); return; }
-
-  const loc = S.eLoc || '';
   if (!loc) { alert('Enemy location not set — reload the Wave Planner from the Intel Site'); return; }
 
   const snapKey = _kddbSnapKey(age, loc);
