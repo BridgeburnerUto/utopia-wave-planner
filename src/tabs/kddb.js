@@ -311,11 +311,12 @@ async function renderKddb() {
 }
 
 function _buildMainView() {
-  const age      = _kddbGetAge();
+  // Preserve whatever the user has typed in the age field across re-renders
+  const age      = $id('__wpkddb_age')?.value.trim() || _kddbGetAge();
   const hasEnemy = !!S.enemy;
   const kdName   = hasEnemy ? (S.enemy.kingdomName || S.eLoc) : '—';
   const snapId   = _kddbSnapId;
-  const canSave  = hasEnemy && !!age;
+  const canSave  = hasEnemy; // age is validated with an alert inside the save function
 
   const toolbar = `
     <div class="webar">
