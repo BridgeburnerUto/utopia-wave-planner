@@ -39,6 +39,7 @@ const S = {
   currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
   snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
   nwView: 'total',
+  kddbAge:       '',             // current age string e.g. "a114" — persisted in localStorage
   intelSort:     { col: 'slot', dir: 1 },
   boardSort:     { col: 'slot', dir: 1 },
   intelInterval: 24,       // NW graph view: 'total'|'war'

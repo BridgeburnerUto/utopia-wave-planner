@@ -29,6 +29,7 @@ const ORDER = [
   'tabs/nwgraph.js',
   'tabs/intel.js',
   'tabs/leaderboard.js',
+  'tabs/kddb.js',
   'app.js',
 ];
 
