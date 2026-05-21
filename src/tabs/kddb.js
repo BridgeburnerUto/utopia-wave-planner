@@ -227,6 +227,47 @@ async function _kddbOpenTagView() {
   renderKddb();
 }
 
+// ── Identity list builder (used by both full render and live search) ──────────
+
+function _kddbBuildIdRows() {
+  const q        = (_kddbSearch || '').toLowerCase();
+  const filtered = _kddbIdentities.filter(identity => {
+    if (!q) return true;
+    if ((identity.label || '').toLowerCase().includes(q)) return true;
+    return (identity.rulersSeen || []).some(r => r.toLowerCase().includes(q));
+  });
+
+  if (!filtered.length) {
+    return q
+      ? `<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities match "${esc(q)}".</div>`
+      : `<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities yet. Save &amp; Analyze an enemy KD to start building the database.</div>`;
+  }
+
+  return filtered.map(identity => {
+    const rulers  = (identity.rulersSeen || []).join(', ');
+    const races   = Object.entries(identity.raceCounts || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([r, c]) => `${r}\xd7${c}`)
+      .join('  ');
+    const history = (identity.kdHistory || [])
+      .map(h => `<span style="font-size:10px;color:#7a5a2a;background:#120d04;border:1px solid #2a1a08;border-radius:2px;padding:1px 5px">${esc(h.kdName)} (${esc(h.age)})</span>`)
+      .join(' ');
+    return `
+      <div style="padding:12px 14px;border-bottom:1px solid #2a1a08;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${history || rulers || races ? '6px' : '0'}">
+          <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(identity.label)}</span>
+          ${identity.typicalProvinceCount ? `<span style="font-size:10px;color:#4a3010">~${identity.typicalProvinceCount} provs</span>` : ''}
+          <button onclick="__wpA.kddbDelete('${esc(identity.id)}')"
+            style="margin-left:auto;background:none;border:none;color:#4a3010;cursor:pointer;font-size:12px;padding:2px 6px"
+            title="Delete identity">&#x2715;</button>
+        </div>
+        ${history ? `<div style="margin-bottom:5px;display:flex;flex-wrap:wrap;gap:4px">${history}</div>` : ''}
+        ${rulers   ? `<div style="font-size:11px;color:#7a5a2a;margin-bottom:3px">Rulers: ${esc(rulers)}</div>` : ''}
+        ${races    ? `<div style="font-size:11px;color:#4a3010">${esc(races)}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 async function renderKddb() {
@@ -347,50 +388,19 @@ function _buildMainView() {
   }
 
   // ── Identity browser ──
-  const q        = _kddbSearch.toLowerCase();
-  const filtered = _kddbIdentities.filter(identity => {
-    if (!q) return true;
-    if ((identity.label || '').toLowerCase().includes(q)) return true;
-    return (identity.rulersSeen || []).some(r => r.toLowerCase().includes(q));
-  });
-
-  const idRows = filtered.map(identity => {
-    const rulers  = (identity.rulersSeen || []).join(', ');
-    const races   = Object.entries(identity.raceCounts || {})
-      .sort((a, b) => b[1] - a[1])
-      .map(([r, c]) => `${r}×${c}`)
-      .join('  ');
-    const history = (identity.kdHistory || [])
-      .map(h => `<span style="font-size:10px;color:#7a5a2a;background:#120d04;border:1px solid #2a1a08;border-radius:2px;padding:1px 5px">${esc(h.kdName)} (${esc(h.age)})</span>`)
-      .join(' ');
-    return `
-      <div style="padding:12px 14px;border-bottom:1px solid #2a1a08;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${history || rulers || races ? '6px' : '0'}">
-          <span style="font-size:14px;font-weight:700;color:#c8a060">${esc(identity.label)}</span>
-          ${identity.typicalProvinceCount ? `<span style="font-size:10px;color:#4a3010">~${identity.typicalProvinceCount} provs</span>` : ''}
-          <button onclick="__wpA.kddbDelete('${esc(identity.id)}')"
-            style="margin-left:auto;background:none;border:none;color:#4a3010;cursor:pointer;font-size:12px;padding:2px 6px"
-            title="Delete identity">✕</button>
-        </div>
-        ${history ? `<div style="margin-bottom:5px;display:flex;flex-wrap:wrap;gap:4px">${history}</div>` : ''}
-        ${rulers   ? `<div style="font-size:11px;color:#7a5a2a;margin-bottom:3px">Rulers: ${esc(rulers)}</div>` : ''}
-        ${races    ? `<div style="font-size:11px;color:#4a3010">${esc(races)}</div>` : ''}
-      </div>`;
-  }).join('');
-
   const browser = `
     <div style="border:1px solid #3a2810;border-radius:4px;background:#1a1208;overflow:hidden">
       <div style="padding:10px 14px;background:#120d04;border-bottom:1px solid #3a2810;display:flex;align-items:center;gap:10px">
         <span style="font-size:11px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase">
           Known Identities (${_kddbIdentities.length})
         </span>
-        <input placeholder="Search by name or ruler..."
+        <input id="__wpkddb_search" placeholder="Search by name or ruler..."
           value="${esc(_kddbSearch)}"
           oninput="__wpA.kddbSearch(this.value)"
           style="flex:1;background:#1a1208;border:1px solid #2a1a08;color:#c8a060;font-size:12px;padding:4px 8px;border-radius:3px;outline:none">
         <button class="wb" style="font-size:11px;padding:4px 10px" onclick="__wpA.kddbCreateNew()">+ New Identity</button>
       </div>
-      ${idRows || '<div style="padding:16px 14px;color:#4a3010;font-style:italic;font-size:12px">No identities yet. Save &amp; Analyze an enemy KD to start building the database.</div>'}
+      <div id="__wpkddb_idlist">${_kddbBuildIdRows()}</div>
     </div>`;
 
   return `${toolbar}${provinceHtml}${matchHtml}${browser}`;

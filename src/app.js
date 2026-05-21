@@ -309,7 +309,7 @@ window.__wpA = {
   kddbCreate:     (label, snapId) => _kddbCreateIdentity(label, snapId),
   kddbCreateNew:  async () => { const l = prompt('New identity name:'); if (l?.trim()) await _kddbCreateIdentity(l.trim(), null); },
   kddbDelete:     (id) => _kddbDeleteIdentity(id),
-  kddbSearch:     (q) => { _kddbSearch = q; renderKddb(); },
+  kddbSearch:     (q) => { _kddbSearch = q; const el = $id('__wpkddb_idlist'); if (el) el.innerHTML = _kddbBuildIdRows(); },
   kddbTagAll:     () => _kddbOpenTagView(),
   kddbTagBack:    () => { _kddbView = 'main'; renderKddb(); },
   kddbTagConfirm: (snapId, identityId) => _kddbConfirm(snapId, identityId),
