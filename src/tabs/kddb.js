@@ -46,10 +46,12 @@ async function _kddbLoadAll() {
 
 async function _kddbSaveSnapshot() {
   const age = _kddbGetAge();
-  if (!age)      { alert('Enter the current age first (e.g. a114)'); return; }
-  if (!S.enemy)  { alert('No enemy kingdom loaded'); return; }
+  if (!age)     { alert('Enter the current age first (e.g. a114)'); return; }
+  if (!S.enemy) { alert('No enemy kingdom loaded'); return; }
 
-  const loc     = S.eLoc;
+  const loc = S.eLoc || '';
+  if (!loc) { alert('Enemy location not set — reload the Wave Planner from the Intel Site'); return; }
+
   const snapKey = _kddbSnapKey(age, loc);
   const provinces = (S.enemy.provinces || []).map(p => ({
     slot:        p.slot,
@@ -61,14 +63,26 @@ async function _kddbSaveSnapshot() {
   }));
 
   $id('__wpc_kddb').innerHTML = loadingHTML('SAVING SNAPSHOT...');
-  await fbWrite(`kd_snapshots/${snapKey}`, {
-    age,
-    location:   loc,
-    kdName:     S.enemy.kingdomName || loc,
-    savedAt:    new Date().toISOString(),
-    identityId: '',
-    provinces,
-  });
+  try {
+    const result = await fbWrite(`kd_snapshots/${snapKey}`, {
+      age,
+      location:   loc,
+      kdName:     S.enemy.kingdomName || loc,
+      savedAt:    new Date().toISOString(),
+      identityId: '',
+      provinces,
+    });
+    if (!result || result.error) {
+      const msg = result?.error?.message || 'Unknown error';
+      console.error('[WavePlanner] kddb snapshot write failed:', msg, 'path:', snapKey);
+      $id('__wpc_kddb').innerHTML = `<div class="wload" style="color:#ff4455">Save failed: ${esc(msg)}<br><small style="color:#666">Key: ${esc(snapKey)}</small></div>`;
+      return;
+    }
+  } catch(e) {
+    console.error('[WavePlanner] kddb save error:', e);
+    $id('__wpc_kddb').innerHTML = `<div class="wload" style="color:#ff4455">Save error: ${esc(e.message)}</div>`;
+    return;
+  }
 
   _kddbSnapId  = snapKey;
   _kddbMatches = _kddbScore(provinces);

@@ -39,7 +39,9 @@ async function fbWrite(path, data) {
     body: JSON.stringify({ fields }),
   }).catch(() => null);
   if (!r) return null;
-  return r.json();
+  const json = await r.json().catch(() => ({ error: { message: `HTTP ${r.status}` } }));
+  if (!r.ok) { console.error('[WavePlanner] fbWrite error', r.status, path, json?.error?.message); }
+  return json;
 }
 
 /** Read a single document at path, returns plain JS object or null */
