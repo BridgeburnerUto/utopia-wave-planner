@@ -21,7 +21,7 @@ function _buildAlerts() {
         <span>Set to 0 to disable. Saved with war plan.</span>
       </div>
 
-      <div style="font-size:10px;font-weight:700;color:#D4A017;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:4px;border-left:2px solid #8B6914;padding-left:8px;">Enemy Kingdom</div>
+      <div style="font-size:17px;font-weight:700;color:#ffd400;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:4px;border-left:2px solid #7a6500;padding-left:8px;">Enemy Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↑</div>
@@ -48,7 +48,7 @@ function _buildAlerts() {
         <div class="wthr-hint">Above X → <span style="color:#c87030">lightning strike / steal</span> target</div>
       </div>
 
-      <div style="font-size:10px;font-weight:700;color:#60C040;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:16px;border-left:2px solid #2a6614;padding-left:8px;">Own Kingdom</div>
+      <div style="font-size:17px;font-weight:700;color:#60C040;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:16px;border-left:2px solid #2a6614;padding-left:8px;">Own Kingdom</div>
 
       <div class="wthr-row">
         <div class="wthr-label">Food ↓</div>
@@ -67,16 +67,16 @@ function _buildAlerts() {
   // ── Discord settings (leader only) ───────────────────────────────────────
   const discordHtml = isLeader ? `
     <div class="wthr" style="border-color:#5865F233">
-      <div style="font-size:10px;font-weight:700;color:#7075c0;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-left:2px solid #5055a0;padding-left:8px;">Discord Alerts <span style="color:#7a5a2a;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">— fires on state change</span></div>
+      <div style="font-size:17px;font-weight:700;color:#7075c0;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-left:2px solid #5055a0;padding-left:8px;">Discord Alerts <span style="color:#7a9090;font-weight:400;text-transform:none;letter-spacing:0;font-size:17px;">— fires on state change</span></div>
       <div class="wthr-row">
-        <div class="wthr-label" style="width:80px;font-size:11px">Webhook</div>
+        <div class="wthr-label" style="width:80px;font-size:17px">Webhook</div>
         <input class="wthr-input" type="text" placeholder="https://discord.com/api/webhooks/..."
           value="${esc(S.discordWebhook || '')}"
-          style="width:320px;font-size:11px"
+          style="width:320px;font-size:17px"
           onblur="__wpA.setDiscordWebhook(this.value)" onkeydown="if(event.key==='Enter')__wpA.setDiscordWebhook(this.value)">
-        <button class="wb" style="font-size:10px;padding:3px 9px;margin-left:8px" onclick="__wpA.testDiscord()">Test</button>
+        <button class="wb" style="font-size:17px;padding:3px 9px;margin-left:8px" onclick="__wpA.testDiscord()">Test</button>
       </div>
-      <div style="font-size:10px;color:#7a5a2a;margin-top:6px;line-height:1.6">
+      <div style="font-size:17px;color:#7a9090;margin-top:6px;line-height:1.6">
         In Discord: Channel Settings → Integrations → Webhooks → New Webhook → Copy URL<br>
         Alerts fire automatically on tool open when status changes. Save plan to persist URL.
       </div>
@@ -88,9 +88,9 @@ function _buildAlerts() {
     <div style="background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:3px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
       <div>
         <span class="wabg wai" style="margin-right:8px">SN DUE</span>
-        <span style="font-size:12px">Take a <b>Snatch News</b> op on the enemy — last acknowledged <b>${snAlert.ago}</b> ago</span>
+        <span style="font-size:19px">Take a <b>Snatch News</b> op on the enemy — last acknowledged <b>${snAlert.ago}</b> ago</span>
       </div>
-      <button class="wb g" style="font-size:10px;padding:3px 10px;white-space:nowrap" onclick="__wpA.snAck()">✓ SN Taken</button>
+      <button class="wb g" style="font-size:17px;padding:3px 10px;white-space:nowrap" onclick="__wpA.snAck()">✓ SN Taken</button>
     </div>` : '';
 
   // ── Gather all other alerts ────────────────────────────────────────────
@@ -106,15 +106,15 @@ function _buildAlerts() {
 
   // ── Build alert list HTML ─────────────────────────────────────────────
   const sections = [
-    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#D4A017' },
+    { key: 'enemy_rich', label: 'Enemy Resource Targets', color: '#ffd400' },
     { key: 'enemy_low',  label: 'Enemy Starvation Risk',  color: '#E05050' },
     { key: 'own',        label: 'Own Kingdom',            color: '#e09040' },
-    { key: 'military',   label: 'Military / Intel',       color: '#7a5a2a' },
+    { key: 'military',   label: 'Military / Intel',       color: '#7a9090' },
   ];
 
   let aHtml = '';
   if (!al.length && !snAlert) {
-    aHtml = `<div style="color:#7a5a2a;font-size:12px;padding:20px 0;font-style:italic;">
+    aHtml = `<div style="color:#7a9090;font-size:19px;padding:20px 0;font-style:italic;">
       No active alerts${_anyThresholdSet(thr) ? '.' : ' — set thresholds on the left to enable resource alerts.'}
     </div>`;
   } else {
@@ -122,11 +122,11 @@ function _buildAlerts() {
     sections.forEach(sec => {
       const group = al.filter(a => a.group === sec.key);
       if (!group.length) return;
-      aHtml += `<div style="font-size:10px;font-weight:700;color:${sec.color};letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;margin-top:${aHtml?'16':'0'}px;padding-bottom:6px;border-bottom:1px solid #3a2810;display:flex;align-items:center;gap:8px;">
-        ${sec.label} <span style="background:#1a1208;border:1px solid #3a2810;color:#7a5a2a;font-size:10px;padding:1px 7px;border-radius:2px;">${group.length}</span>
+      aHtml += `<div style="font-size:17px;font-weight:700;color:${sec.color};letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;margin-top:${aHtml?'16':'0'}px;padding-bottom:6px;border-bottom:1px solid #617070;display:flex;align-items:center;gap:8px;">
+        ${sec.label} <span style="background:#3c4545;border:1px solid #617070;color:#7a9090;font-size:17px;padding:1px 7px;border-radius:2px;">${group.length}</span>
       </div>`;
       aHtml += group.map(a => `
-        <div class="walt" style="${a.bg || 'background:#1a1208;border-color:#3a2810;'}">
+        <div class="walt" style="${a.bg || 'background:#3c4545;border-color:#617070;'}">
           <span class="wabg ${a.cls}">${a.badge}</span>
           <span>${a.t}</span>
         </div>`).join('');
@@ -178,7 +178,7 @@ function _gatherAlerts(thr) {
   if (S.enemy) {
     S.enemy.provinces.forEach(p => {
       const da  = p.calcs?.defPointsSummary?.ageSeconds;
-      const age = da != null ? ` <span style="color:#7a5a2a">(intel ${fA(da)} old)</span>` : '';
+      const age = da != null ? ` <span style="color:#7a9090">(intel ${fA(da)} old)</span>` : '';
 
       if (p.sot) {
         const food  = p.sot.food  || 0;

@@ -39,9 +39,9 @@ function _buildSummary() {
 
     return `<tr>
       <td style="font-weight:700">${esc(item.province.name)}</td>
-      <td style="color:#7a5a2a">${esc(item.province.race || '')}</td>
+      <td style="color:#7a9090">${esc(item.province.race || '')}</td>
       <td>${fK(def)}</td>
-      <td>${ops.map(o => `<span class="wtag" style="cursor:default;font-size:8px">${o}</span>`).join('') || '—'}</td>
+      <td>${ops.map(o => `<span class="wtag" style="cursor:default;font-size:15px">${o}</span>`).join('') || '—'}</td>
       <td>${brk}/${attackers.length} <span style="color:${pctColor}">(${pct}%)</span></td>
       <td><span class="${aC(da)}">${fA(da)}</span></td>
       <td>${away ? '<span style="color:#60C040">AWAY</span>' : '—'}</td>

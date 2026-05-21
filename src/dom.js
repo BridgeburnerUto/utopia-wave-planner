@@ -19,14 +19,14 @@ function buildOverlay() {
   ov.innerHTML = `
 <div id="__wph">
   <div class="logo">⚔ WAVE PLANNER</div>
-  <div id="__wptick" style="font-family:monospace;font-size:11px;color:#7a5a2a;display:none"></div>
+  <div id="__wptick" style="font-family:monospace;font-size:17px;color:#7a9090;display:none"></div>
   <div class="wrole">
     <span>View as:</span>
-    <button class="wb" id="__wprole_leader" onclick="__wpA.setRole('leader')" style="border-color:#D4A017;color:#D4A017">⚔ Leader</button>
+    <button class="wb" id="__wprole_leader" onclick="__wpA.setRole('leader')" style="border-color:#ffd400;color:#ffd400">⚔ Leader</button>
     <button class="wb" id="__wprole_player" onclick="__wpA.setRole('player')">🗡 Player</button>
   </div>
   <div id="__wpprovpick" style="display:none;align-items:center;gap:8px">
-    <span style="font-size:10px;color:#7a5a2a;font-weight:700;letter-spacing:1px;text-transform:uppercase">My Province:</span>
+    <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase">My Province:</span>
     <select class="wpick" id="__wpprovsel" onchange="__wpA.pickProv(this.value)">
       <option value="">— select —</option>
     </select>

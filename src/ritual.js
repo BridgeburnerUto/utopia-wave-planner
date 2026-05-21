@@ -35,7 +35,7 @@ function _ritualExpiry(currentTickName, ticksRemaining) {
 
 // ── Ritual badge colour ───────────────────────────────────────────────────────
 function _ritualColor(ticks) {
-  if (ticks == null) return '#4a6a88';
+  if (ticks == null) return '#7a9090';
   if (ticks <= 24)   return '#ff4455';
   if (ticks <= 48)   return '#ffaa00';
   return '#00ff88';
@@ -172,12 +172,12 @@ function renderRitualBadges() {
     const expiry = _ritualExpiry(tick, enemy.ritualDuration);
     // Casting info shown inside dropdown even if ritual is already active
     const castingHtml = casting ? `
-      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #1e2d3d">
-        <div style="font-family:monospace;font-size:10px;color:#ffaa00;letter-spacing:1px;margin-bottom:6px">⚠ NEXT RITUAL CASTING</div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #617070">
+        <div style="font-family:monospace;font-size:17px;color:#ffaa00;letter-spacing:1px;margin-bottom:6px">⚠ NEXT RITUAL CASTING</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ritual</span><span style="font-family:monospace">${esc(casting.name)}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
-        ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${casting.ticksUntilLaunch <= 0 ? '#ff4455' : casting.ticksUntilLaunch <= 12 ? '#ffaa00' : '#c8d8e8'}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
+        ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${casting.ticksUntilLaunch <= 0 ? '#ff4455' : casting.ticksUntilLaunch <= 12 ? '#ffaa00' : '#ffffff'}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
       </div>` : '';
     html += `
       <div class="wkb writ-badge" id="__wprit_ene" onclick="__wpA.toggleRitual('ene')" style="cursor:pointer;border-color:${col}22">
@@ -207,7 +207,7 @@ function renderRitualBadges() {
         <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
         ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${timeCol}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
-        <div style="margin-top:8px;font-size:10px;color:#4a6a88">Source: Snatch News. Take another SN to confirm if it has launched.</div>
+        <div style="margin-top:8px;font-size:17px;color:#7a9090">Source: Snatch News. Take another SN to confirm if it has launched.</div>
       </div></div>`;
   }
 

@@ -51,7 +51,7 @@ function _buildBoard() {
     <div class="webar">
       <label>ENEMY:</label>
       <input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3">
-      <button class="wb" style="font-size:11px"
+      <button class="wb" style="font-size:17px"
         onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);__wpA.refresh()">
         LOAD
       </button>
@@ -103,37 +103,37 @@ function _buildBoard() {
 
   // Sort indicator
   const si = c => S.boardSort.col === c
-    ? `<span style="color:#D4A017;margin-left:3px;">${S.boardSort.dir === -1 ? '↓' : '↑'}</span>`
-    : `<span style="color:#3a2810;margin-left:3px;">⇅</span>`;
+    ? `<span style="color:#ffd400;margin-left:3px;">${S.boardSort.dir === -1 ? '↓' : '↑'}</span>`
+    : `<span style="color:#617070;margin-left:3px;">⇅</span>`;
 
   const thStyle = (c, right=false) => `cursor:pointer;user-select:none;white-space:nowrap;padding:8px 10px;
-    text-align:${right?'right':'left'};background:#120d04;font-size:9px;font-weight:700;
-    letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #4a3010;
-    color:${S.boardSort.col===c?'#D4A017':'#7a5a2a'};`;
+    text-align:${right?'right':'left'};background:#2b3333;font-size:15px;font-weight:700;
+    letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070;
+    color:${S.boardSort.col===c?'#ffd400':'#7a9090'};`;
 
   const th  = (c, l, right=false) => `<th onclick="__wpA.boardSort('${c}')" style="${thStyle(c,right)}">${l}${si(c)}</th>`;
-  const thS = (l) => `<th style="${thStyle('',false)}color:#7a5a2a;">${l}</th>`; // static header
+  const thS = (l) => `<th style="${thStyle('',false)}color:#7a9090;">${l}</th>`; // static header
 
   // Wave badge colours
   const waveBadge = (wave) => {
-    if (wave === 'current') return `<span style="background:rgba(224,80,80,.15);color:#E05050;border:1px solid #8B1414;font-size:9px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current Wave</span>`;
-    if (wave === 'preplan') return `<span style="background:rgba(212,160,23,.12);color:#D4A017;border:1px solid #8B6914;font-size:9px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Pre-Plan</span>`;
-    return `<span style="color:#3a2810;font-size:10px;">—</span>`;
+    if (wave === 'current') return `<span style="background:rgba(224,80,80,.15);color:#E05050;border:1px solid #8B1414;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current Wave</span>`;
+    if (wave === 'preplan') return `<span style="background:rgba(212,160,23,.12);color:#ffd400;border:1px solid #7a6500;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Pre-Plan</span>`;
+    return `<span style="color:#617070;font-size:17px;">—</span>`;
   };
 
   const isLeader = S.role === 'leader';
 
   const tableRows = rows.map(r => {
-    const ageCol = r.intelAge == null ? '#3a2810'
+    const ageCol = r.intelAge == null ? '#617070'
                  : r.intelAge < 3600  ? '#60C040'
-                 : r.intelAge < 14400 ? '#D4A017'
+                 : r.intelAge < 14400 ? '#ffd400'
                  : r.intelAge < 28800 ? '#e09040' : '#E05050';
 
-    const popCol = r.popPct >= 100 ? '#60C040' : r.popPct >= 75 ? '#D4A017' : '#E05050';
+    const popCol = r.popPct >= 100 ? '#60C040' : r.popPct >= 75 ? '#ffd400' : '#E05050';
 
     const waveSelect = isLeader ? `
       <select onchange="__wpA.setProvWave(${r.slot},this.value)"
-        style="background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:11px;
+        style="background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;
                padding:3px 6px;border-radius:3px;outline:none;cursor:pointer;max-width:110px;">
         <option value="" ${!r.wave?'selected':''}>—</option>
         <option value="current" ${r.wave==='current'?'selected':''}>Current Wave</option>
@@ -142,27 +142,27 @@ function _buildBoard() {
 
     const razeCheck = isLeader
       ? `<input type="checkbox" ${r.needsRaze?'checked':''} onchange="__wpA.setProvNeedsRaze(${r.slot},this.checked)"
-           style="cursor:pointer;width:14px;height:14px;accent-color:#D4A017;">`
+           style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400;">`
       : r.needsRaze ? '✓' : '—';
 
     const massCheck = isLeader
       ? `<input type="checkbox" ${r.needsMassacre?'checked':''} onchange="__wpA.setProvNeedsMassacre(${r.slot},this.checked)"
-           style="cursor:pointer;width:14px;height:14px;accent-color:#D4A017;">`
+           style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400;">`
       : r.needsMassacre ? '✓' : '—';
 
     const opTags = r.requiredOps.length
-      ? r.requiredOps.map(o => `<span class="wtag" style="cursor:default;font-size:9px;">${o}</span>`).join('')
+      ? r.requiredOps.map(o => `<span class="wtag" style="cursor:default;font-size:15px;">${o}</span>`).join('')
       : '';
 
-    return `<tr style="border-bottom:1px solid #2a1a08;${r.wave==='current'?'background:rgba(224,80,80,.04);':r.wave==='preplan'?'background:rgba(212,160,23,.03);':''}"
-      onmouseover="this.style.background='#1a1208'" onmouseout="this.style.background='${r.wave==='current'?'rgba(224,80,80,.04)':r.wave==='preplan'?'rgba(212,160,23,.03)':''}'">
-      <td style="padding:7px 10px;font-weight:700;color:#c8a060;">${r.slot}</td>
-      <td style="padding:7px 10px;color:#c8a060;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+    return `<tr style="border-bottom:1px solid rgba(97,112,112,.25);${r.wave==='current'?'background:rgba(224,80,80,.04);':r.wave==='preplan'?'background:rgba(212,160,23,.03);':''}"
+      onmouseover="this.style.background='#3c4545'" onmouseout="this.style.background='${r.wave==='current'?'rgba(224,80,80,.04)':r.wave==='preplan'?'rgba(212,160,23,.03)':''}'">
+      <td style="padding:7px 10px;font-weight:700;color:#ffffff;">${r.slot}</td>
+      <td style="padding:7px 10px;color:#ffffff;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
         <span onclick="__wpA.openOps(${r.slot})" style="cursor:pointer;" title="Click to assign ops">${esc(r.name)}</span>
         ${opTags ? `<div style="margin-top:2px;">${opTags}</div>` : ''}
-        ${r.notes ? `<div style="font-size:10px;color:#7a5a2a;font-style:italic;margin-top:1px;">${esc(r.notes.substring(0,40))}${r.notes.length>40?'…':''}</div>` : ''}
+        ${r.notes ? `<div style="font-size:17px;color:#7a9090;font-style:italic;margin-top:1px;">${esc(r.notes.substring(0,40))}${r.notes.length>40?'…':''}</div>` : ''}
       </td>
-      <td style="padding:7px 10px;color:#7a5a2a;font-size:11px;">${esc(r.race)}</td>
+      <td style="padding:7px 10px;color:#7a9090;font-size:17px;">${esc(r.race)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.nw)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.land)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.nwpa)}</td>
@@ -172,10 +172,10 @@ function _buildBoard() {
       <td style="padding:7px 10px;text-align:right;">${r.rtpa != null ? r.rtpa.toFixed(2) : '—'}</td>
       <td style="padding:7px 10px;text-align:right;">${r.castles != null ? r.castles.toFixed(1)+'%' : '—'}</td>
       <td style="padding:7px 10px;text-align:right;">${r.wt != null ? r.wt.toFixed(1)+'%' : '—'}</td>
-      <td style="padding:7px 10px;text-align:right;font-size:10px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
       <td style="padding:7px 10px;text-align:center;">${waveSelect}</td>
-      <td style="padding:7px 10px;text-align:center;color:${r.needsRaze?'#D4A017':'#7a5a2a'};">${razeCheck}</td>
-      <td style="padding:7px 10px;text-align:center;color:${r.needsMassacre?'#D4A017':'#7a5a2a'};">${massCheck}</td>
+      <td style="padding:7px 10px;text-align:center;color:${r.needsRaze?'#ffd400':'#7a9090'};">${razeCheck}</td>
+      <td style="padding:7px 10px;text-align:center;color:${r.needsMassacre?'#ffd400':'#7a9090'};">${massCheck}</td>
     </tr>`;
   }).join('');
 
@@ -187,21 +187,21 @@ function _buildBoard() {
     <div class="webar">
       <label>ENEMY:</label>
       <input id="__wpeloc" value="${esc(S.eLoc)}" placeholder="5:3">
-      <button class="wb" style="font-size:11px"
+      <button class="wb" style="font-size:17px"
         onclick="__wpA.loadEnemy(document.getElementById('__wpeloc').value);__wpA.refresh()">
         LOAD
       </button>
-      <div style="color:#D4A017;font-weight:700;font-size:13px">${esc(S.enemy?.kingdomName || '—')}</div>
-      <div style="font-size:11px;color:#7a5a2a;margin-left:auto">
+      <div style="color:#ffd400;font-weight:700;font-size:19px">${esc(S.enemy?.kingdomName || '—')}</div>
+      <div style="font-size:17px;color:#7a9090;margin-left:auto">
         ${rows.length} provinces ·
         <span style="color:#E05050;">${assigned} current wave</span> ·
-        <span style="color:#D4A017;">${preplanned} pre-plan</span>
+        <span style="color:#ffd400;">${preplanned} pre-plan</span>
       </div>
     </div>`;
 
   const table = `
     <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;background:#1a1208;border:1px solid #3a2810;border-radius:4px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:19px;background:#3c4545;border:1px solid #617070;border-radius:4px;overflow:hidden;">
         <thead><tr>
           ${th('slot','#')}
           ${th('name','Province')}
@@ -244,11 +244,11 @@ function openOps(slot) {
   const html = `
     <div class="wopsh">
       <h3>// OPS — Slot ${slot}</h3>
-      <button onclick="__wpA.closeOps()" style="background:none;border:none;color:#7a5a2a;cursor:pointer;font-size:16px">✕</button>
+      <button onclick="__wpA.closeOps()" style="background:none;border:none;color:#7a9090;cursor:pointer;font-size:21px">✕</button>
     </div>
     <div class="wopsb">
-      <div style="font-size:15px;font-weight:700;margin-bottom:3px;color:#c8a060;">${esc(p?.name || 'Unknown')}</div>
-      <div style="font-size:10px;color:#7a5a2a;margin-bottom:12px;">
+      <div style="font-size:21px;font-weight:700;margin-bottom:3px;color:#ffffff;">${esc(p?.name || 'Unknown')}</div>
+      <div style="font-size:17px;color:#7a9090;margin-bottom:12px;">
         ${esc(p?.race || '')} · ${esc(sot.personality || '')} · Slot ${slot}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
@@ -257,8 +257,8 @@ function openOps(slot) {
         <div class="wsb"><div class="l">Def Home</div><div class="v">${fK(p?.calcs?.defPointsSummary?.defPointsHome)}</div></div>
         <div class="wsb"><div class="l">Intel Age</div><div class="v"><span class="${aC(da)}">${fA(da)}</span></div></div>
       </div>
-      ${sot.badSpells?.length ? `<div style="font-size:10px;color:#E05050;margin-bottom:8px;">⚠ ${sot.badSpells.map(s=>s.name).join(', ')}</div>` : ''}
-      ${p?.som?.armiesAway?.length ? `<div style="font-size:10px;color:#60C040;margin-bottom:8px;">↗ Army away — ${fA(p.som.armiesAway[0].secondsRemaining)} to return</div>` : ''}
+      ${sot.badSpells?.length ? `<div style="font-size:17px;color:#E05050;margin-bottom:8px;">⚠ ${sot.badSpells.map(s=>s.name).join(', ')}</div>` : ''}
+      ${p?.som?.armiesAway?.length ? `<div style="font-size:17px;color:#60C040;margin-bottom:8px;">↗ Army away — ${fA(p.som.armiesAway[0].secondsRemaining)} to return</div>` : ''}
       <div class="wopsec">Duration Ops</div>
       <div class="wopsg">
         ${DOPS.map(o => `<div class="wop${ops.includes(o.c)?' sel':''}" onclick="__wpA.togOp(${slot},'${o.c}')" title="${esc(o.l)}">${esc(o.c)}</div>`).join('')}
@@ -268,7 +268,7 @@ function openOps(slot) {
         ${IOPS.map(o => `<div class="wop i${ops.includes(o.c)?' sel':''}" onclick="__wpA.togOp(${slot},'${o.c}')" title="${esc(o.l)}">${esc(o.c)}</div>`).join('')}
       </div>
       <div class="wopsec">Notes</div>
-      <textarea style="width:100%;background:#120d04;border:1px solid #3a2810;color:#c8a060;font-size:11px;padding:6px;border-radius:2px;resize:vertical;min-height:60px;outline:none;"
+      <textarea style="width:100%;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:6px;border-radius:2px;resize:vertical;min-height:60px;outline:none;"
         onblur="__wpA.setNote(${slot},this.value)">${esc(plan.notes || '')}</textarea>
     </div>`;
 

@@ -214,43 +214,43 @@ function _buildIntel() {
   const intervals = [4, 6, 8, 12, 24];
   const intervalSelect = `
     <div style="display:flex;align-items:center;gap:8px;">
-      <span style="font-size:10px;font-weight:700;color:#7a5a2a;text-transform:uppercase;letter-spacing:1px;">Interval</span>
+      <span style="font-size:17px;font-weight:700;color:#7a9090;text-transform:uppercase;letter-spacing:1px;">Interval</span>
       <select onchange="__wpA.setIntelInterval(parseInt(this.value))"
-        style="background:#1a1208;border:1px solid #4a3010;color:#c8a060;font-size:12px;padding:4px 8px;border-radius:3px;outline:none;cursor:pointer;">
+        style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:19px;padding:4px 8px;border-radius:3px;outline:none;cursor:pointer;">
         ${intervals.map(t => `<option value="${t}" ${S.intelInterval===t?'selected':''}>${t} ticks</option>`).join('')}
       </select>
-      <span style="font-size:11px;color:#7a5a2a;font-style:italic;">Gain/loss/attacks parsed from kingdom news</span>
+      <span style="font-size:17px;color:#7a9090;font-style:italic;">Gain/loss/attacks parsed from kingdom news</span>
     </div>`;
 
   // Sort indicator helper
   const si = (c) => {
-    if (S.intelSort.col !== c) return '<span style="color:#4a3010;margin-left:3px;">⇅</span>';
+    if (S.intelSort.col !== c) return '<span style="color:#617070;margin-left:3px;">⇅</span>';
     return S.intelSort.dir === -1
-      ? '<span style="color:#D4A017;margin-left:3px;">↓</span>'
-      : '<span style="color:#D4A017;margin-left:3px;">↑</span>';
+      ? '<span style="color:#ffd400;margin-left:3px;">↓</span>'
+      : '<span style="color:#ffd400;margin-left:3px;">↑</span>';
   };
 
   // Column header helper
   const th = (col, label, title='') =>
     `<th onclick="__wpA.intelSort('${col}')" title="${esc(title)}"
-      style="cursor:pointer;user-select:none;white-space:nowrap;padding:8px 10px;text-align:right;background:#120d04;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #4a3010;${S.intelSort.col===col?'color:#D4A017;':''}"
+      style="cursor:pointer;user-select:none;white-space:nowrap;padding:8px 10px;text-align:right;background:#2b3333;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070;${S.intelSort.col===col?'color:#ffd400;':''}"
     >${label}${si(col)}</th>`;
 
   const thLeft = (col, label) =>
     `<th onclick="__wpA.intelSort('${col}')"
-      style="cursor:pointer;user-select:none;white-space:nowrap;padding:8px 10px;text-align:left;background:#120d04;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #4a3010;${S.intelSort.col===col?'color:#D4A017;':''}"
+      style="cursor:pointer;user-select:none;white-space:nowrap;padding:8px 10px;text-align:left;background:#2b3333;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070;${S.intelSort.col===col?'color:#ffd400;':''}"
     >${label}${si(col)}</th>`;
 
   const tableRows = rows.map(r => {
-    const ageCol = r.stale ? '#E05050' : r.intelAge != null ? (r.intelAge < 3600 ? '#60C040' : r.intelAge < 14400 ? '#D4A017' : '#e09040') : '#7a5a2a';
-    const gainCol  = r.acresGained > 0 ? '#60C040' : '#7a5a2a';
-    const lossCol  = r.acresLost   > 0 ? '#E05050' : '#7a5a2a';
-    const atkCol   = r.attacksMade >= 4 ? '#E05050' : r.attacksMade >= 2 ? '#e09040' : r.attacksMade > 0 ? '#D4A017' : '#7a5a2a';
+    const ageCol = r.stale ? '#E05050' : r.intelAge != null ? (r.intelAge < 3600 ? '#60C040' : r.intelAge < 14400 ? '#ffd400' : '#e09040') : '#7a9090';
+    const gainCol  = r.acresGained > 0 ? '#60C040' : '#7a9090';
+    const lossCol  = r.acresLost   > 0 ? '#E05050' : '#7a9090';
+    const atkCol   = r.attacksMade >= 4 ? '#E05050' : r.attacksMade >= 2 ? '#e09040' : r.attacksMade > 0 ? '#ffd400' : '#7a9090';
 
-    return `<tr style="border-bottom:1px solid #2a1a08;">
-      <td style="padding:7px 10px;font-weight:700;color:#c8a060;">${r.slot}</td>
-      <td style="padding:7px 10px;color:#c8a060;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}</td>
-      <td style="padding:7px 10px;color:#7a5a2a;font-size:11px;">${esc(r.race)}</td>
+    return `<tr style="border-bottom:1px solid rgba(97,112,112,.25);">
+      <td style="padding:7px 10px;font-weight:700;color:#ffffff;">${r.slot}</td>
+      <td style="padding:7px 10px;color:#ffffff;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}</td>
+      <td style="padding:7px 10px;color:#7a9090;font-size:17px;">${esc(r.race)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.nw)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.land)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.off)}</td>
@@ -260,10 +260,10 @@ function _buildIntel() {
       <td style="padding:7px 10px;text-align:right;color:${gainCol};font-weight:${r.acresGained>0?'700':'400'};">${r.acresGained > 0 ? '+'+fK(r.acresGained) : '—'}</td>
       <td style="padding:7px 10px;text-align:right;color:${lossCol};font-weight:${r.acresLost>0?'700':'400'};">${r.acresLost > 0 ? '-'+fK(r.acresLost) : '—'}</td>
       <td style="padding:7px 10px;text-align:right;color:${atkCol};font-weight:${r.attacksMade>0?'700':'400'};">${r.attacksMade || '—'}</td>
-      <td style="padding:7px 10px;text-align:right;color:${r.razes>0?'#E05050':'#3a2810'};font-weight:${r.razes>0?'700':'400'};">${r.razes > 0 ? r.razes+'×' : '—'}</td>
-      <td style="padding:7px 10px;text-align:right;color:${r.razeAcres>0?'#E05050':'#3a2810'};font-weight:${r.razeAcres>0?'700':'400'};">${r.razeAcres > 0 ? '-'+fK(r.razeAcres) : '—'}</td>
-      <td style="padding:7px 10px;text-align:right;color:${r.massacres>0?'#E05050':'#3a2810'};font-weight:${r.massacres>0?'700':'400'};">${r.massacres > 0 ? r.massacres+'×' : '—'}</td>
-      <td style="padding:7px 10px;text-align:right;font-size:10px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;color:${r.razes>0?'#E05050':'#617070'};font-weight:${r.razes>0?'700':'400'};">${r.razes > 0 ? r.razes+'×' : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;color:${r.razeAcres>0?'#E05050':'#617070'};font-weight:${r.razeAcres>0?'700':'400'};">${r.razeAcres > 0 ? '-'+fK(r.razeAcres) : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;color:${r.massacres>0?'#E05050':'#617070'};font-weight:${r.massacres>0?'700':'400'};">${r.massacres > 0 ? r.massacres+'×' : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -279,26 +279,26 @@ function _buildIntel() {
     massacres: s.massacres + r.massacres,
   }), { nw:0, land:0, off:0, def:0, peons:0, gained:0, lost:0, attacks:0, razes:0, razeAcres:0, massacres:0 });
 
-  const totRow = `<tr style="border-top:2px solid #4a3010;background:#120d04;">
-    <td colspan="3" style="padding:7px 10px;font-size:10px;font-weight:700;color:#7a5a2a;text-transform:uppercase;letter-spacing:1px;">Kingdom Total</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${fK(totals.nw)}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${fK(totals.land)}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${fK(totals.off)}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${fK(totals.def)}</td>
+  const totRow = `<tr style="border-top:2px solid #617070;background:#2b3333;">
+    <td colspan="3" style="padding:7px 10px;font-size:17px;font-weight:700;color:#7a9090;text-transform:uppercase;letter-spacing:1px;">Kingdom Total</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${fK(totals.nw)}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${fK(totals.land)}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${fK(totals.off)}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${fK(totals.def)}</td>
     <td style="padding:7px 10px;"></td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${fK(totals.peons)}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${fK(totals.peons)}</td>
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:#60C040;">${totals.gained > 0 ? '+'+fK(totals.gained) : '—'}</td>
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:#E05050;">${totals.lost > 0 ? '-'+fK(totals.lost) : '—'}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#D4A017;">${totals.attacks || '—'}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razes>0?'#E05050':'#7a5a2a'};">${totals.razes > 0 ? totals.razes+'×' : '—'}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razeAcres>0?'#E05050':'#7a5a2a'};">${totals.razeAcres > 0 ? '-'+fK(totals.razeAcres) : '—'}</td>
-    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.massacres>0?'#E05050':'#7a5a2a'};">${totals.massacres > 0 ? totals.massacres+'×' : '—'}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:#ffd400;">${totals.attacks || '—'}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razes>0?'#E05050':'#7a9090'};">${totals.razes > 0 ? totals.razes+'×' : '—'}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razeAcres>0?'#E05050':'#7a9090'};">${totals.razeAcres > 0 ? '-'+fK(totals.razeAcres) : '—'}</td>
+    <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.massacres>0?'#E05050':'#7a9090'};">${totals.massacres > 0 ? totals.massacres+'×' : '—'}</td>
     <td></td>
   </tr>`;
 
   const table = `
     <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;background:#1a1208;border:1px solid #3a2810;border-radius:4px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:19px;background:#3c4545;border:1px solid #617070;border-radius:4px;overflow:hidden;">
         <thead><tr>
           ${thLeft('slot','#')}
           ${thLeft('name','Province')}
@@ -325,7 +325,7 @@ function _buildIntel() {
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       ${intervalSelect}
-      <div style="font-size:11px;color:#7a5a2a;">${rows.length} provinces · ${esc(S.enemy.kingdomName || S.eLoc)}</div>
+      <div style="font-size:17px;color:#7a9090;">${rows.length} provinces · ${esc(S.enemy.kingdomName || S.eLoc)}</div>
     </div>
     ${table}`;
 }

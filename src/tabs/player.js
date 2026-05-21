@@ -117,15 +117,15 @@ function _buildPlayer() {
 
   if (!waveTargets.length) {
     return h + `<div class="watk-notarget">// No wave targets assigned yet<br>
-      <span style="font-size:11px">The war leader needs to set targets in the WAR BOARD tab first</span></div>`;
+      <span style="font-size:17px">The war leader needs to set targets in the WAR BOARD tab first</span></div>`;
   }
   if (reason === 'no_off') {
     return h + `<div class="watk-notarget">// No offensive data available for this province<br>
-      <span style="font-size:11px">SoM data needed to calculate attacks</span></div>`;
+      <span style="font-size:17px">SoM data needed to calculate attacks</span></div>`;
   }
   if (!attacks.length) {
     return h + `<div class="watk-notarget">// No valid targets in NW range<br>
-      <span style="font-size:11px">Your NW (${fK(prov.networth)}) doesn't overlap with any wave target</span></div>`;
+      <span style="font-size:17px">Your NW (${fK(prov.networth)}) doesn't overlap with any wave target</span></div>`;
   }
 
   // Group attacks by wave name
@@ -154,16 +154,16 @@ function _buildProvPicker() {
           const off  = p.som?.offPointsHome || p.sot?.offPoints || 0;
           const gens = p.som?.standingArmy?.generals ?? '?';
           return `<div onclick="__wpA.pickProv(${p.slot})"
-            style="background:#120d04;border:1px solid #3a2810;border-radius:3px;padding:12px 14px;cursor:pointer;
+            style="background:#2b3333;border:1px solid #617070;border-radius:3px;padding:12px 14px;cursor:pointer;
                    display:flex;align-items:center;justify-content:space-between;transition:border-color .15s"
-            onmouseover="this.style.borderColor='#4a3010'" onmouseout="this.style.borderColor='#3a2810'">
+            onmouseover="this.style.borderColor='#617070'" onmouseout="this.style.borderColor='#617070'">
             <div>
-              <div style="font-size:14px;font-weight:700">${esc(p.name)}</div>
-              <div style="font-family:monospace;font-size:10px;color:#7a5a2a">${esc(p.race || '')} · ${esc(p.sot?.personality || '')}</div>
+              <div style="font-size:21px;font-weight:700">${esc(p.name)}</div>
+              <div style="font-family:monospace;font-size:17px;color:#7a9090">${esc(p.race || '')} · ${esc(p.sot?.personality || '')}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:monospace;font-size:13px;color:#D4A017">${fK(off)} off</div>
-              <div style="font-family:monospace;font-size:10px;color:#7a5a2a">${gens} gens home · ${fK(p.networth)} NW</div>
+              <div style="font-family:monospace;font-size:19px;color:#ffd400">${fK(off)} off</div>
+              <div style="font-family:monospace;font-size:17px;color:#7a9090">${gens} gens home · ${fK(p.networth)} NW</div>
             </div>
           </div>`;
         }).join('')}
@@ -176,20 +176,20 @@ function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div>
-        <div style="font-size:18px;font-weight:700">${esc(prov.name)}</div>
-        <div style="font-family:monospace;font-size:11px;color:#7a5a2a">
+        <div style="font-size:21px;font-weight:700">${esc(prov.name)}</div>
+        <div style="font-family:monospace;font-size:17px;color:#7a9090">
           ${esc(prov.race || '')} · ${esc(prov.sot?.personality || '')} · ${fK(prov.networth)} NW
         </div>
       </div>
       <button onclick="__wpA.pickProv('')"
-        style="padding:5px 10px;background:#120d04;border:1px solid #4a3010;color:#c8a060;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px">
+        style="padding:5px 10px;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;font-weight:700;cursor:pointer;border-radius:3px">
         ↩ Change
       </button>
     </div>
     <div class="watk-summary">
       <div class="watk-sstat"><div class="l">Off Home</div><div class="v">${fK(aOff)}</div></div>
       <div class="watk-sstat"><div class="l">Generals Home</div>
-        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:12px;color:#7a5a2a"> / ${totalGenerals}</span></div>
+        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:19px;color:#7a9090"> / ${totalGenerals}</span></div>
       </div>
       <div class="watk-sstat"><div class="l">Own NW</div><div class="v">${fK(prov.networth)}</div></div>
       <div class="watk-sstat"><div class="l">Targets Set</div><div class="v">${targetCount}</div><div class="s">by war leader</div></div>
@@ -201,7 +201,7 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     <div class="watk-card">
       <div class="watk-header">
         <span class="watk-wave">// ${esc(wave.toUpperCase())}</span>
-        <span style="font-family:monospace;font-size:10px;color:#7a5a2a">${atkList.length} attack${atkList.length > 1 ? 's' : ''}</span>
+        <span style="font-family:monospace;font-size:17px;color:#7a9090">${atkList.length} attack${atkList.length > 1 ? 's' : ''}</span>
       </div>
       <div class="watk-body">`;
 
@@ -210,18 +210,18 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     const away      = t.tp?.som?.armiesAway?.length > 0;
     const ops       = t.item.province.requiredOps || [];
     const da        = t.dAge;
-    const genColor  = atk.gens <= 2 ? '#60C040' : atk.gens <= 3 ? '#e09040' : '#c8a060';
+    const genColor  = atk.gens <= 2 ? '#60C040' : atk.gens <= 3 ? '#e09040' : '#ffffff';
     const resCls    = atk.result === 'yes' ? 'watk-yes' : atk.result === 'close' ? 'watk-cl' : 'watk-no';
     const resLabel  = atk.result === 'yes' ? 'BREAKS' : atk.result === 'close' ? 'CLOSE' : 'RISKY';
     const sentOff   = atk.scaledOff || aOff * (atk.gens / totalGenerals);
 
     h += `
       <div class="watk-row">
-        <div class="watk-num" style="color:#7a5a2a">${atk.n}</div>
+        <div class="watk-num" style="color:#7a9090">${atk.n}</div>
         <div class="watk-main">
           <div class="watk-target">
             ${esc(t.item.province.name)}
-            ${away ? ' <span style="color:#60C040;font-size:11px">↗ army away</span>' : ''}
+            ${away ? ' <span style="color:#60C040;font-size:17px">↗ army away</span>' : ''}
           </div>
           <div class="watk-detail">
             ${fK(t.tDef)} def · ${fK(sentOff)} off sent · ${atk.pct}% ratio
@@ -229,7 +229,7 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
             ${atk.note ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
           </div>
           ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
-          ${t.item.province.notes ? `<div style="margin-top:4px;font-size:10px;color:#c8a060;background:#120d04;padding:4px 6px;border-radius:2px;border-left:2px solid #D4A017">${esc(t.item.province.notes)}</div>` : ''}
+          ${t.item.province.notes ? `<div style="margin-top:4px;font-size:17px;color:#ffffff;background:#2b3333;padding:4px 6px;border-radius:2px;border-left:2px solid #ffd400">${esc(t.item.province.notes)}</div>` : ''}
         </div>
         <div class="watk-gen">
           <div class="watk-gen-num" style="color:${genColor}">${atk.gens}</div>
@@ -252,26 +252,26 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const pct   = tDef > 0 ? Math.round(aOff / tDef * 100) : 0;
     const away  = tp?.som?.armiesAway?.length > 0;
     const cls   = !nwOk ? 'wmno' : aOff > tDef * 1.01 ? 'wmyes' : 'wmcl';
-    return `<tr style="border-bottom:1px solid #3a2810">
+    return `<tr style="border-bottom:1px solid #617070">
       <td style="padding:6px 8px;font-weight:600">${esc(item.province.name)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tDef)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tNW)}</td>
       <td style="padding:6px 8px"><span class="wmatch ${cls}">${pct}%</span></td>
       <td style="padding:6px 8px"><span class="wmatch ${nwOk ? 'wmyes' : 'wmno'}">${nwOk ? '✓ in range' : '✗ out'}</span></td>
-      <td style="padding:6px 8px">${away ? '<span style="color:#60C040;font-family:monospace;font-size:10px">AWAY</span>' : '—'}</td>
+      <td style="padding:6px 8px">${away ? '<span style="color:#60C040;font-family:monospace;font-size:17px">AWAY</span>' : '—'}</td>
     </tr>`;
   }).join('');
 
   return `
     <div style="margin-top:20px" class="wsech">// ALL WAVE TARGETS (context)</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px">
+    <table style="width:100%;border-collapse:collapse;font-size:17px">
       <thead><tr>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Province</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Def Home</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">NW</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Off/Def</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">NW Range</th>
-        <th style="text-align:left;padding:5px 8px;font-size:9px;font-weight:700;color:#7a5a2a;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #3a2810">Army</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Province</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Def Home</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">NW</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Off/Def</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">NW Range</th>
+        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Army</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

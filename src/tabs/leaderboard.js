@@ -72,14 +72,14 @@ async function renderLeaderboard() {
     const kdId = S.own?.location.replace(':', '_');
     const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
     if (!allOps.length) {
-      el.innerHTML = `<div style="color:#4a6a88;font-family:monospace;font-size:12px;padding:20px 0">
+      el.innerHTML = `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
         // No op data yet — data accumulates automatically as players use the tool during war.
       </div>`;
       return;
     }
     el.innerHTML = _buildLeaderboard(allOps);
   } catch (e) {
-    el.innerHTML = `<div style="color:#ff4455;font-family:monospace;font-size:12px;padding:20px 0">
+    el.innerHTML = `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">
       Error loading leaderboard: ${esc(e.message)}
     </div>`;
   }
@@ -94,7 +94,7 @@ function _buildLeaderboard(allOps) {
   const filterBar = _buildFilterBar(f, warPeriod, allOps.length, ops.length);
 
   if (!ops.length) {
-    return filterBar + `<div style="color:#4a6a88;font-family:monospace;font-size:12px;padding:20px 0">
+    return filterBar + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
       // No ops match the selected period.
     </div>`;
   }
@@ -130,13 +130,13 @@ function _buildLeaderboard(allOps) {
   // ── Sort/view toggle ────────────────────────────────────────────────────
   const viewToggle = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="font-family:monospace;font-size:10px;color:#4a6a88;letter-spacing:2px;text-transform:uppercase">
+      <div style="font-family:monospace;font-size:17px;color:#7a9090;letter-spacing:2px;text-transform:uppercase">
         ${ops.length} ops · ${sorted.length} provinces
       </div>
       <div style="display:flex;gap:6px">
-        <button class="wb${S.lbView==='damage'?' g':''}" onclick="__wpA.lbView('damage')" style="font-size:10px;padding:3px 9px">Damage</button>
-        <button class="wb${S.lbView==='ops'   ?' g':''}" onclick="__wpA.lbView('ops')"    style="font-size:10px;padding:3px 9px">Op Count</button>
-        <button class="wb${S.lbView==='gain'  ?' g':''}" onclick="__wpA.lbView('gain')"   style="font-size:10px;padding:3px 9px">Gain</button>
+        <button class="wb${S.lbView==='damage'?' g':''}" onclick="__wpA.lbView('damage')" style="font-size:17px;padding:3px 9px">Damage</button>
+        <button class="wb${S.lbView==='ops'   ?' g':''}" onclick="__wpA.lbView('ops')"    style="font-size:17px;padding:3px 9px">Op Count</button>
+        <button class="wb${S.lbView==='gain'  ?' g':''}" onclick="__wpA.lbView('gain')"   style="font-size:17px;padding:3px 9px">Gain</button>
       </div>
     </div>`;
 
@@ -158,19 +158,19 @@ function _buildLeaderboard(allOps) {
     const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
     const pctCol  = pct >= 70 ? '#00ff88' : pct >= 50 ? '#ffaa00' : '#ff4455';
     return `<tr>
-      <td style="font-family:monospace;font-size:12px">${medal}</td>
+      <td style="font-family:monospace;font-size:19px">${medal}</td>
       <td style="font-weight:700">${esc(p.name)}</td>
       <td style="text-align:right;font-family:monospace">
         ${fK(p.totalDamage)}
-        <div style="height:3px;background:#1e2d3d;border-radius:2px;margin-top:2px">
+        <div style="height:3px;background:#617070;border-radius:2px;margin-top:2px">
           <div style="height:100%;width:${barW}%;background:#00d4ff;border-radius:2px"></div>
         </div>
       </td>
       <td style="text-align:right;font-family:monospace">${p.totalOps}</td>
       <td style="text-align:right;font-family:monospace;color:${pctCol}">${pct}%</td>
       <td style="text-align:right;font-family:monospace">${fK(p.totalGain)}</td>
-      <td><span class="wtag" style="cursor:default;font-size:9px">${topName}${topOp?' ×'+topOp[1]:''}</span></td>
-      <td style="font-family:monospace;font-size:10px;color:#4a6a88">${esc(p.lastSeen || '')}</td>
+      <td><span class="wtag" style="cursor:default;font-size:15px">${topName}${topOp?' ×'+topOp[1]:''}</span></td>
+      <td style="font-family:monospace;font-size:17px;color:#7a9090">${esc(p.lastSeen || '')}</td>
     </tr>`;
   }).join('');
 
@@ -206,11 +206,11 @@ function _buildLeaderboard(allOps) {
     .map(([code, d]) => {
       const isThief  = d.category === 'thief_sabotage';
       const catLabel = isThief
-        ? `<span style="font-family:monospace;font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.2)">THIEF</span>`
-        : `<span style="font-family:monospace;font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(170,102,255,.12);color:#aa66ff;border:1px solid rgba(170,102,255,.2)">SPELL</span>`;
+        ? `<span style="font-family:monospace;font-size:15px;padding:1px 4px;border-radius:2px;background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.2)">THIEF</span>`
+        : `<span style="font-family:monospace;font-size:15px;padding:1px 4px;border-radius:2px;background:rgba(170,102,255,.12);color:#aa66ff;border:1px solid rgba(170,102,255,.2)">SPELL</span>`;
       return `<tr>
         <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
-        <td style="color:#7a9ab8">${esc(d.opName || code)}</td>
+        <td style="color:#b8c8c8">${esc(d.opName || code)}</td>
         <td>${catLabel}</td>
         <td style="text-align:right;font-family:monospace">${d.count}</td>
         <td style="text-align:right;font-family:monospace">${fK(d.damage) || '—'}</td>
@@ -242,10 +242,10 @@ function _buildFilterBar(f, warPeriod, totalCount, filteredCount) {
 
   // War button — only shown if kingdomNews has usable dates
   const warBtn = warPeriod
-    ? `<button class="wb${warActive?' g':''}" style="font-size:10px;padding:3px 9px"
+    ? `<button class="wb${warActive?' g':''}" style="font-size:17px;padding:3px 9px"
         onclick="__wpA.lbSetFilter('war',{fromYear:${warPeriod.fromYear},fromMonth:${warPeriod.fromMonth},toYear:${warPeriod.toYear},toMonth:${warPeriod.toMonth}})">
         ⚔ Last War
-        <span style="font-size:9px;color:#4a6a88;margin-left:4px">${esc(warPeriod.fromLabel)} – ${esc(warPeriod.toLabel)}</span>
+        <span style="font-size:15px;color:#7a9090;margin-left:4px">${esc(warPeriod.fromLabel)} – ${esc(warPeriod.toLabel)}</span>
       </button>`
     : '';
 
@@ -253,42 +253,42 @@ function _buildFilterBar(f, warPeriod, totalCount, filteredCount) {
   const monthOpts = MONTH_NAMES.slice(1).map((m, i) =>
     `<option value="${i+1}">${m}</option>`).join('');
 
-  const fromMonthSel = `<select style="background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:11px;padding:3px 5px;border-radius:3px;outline:none"
+  const fromMonthSel = `<select style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-family:monospace;font-size:17px;padding:3px 5px;border-radius:3px;outline:none"
     onchange="__wpA._lbCustom('fromMonth',this.value)">
     ${MONTH_NAMES.slice(1).map((m,i)=>`<option value="${i+1}"${(f.fromMonth===i+1)?' selected':''}>${m}</option>`).join('')}
   </select>`;
-  const toMonthSel = `<select style="background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:11px;padding:3px 5px;border-radius:3px;outline:none"
+  const toMonthSel = `<select style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-family:monospace;font-size:17px;padding:3px 5px;border-radius:3px;outline:none"
     onchange="__wpA._lbCustom('toMonth',this.value)">
     ${MONTH_NAMES.slice(1).map((m,i)=>`<option value="${i+1}"${(f.toMonth===i+1)?' selected':''}>${m}</option>`).join('')}
   </select>`;
 
   const customPanel = `
-    <div style="display:${custActive?'flex':'none'};align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:#151a22;border:1px solid #1e2d3d;border-radius:3px">
-      <span style="font-size:10px;color:#4a6a88;font-weight:700;letter-spacing:1px;text-transform:uppercase">From</span>
+    <div style="display:${custActive?'flex':'none'};align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:#3c4545;border:1px solid #617070;border-radius:3px">
+      <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase">From</span>
       ${fromMonthSel}
       <input type="number" min="1" placeholder="YR" value="${f.fromYear||''}"
-        style="background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:11px;padding:3px 6px;border-radius:3px;width:60px;outline:none"
+        style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-family:monospace;font-size:17px;padding:3px 6px;border-radius:3px;width:60px;outline:none"
         oninput="__wpA._lbCustom('fromYear',this.value)">
-      <span style="font-size:10px;color:#4a6a88;font-weight:700;letter-spacing:1px;text-transform:uppercase">To</span>
+      <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase">To</span>
       ${toMonthSel}
       <input type="number" min="1" placeholder="YR" value="${f.toYear||''}"
-        style="background:#151a22;border:1px solid #2a3f55;color:#c8d8e8;font-family:monospace;font-size:11px;padding:3px 6px;border-radius:3px;width:60px;outline:none"
+        style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-family:monospace;font-size:17px;padding:3px 6px;border-radius:3px;width:60px;outline:none"
         oninput="__wpA._lbCustom('toYear',this.value)">
-      <button class="wb g" style="font-size:10px;padding:3px 9px" onclick="__wpA._lbApplyCustom()">Apply</button>
+      <button class="wb g" style="font-size:17px;padding:3px 9px" onclick="__wpA._lbApplyCustom()">Apply</button>
     </div>`;
 
   const filterInfo = !allActive
-    ? `<span style="font-family:monospace;font-size:10px;color:#4a6a88;margin-left:8px">${filteredCount} of ${totalCount} ops</span>`
+    ? `<span style="font-family:monospace;font-size:17px;color:#7a9090;margin-left:8px">${filteredCount} of ${totalCount} ops</span>`
     : '';
 
   return `
-    <div style="background:#0f1218;border:1px solid #1e2d3d;border-radius:4px;padding:10px 14px;margin-bottom:14px">
+    <div style="background:#2b3333;border:1px solid #617070;border-radius:4px;padding:10px 14px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:10px;color:#4a6a88;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:4px">Period:</span>
-        <button class="wb${allActive?' g':''}" style="font-size:10px;padding:3px 9px"
+        <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:4px">Period:</span>
+        <button class="wb${allActive?' g':''}" style="font-size:17px;padding:3px 9px"
           onclick="__wpA.lbSetFilter('all',{})">All Time</button>
         ${warBtn}
-        <button class="wb${custActive?' g':''}" style="font-size:10px;padding:3px 9px"
+        <button class="wb${custActive?' g':''}" style="font-size:17px;padding:3px 9px"
           onclick="__wpA.lbSetFilter('custom',{fromYear:${f.fromYear||1},fromMonth:${f.fromMonth||1},toYear:${f.toYear||1},toMonth:${f.toMonth||12}})">
           Custom…</button>
         ${filterInfo}
