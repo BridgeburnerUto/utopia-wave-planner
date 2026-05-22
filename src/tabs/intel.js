@@ -181,6 +181,15 @@ function _buildIntel() {
     const ce   = combatEvents[p.slot] || { razes: 0, razeAcres: 0, massacres: 0 };
     const nwpa = p.land > 0 ? Math.round((p.networth || 0) / p.land) : 0;
     const da   = p.calcs?.defPointsSummary?.ageSeconds;
+    const armiesAway = (p.som?.armiesAway || []).map(a => ({
+      oSpecs:           a.oSpecs || 0,
+      land:             a.land   || 0,
+      secondsRemaining: typeof a.secondsRemaining === 'number' ? a.secondsRemaining : null,
+    }));
+    // For sorting: overdue/unknown = 0 (sorted first asc), no armies = 9e9 (sorted last)
+    const awayEarliest = armiesAway.length > 0
+      ? Math.min(...armiesAway.map(a => a.secondsRemaining != null ? a.secondsRemaining : 0))
+      : 9e9;
     return {
       slot:         p.slot,
       name:         p.name,
@@ -197,6 +206,8 @@ function _buildIntel() {
       razes:        ce.razes,
       razeAcres:    ce.razeAcres,
       massacres:    ce.massacres,
+      armiesAway,
+      awayEarliest,
       intelAge:     da,
       stale:        da != null && da > 28800,
     };
@@ -263,6 +274,16 @@ function _buildIntel() {
       <td style="padding:7px 10px;text-align:right;color:${r.razes>0?'#E05050':'#617070'};font-weight:${r.razes>0?'700':'400'};">${r.razes > 0 ? r.razes+'×' : '—'}</td>
       <td style="padding:7px 10px;text-align:right;color:${r.razeAcres>0?'#E05050':'#617070'};font-weight:${r.razeAcres>0?'700':'400'};">${r.razeAcres > 0 ? '-'+fK(r.razeAcres) : '—'}</td>
       <td style="padding:7px 10px;text-align:right;color:${r.massacres>0?'#E05050':'#617070'};font-weight:${r.massacres>0?'700':'400'};">${r.massacres > 0 ? r.massacres+'×' : '—'}</td>
+      <td style="padding:7px 10px;text-align:right;vertical-align:top;line-height:1.6;">${
+        r.armiesAway.length === 0
+          ? '<span style="color:#617070">—</span>'
+          : r.armiesAway.map(a => {
+              const t = a.secondsRemaining != null && a.secondsRemaining > 0
+                ? `<span style="color:#ffd400">${fA(a.secondsRemaining)}</span>`
+                : `<span style="color:#E05050;font-weight:700">OVERDUE</span>`;
+              return `<span style="white-space:nowrap">${fK(a.oSpecs)}&nbsp;·&nbsp;${t}</span>`;
+            }).join('<br>')
+      }</td>
       <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
     </tr>`;
   }).join('');
@@ -294,6 +315,7 @@ function _buildIntel() {
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.razeAcres>0?'#E05050':'#7a9090'};">${totals.razeAcres > 0 ? '-'+fK(totals.razeAcres) : '—'}</td>
     <td style="padding:7px 10px;text-align:right;font-weight:700;color:${totals.massacres>0?'#E05050':'#7a9090'};">${totals.massacres > 0 ? totals.massacres+'×' : '—'}</td>
     <td></td>
+    <td></td>
   </tr>`;
 
   const table = `
@@ -315,6 +337,7 @@ function _buildIntel() {
           ${th('razes',`Razes (${S.intelInterval}t)`,'Times razed in interval')}
           ${th('razeAcres',`Raze Acres (${S.intelInterval}t)`,'Total acres razed in interval')}
           ${th('massacres',`Massacres (${S.intelInterval}t)`,'Times massacred in interval')}
+          ${th('awayEarliest','Away','Enemy armies away — oSpecs · time to return')}
           ${th('intelAge','Intel','Intel age')}
         </tr></thead>
         <tbody>${tableRows}</tbody>
