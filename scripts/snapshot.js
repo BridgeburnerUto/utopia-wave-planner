@@ -119,15 +119,30 @@ async function main() {
     .map(kd => {
       const locKey  = kd.loc.replace(':', '_');
       const docName = `${FB_BASE}/kd_nw_history/${locKey}_${hourId}`;
+
+      // stance is either the string "Normal" or the array ["war", "X:Y"]
+      // Store stanceLoc as the enemy location when at war, empty string when at peace.
+      // This lets us detect mutual wars: find snapshots where A.stanceLoc === locB && B.stanceLoc === locA
+      const stance    = kd.stance;
+      const stanceLoc = Array.isArray(stance) && stance[0] === 'war'
+        ? (stance[1] || '')
+        : '';
+
+      // wars is an array of integer war IDs assigned by the game.
+      // Store as comma-separated string for simple Firestore storage.
+      const wars = Array.isArray(kd.wars) ? kd.wars.join(',') : '';
+
       return {
         update: {
           name:   docName,
           fields: {
-            loc:      _toFB(kd.loc),
-            name:     _toFB(kd.name   || ''),
-            nw:       _toFB(Math.round(kd.nw   || 0)),
-            land:     _toFB(Math.round(kd.land  || 0)),
-            storedAt: _toFB(storedAt),
+            loc:        _toFB(kd.loc),
+            name:       _toFB(kd.name   || ''),
+            nw:         _toFB(Math.round(kd.nw   || 0)),
+            land:       _toFB(Math.round(kd.land  || 0)),
+            stanceLoc:  _toFB(stanceLoc),  // enemy KD location if at war, '' if at peace
+            wars:       _toFB(wars),        // e.g. "1,2" — war IDs from the game
+            storedAt:   _toFB(storedAt),
           },
         },
       };

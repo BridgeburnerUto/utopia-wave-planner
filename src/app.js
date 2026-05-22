@@ -306,6 +306,89 @@ window.__wpA = {
     renderNwGraph();
   },
 
+  /**
+   * Scan kd_nw_history for when KD A and KD B were mutually at war.
+   * Uses the stanceLoc field stored by the snapshot script (available after the
+   * first run following the stance/wars update to scripts/snapshot.js).
+   * On success: enables custom mode and auto-fills From/To with the war period.
+   */
+  async nwFindWar() {
+    const inA = $id('__wpnw_locA');
+    const inB = $id('__wpnw_locB');
+    if (inA) S.nwLocA = inA.value.trim();
+    if (inB) S.nwLocB = inB.value.trim();
+
+    if (!S.nwLocA || !S.nwLocB) {
+      alert('Enter both KD locations first.');
+      return;
+    }
+
+    // Show loading in graph area without disturbing the controls
+    const area = $id('__wpnwgraph_area');
+    if (area) area.innerHTML = loadingHTML('SCANNING FOR WAR PERIOD...');
+
+    // Query last 90 days (= full age worth of data) for both KDs
+    const toTs   = Date.now();
+    const fromTs = toTs - 90 * 24 * 3_600_000;
+
+    try {
+      const [docsA, docsB] = await Promise.all([
+        fbQueryNWHistory(S.nwLocA, fromTs, toTs),
+        fbQueryNWHistory(S.nwLocB, fromTs, toTs),
+      ]);
+
+      // Round each snapshot to its hourId so A and B snapshots align even if
+      // storedAt differs by a few seconds within the same batch write.
+      const hourOf = ts => Math.floor(ts / 3_600_000);
+
+      // Hours where A was at war with B
+      const warHoursA = new Set(
+        docsA.filter(d => d.stanceLoc === S.nwLocB).map(d => hourOf(d.storedAt))
+      );
+      // Hours where B was at war with A
+      const warHoursB = new Set(
+        docsB.filter(d => d.stanceLoc === S.nwLocA).map(d => hourOf(d.storedAt))
+      );
+
+      // Mutual war = both at war with each other in the same hour
+      const mutual = [...warHoursA].filter(h => warHoursB.has(h)).sort((a, b) => a - b);
+
+      if (!mutual.length) {
+        // Check if either KD has ANY stanceLoc data at all — helps diagnose
+        const hasStanceA = docsA.some(d => 'stanceLoc' in d);
+        const hint = hasStanceA
+          ? `No mutual war found between <b>${esc(S.nwLocA)}</b> and <b>${esc(S.nwLocB)}</b> in the last 90 days of snapshots.`
+          : `No stance data in stored snapshots yet.<br><span style="font-size:17px">Stance tracking was added recently — it will appear after the next hourly GitHub Actions run.</span>`;
+        if (area) area.innerHTML = `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0;text-align:center">${hint}</div>`;
+        return;
+      }
+
+      // Convert first and last mutual war hours to in-game dates
+      const fromTs2  = mutual[0]        * 3_600_000;
+      const toTs2    = mutual[mutual.length - 1] * 3_600_000;
+      const fromDate = _tsToUtoDate(fromTs2);
+      const toDate   = _tsToUtoDate(toTs2);
+
+      if (!fromDate || !toDate) {
+        if (area) area.innerHTML = `<div style="color:#e09040;font-size:19px;padding:20px 0">
+          War period found (${mutual.length} ticks) but could not convert to in-game dates — refresh the tool and try again.
+        </div>`;
+        return;
+      }
+
+      // Auto-fill custom date range and re-render the full tab
+      S.nwCustom     = true;
+      S.nwCustomFrom = { month: fromDate.month, day: fromDate.day, year: fromDate.year };
+      S.nwCustomTo   = { month: toDate.month,   day: toDate.day,   year: toDate.year };
+      renderNwGraph();
+
+    } catch(e) {
+      if (area) area.innerHTML = `<div style="color:#E05050;font-family:monospace;font-size:19px;padding:20px 0">
+        Error scanning snapshots: ${esc(e.message)}
+      </div>`;
+    }
+  },
+
   /** Toggle custom date range mode */
   nwToggleCustom() {
     // Snapshot location inputs before rebuilding

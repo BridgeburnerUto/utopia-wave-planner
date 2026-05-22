@@ -21,7 +21,20 @@ function _parseUtoDate(s) {
 /** Convert {year, month} to a single sortable integer: year*100 + month */
 function _ym(year, month) { return (year || 0) * 100 + (month || 0); }
 
-/** Get war period from IS kingdomNews as {fromYear, fromMonth, toYear, toMonth} or null */
+/**
+ * Get war period from IS kingdomNews as {fromYear, fromMonth, toYear, toMonth} or null.
+ *
+ * NOTE — stance-based war detection:
+ * The world dump stores kd.stance = ["war","X:Y"] when at war.
+ * The snapshot script (scripts/snapshot.js) stores this as stanceLoc on each
+ * kd_nw_history document. This means we can derive war start/end for ANY KD pair
+ * by querying kd_nw_history for mutual stanceLoc matches (see nwFindWar() in app.js).
+ *
+ * For own-KD leaderboard filtering, kingdomNews gives the exact in-game dates
+ * directly from the intel API and is the better source — no change needed here.
+ * The stanceLoc approach is more useful for the NW graph (external KD pairs)
+ * and future features like cross-war leaderboard comparisons.
+ */
 function _getWarPeriod() {
   try {
     const IS   = JSON.parse(localStorage.getItem('IntelState') || '{}');

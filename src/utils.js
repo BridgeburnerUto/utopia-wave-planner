@@ -57,6 +57,20 @@ function $id(id) {
   return document.getElementById(id);
 }
 
+/**
+ * True if own KD is currently at war.
+ * Checks S.own.war (boolean from intel API) and S.own.stance (from world dump format).
+ * Dump stance is either the string "Normal" or the array ["war", "X:Y"].
+ */
+function _atWar() {
+  if (!S.own) return false;
+  if (S.own.war === true) return true;
+  const s = S.own.stance;
+  if (Array.isArray(s)) return s[0]?.toLowerCase() === 'war';
+  if (typeof s === 'string') return s.toLowerCase() === 'war';
+  return false;
+}
+
 /** Update the save status indicator in the header */
 function setSav(msg, cls) {
   const el = $id('__wpsav');

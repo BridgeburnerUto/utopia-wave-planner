@@ -89,6 +89,20 @@ function _nwParseTickName(s) {
 }
 
 /**
+ * Convert a real Unix ms timestamp back to an in-game { month, day, year }.
+ * Inverse of _utoDateToTs — uses the current tick as anchor.
+ * Returns null if S.currentTickName is not available.
+ */
+function _tsToUtoDate(ts) {
+  const cur = _nwParseTickName(S.currentTickName);
+  if (!cur) return null;
+  const currentAbs = _utoToAbs(cur.month, cur.day, cur.year);
+  const hoursAgo   = (Date.now() - ts) / 3_600_000;
+  const targetAbs  = Math.round(currentAbs - hoursAgo);
+  return _absToUto(Math.max(1, targetAbs));
+}
+
+/**
  * Convert an in-game { month, day, year } to a real Unix ms timestamp.
  * Uses the current tick as anchor: 1 tick difference = 1 real hour difference.
  * Returns null if S.currentTickName is not available.
@@ -179,6 +193,7 @@ function _buildNwControls() {
             onkeydown="if(event.key==='Enter')__wpA.nwLoad()">
         </div>
         <div style="display:flex;gap:4px;margin-left:4px">${presetBtns}${customBtn}</div>
+        <button class="wb" style="font-size:17px;padding:3px 10px;border-color:#617070;color:#e09040" onclick="__wpA.nwFindWar()" title="Scan stored snapshots for when these two KDs were mutually at war">⚔ Find War</button>
         ${!S.nwCustom ? `<button class="wb g" style="font-size:17px;padding:3px 14px" onclick="__wpA.nwLoad()">Load ▶</button>` : ''}
       </div>
       ${customRow}
