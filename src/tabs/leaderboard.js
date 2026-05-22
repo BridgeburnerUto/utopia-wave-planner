@@ -57,6 +57,11 @@ function lbSetFilter(mode, opts) {
   renderLeaderboard();
 }
 
+function lbOpFilter(type) {
+  S.lbOpFilter = type || 'all';
+  renderLeaderboard();
+}
+
 /** Apply current filter to raw ops array */
 function _filterOps(ops) {
   const f = S.lbFilter;
@@ -102,6 +107,8 @@ function _buildLeaderboard(allOps) {
   const warPeriod = _getWarPeriod();
   const ops       = _filterOps(allOps);
   const f         = S.lbFilter;
+  if (!S.lbOpFilter) S.lbOpFilter = 'all';
+  const opf       = S.lbOpFilter; // 'all' or an opType string
 
   // ── Filter bar ──────────────────────────────────────────────────────────
   const filterBar = _buildFilterBar(f, warPeriod, allOps.length, ops.length);
@@ -112,9 +119,35 @@ function _buildLeaderboard(allOps) {
     </div>`;
   }
 
-  // ── Aggregate ───────────────────────────────────────────────────────────
-  const byProv = {};
+  // ── Build per-op-type index (always over full period, for pill row) ─────
+  const byOp = {};
   ops.forEach(op => {
+    if (!op.opType) return;
+    if (!byOp[op.opType]) byOp[op.opType] = {
+      count: 0, successCount: 0, damage: 0, gain: 0,
+      opName:   op.opName || op.opType,
+      category: op.category || (OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive'),
+    };
+    byOp[op.opType].count++;
+    if (op.success) byOp[op.opType].successCount++;
+    byOp[op.opType].damage += op.damage || 0;
+    byOp[op.opType].gain   += op.gain   || 0;
+  });
+
+  // ── Op-type pill row ─────────────────────────────────────────────────────
+  const opPills = _buildOpPillRow(byOp, opf);
+
+  // ── Ops scoped to the op filter ──────────────────────────────────────────
+  const scopedOps = opf === 'all' ? ops : ops.filter(op => op.opType === opf);
+  const opMeta    = opf !== 'all' ? byOp[opf] : null; // {opName, category, count, …}
+
+  // Label used in column headers & cards when a specific op is selected
+  const opLabel   = opMeta ? (opMeta.opName || opf).split(' ').map(w => w[0]).join('').toUpperCase().slice(0,4) : '';
+  const isThiefOp = opMeta?.category === 'thief_sabotage';
+
+  // ── Aggregate by province (scoped) ──────────────────────────────────────
+  const byProv = {};
+  scopedOps.forEach(op => {
     if (!op.provinceName) return;
     if (!byProv[op.provinceName]) byProv[op.provinceName] = {
       name: op.provinceName, totalOps: 0, successOps: 0,
@@ -133,117 +166,214 @@ function _buildLeaderboard(allOps) {
   const sorted     = Object.values(byProv).sort((a, b) => b.totalDamage - a.totalDamage);
   const totalDmg   = sorted.reduce((s, p) => s + p.totalDamage, 0);
   const totalOps   = sorted.reduce((s, p) => s + p.totalOps, 0);
+  const totalGain  = sorted.reduce((s, p) => s + p.totalGain, 0);
+  const totalSucc  = sorted.reduce((s, p) => s + p.successOps, 0);
   const maxDmg     = sorted[0]?.totalDamage || 1;
-  const successPct = totalOps > 0 ? Math.round(sorted.reduce((s, p) => s + p.successOps, 0) / totalOps * 100) : 0;
+  const successPct = totalOps > 0 ? Math.round(totalSucc / totalOps * 100) : 0;
 
-  const viewSorted = S.lbView === 'ops'  ? [...sorted].sort((a, b) => b.totalOps - a.totalOps)
-                   : S.lbView === 'gain' ? [...sorted].sort((a, b) => b.totalGain - a.totalGain)
-                   : sorted;
+  const viewSorted = S.lbView === 'ops'     ? [...sorted].sort((a, b) => b.totalOps    - a.totalOps)
+                   : S.lbView === 'gain'    ? [...sorted].sort((a, b) => b.totalGain   - a.totalGain)
+                   : S.lbView === 'success' ? [...sorted].sort((a, b) => {
+                       const pa = a.totalOps > 0 ? a.successOps / a.totalOps : 0;
+                       const pb = b.totalOps > 0 ? b.successOps / b.totalOps : 0;
+                       return pb - pa;
+                     })
+                   : sorted; // default: damage
 
-  // ── Sort/view toggle ────────────────────────────────────────────────────
+  // ── Context bar (only when op filter active) ─────────────────────────────
+  const opContextBar = opf !== 'all' ? (() => {
+    const catBadge = isThiefOp
+      ? `<span style="font-family:monospace;font-size:15px;padding:1px 5px;border-radius:2px;background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.25)">THIEF</span>`
+      : `<span style="font-family:monospace;font-size:15px;padding:1px 5px;border-radius:2px;background:rgba(170,102,255,.12);color:#aa66ff;border:1px solid rgba(170,102,255,.25)">SPELL</span>`;
+    const accentCol = isThiefOp ? '#00d4ff' : '#aa66ff';
+    const accentBg  = isThiefOp ? 'rgba(0,212,255,.12)' : 'rgba(170,102,255,.12)';
+    const accentBrd = isThiefOp ? 'rgba(0,212,255,.35)' : 'rgba(170,102,255,.35)';
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:#2b3333;border:1px solid #617070;border-radius:4px;flex-wrap:wrap">
+      <span style="font-size:17px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Showing:</span>
+      <span style="font-size:17px;font-weight:700;padding:3px 12px;border-radius:3px;background:${accentBg};border:1px solid ${accentBrd};color:${accentCol}">${esc(opMeta?.opName || opf)} (${esc(opf)})</span>
+      ${catBadge}
+      <span style="font-size:17px;color:#7a9090">${scopedOps.length} ops &middot; ${sorted.length} provinces</span>
+    </div>`;
+  })() : '';
+
+  // ── Sort/view toggle ─────────────────────────────────────────────────────
   const viewToggle = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div style="font-family:monospace;font-size:17px;color:#7a9090;letter-spacing:2px;text-transform:uppercase">
-        ${ops.length} ops · ${sorted.length} provinces
+        ${scopedOps.length} ops &middot; ${sorted.length} provinces
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="wb${S.lbView==='damage'?' g':''}" onclick="__wpA.lbView('damage')" style="font-size:17px;padding:3px 9px">Damage</button>
-        <button class="wb${S.lbView==='ops'   ?' g':''}" onclick="__wpA.lbView('ops')"    style="font-size:17px;padding:3px 9px">Op Count</button>
-        <button class="wb${S.lbView==='gain'  ?' g':''}" onclick="__wpA.lbView('gain')"   style="font-size:17px;padding:3px 9px">Gain</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="wb${S.lbView==='damage' ?' g':''}" onclick="__wpA.lbView('damage')"  style="font-size:17px;padding:3px 9px">Damage</button>
+        <button class="wb${S.lbView==='ops'    ?' g':''}" onclick="__wpA.lbView('ops')"     style="font-size:17px;padding:3px 9px">Op Count</button>
+        <button class="wb${S.lbView==='success'?' g':''}" onclick="__wpA.lbView('success')" style="font-size:17px;padding:3px 9px">Success%</button>
+        <button class="wb${S.lbView==='gain'   ?' g':''}" onclick="__wpA.lbView('gain')"    style="font-size:17px;padding:3px 9px">Gain</button>
       </div>
     </div>`;
 
-  // ── Summary cards ───────────────────────────────────────────────────────
+  // ── Summary cards ────────────────────────────────────────────────────────
+  const opsLabel = opf === 'all' ? 'Total Ops' : `${esc(opLabel)} Ops`;
+  const dmgLabel = opf === 'all' ? 'Total Damage' : `${esc(opLabel)} Damage`;
+  const gainLabel= opf === 'all' ? 'Total Gain'   : `${esc(opLabel)} Gain`;
+  const avgDmg   = totalOps > 0 && totalDmg > 0 ? `avg ${fK(Math.round(totalDmg/totalOps))} / op` : '';
+  const succSub  = totalOps > 0 ? `${totalSucc} of ${totalOps}` : '';
+
   const summaryCards = `
     <div class="wsum" style="margin-bottom:16px">
-      <div class="wscard"><div class="l">Total Ops</div><div class="v">${fK(totalOps)}</div></div>
-      <div class="wscard"><div class="l">Total Damage</div><div class="v">${fK(totalDmg)}</div></div>
-      <div class="wscard"><div class="l">Provinces</div><div class="v">${sorted.length}</div></div>
-      <div class="wscard"><div class="l">Success Rate</div><div class="v">${successPct}%</div></div>
+      <div class="wscard"><div class="l">${opsLabel}</div><div class="v">${fK(totalOps)}</div><div class="s">${sorted.length} provinces</div></div>
+      <div class="wscard"><div class="l">${dmgLabel}</div><div class="v">${fK(totalDmg)}</div><div class="s">${avgDmg}</div></div>
+      <div class="wscard"><div class="l">${gainLabel}</div><div class="v">${fK(totalGain)}</div></div>
+      <div class="wscard"><div class="l">Success Rate</div><div class="v" style="color:${successPct>=70?'#00ff88':successPct>=50?'#ffaa00':'#ff4455'}">${successPct}%</div><div class="s">${succSub}</div></div>
     </div>`;
 
-  // ── Province rows ───────────────────────────────────────────────────────
+  // ── Province rows ────────────────────────────────────────────────────────
+  const dmgColLabel  = opf === 'all' ? 'Damage'   : `${esc(opLabel)} Dmg`;
+  const opsColLabel  = opf === 'all' ? 'Ops'      : `${esc(opLabel)} Ops`;
+  const gainColLabel = opf === 'all' ? 'Gain'     : `${esc(opLabel)} Gain`;
+  const topOpCol     = opf === 'all'; // only show "Top Op" col in all-mode
+
   const provRows = viewSorted.map((p, i) => {
     const pct     = p.totalOps > 0 ? Math.round(p.successOps / p.totalOps * 100) : 0;
-    const topOp   = Object.entries(p.opCounts).sort((a, b) => b[1] - a[1])[0];
-    const topName = topOp ? (p.opNames[topOp[0]] || topOp[0]) : '';
-    const barW    = Math.round(p.totalDamage / maxDmg * 100);
+    const barW    = maxDmg > 0 ? Math.round(p.totalDamage / maxDmg * 100) : 0;
+    const barCol  = opf === 'all' ? '#00d4ff' : (isThiefOp ? '#00d4ff' : '#aa66ff');
     const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
     const pctCol  = pct >= 70 ? '#00ff88' : pct >= 50 ? '#ffaa00' : '#ff4455';
+    const avgDmgP = p.totalOps > 0 && p.totalDamage > 0 ? fK(Math.round(p.totalDamage / p.totalOps)) : '—';
+
+    const topOpCell = topOpCol ? (() => {
+      const topOp   = Object.entries(p.opCounts).sort((a, b) => b[1] - a[1])[0];
+      const topName = topOp ? (p.opNames[topOp[0]] || topOp[0]) : '';
+      return `<td><span class="wtag" style="cursor:default;font-size:15px">${topName}${topOp?' ×'+topOp[1]:''}</span></td>`;
+    })() : '';
+
     return `<tr>
       <td style="font-family:monospace;font-size:19px">${medal}</td>
       <td style="font-weight:700">${esc(p.name)}</td>
       <td style="text-align:right;font-family:monospace">
         ${fK(p.totalDamage)}
         <div style="height:3px;background:#617070;border-radius:2px;margin-top:2px">
-          <div style="height:100%;width:${barW}%;background:#00d4ff;border-radius:2px"></div>
+          <div style="height:100%;width:${barW}%;background:${barCol};border-radius:2px"></div>
         </div>
       </td>
       <td style="text-align:right;font-family:monospace">${p.totalOps}</td>
       <td style="text-align:right;font-family:monospace;color:${pctCol}">${pct}%</td>
       <td style="text-align:right;font-family:monospace">${fK(p.totalGain)}</td>
-      <td><span class="wtag" style="cursor:default;font-size:15px">${topName}${topOp?' ×'+topOp[1]:''}</span></td>
+      ${opf !== 'all' ? `<td style="text-align:right;font-family:monospace;color:#7a9090">${avgDmgP}</td>` : ''}
+      ${topOpCell}
       <td style="font-family:monospace;font-size:17px;color:#7a9090">${esc(p.lastSeen || '')}</td>
     </tr>`;
   }).join('');
 
+  const avgDmgTh  = opf !== 'all' ? `<th style="text-align:right">Avg Dmg</th>` : '';
+  const topOpTh   = opf === 'all' ? `<th>Top Op</th>` : '';
   const mainTable = `
     <table class="wtbl">
       <thead><tr>
         <th style="width:24px">#</th><th>Province</th>
-        <th style="text-align:right">Damage</th><th style="text-align:right">Ops</th>
-        <th style="text-align:right">Success%</th><th style="text-align:right">Gain</th>
-        <th>Top Op</th><th>Last seen</th>
+        <th style="text-align:right">${dmgColLabel}</th>
+        <th style="text-align:right">${opsColLabel}</th>
+        <th style="text-align:right">Success%</th>
+        <th style="text-align:right">${gainColLabel}</th>
+        ${avgDmgTh}${topOpTh}
+        <th>Last seen</th>
       </tr></thead>
       <tbody>${provRows}</tbody>
     </table>`;
 
-  // ── Op breakdown ────────────────────────────────────────────────────────
-  const byOp = {};
-  ops.forEach(op => {
-    if (!byOp[op.opType]) byOp[op.opType] = {
-      count: 0, damage: 0, gain: 0,
-      opName: op.opName || op.opType,
-      category: op.category || (OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive'),
-    };
-    byOp[op.opType].count++;
-    byOp[op.opType].damage += op.damage || 0;
-    byOp[op.opType].gain   += op.gain   || 0;
-  });
-
+  // ── Op breakdown table (always full period, selected op highlighted) ──────
   const opRows = Object.entries(byOp)
     .sort((a, b) => {
       if (a[1].category !== b[1].category) return a[1].category === 'thief_sabotage' ? -1 : 1;
       return b[1].damage - a[1].damage || b[1].count - a[1].count;
     })
     .map(([code, d]) => {
-      const isThief  = d.category === 'thief_sabotage';
-      const catLabel = isThief
+      const isThief   = d.category === 'thief_sabotage';
+      const isActive  = code === opf;
+      const catLabel  = isThief
         ? `<span style="font-family:monospace;font-size:15px;padding:1px 4px;border-radius:2px;background:rgba(0,212,255,.12);color:#00d4ff;border:1px solid rgba(0,212,255,.2)">THIEF</span>`
         : `<span style="font-family:monospace;font-size:15px;padding:1px 4px;border-radius:2px;background:rgba(170,102,255,.12);color:#aa66ff;border:1px solid rgba(170,102,255,.2)">SPELL</span>`;
-      return `<tr>
-        <td><span class="wtag" style="cursor:default">${esc(code)}</span></td>
-        <td style="color:#b8c8c8">${esc(d.opName || code)}</td>
+      const accentCol  = isThief ? '#00d4ff' : '#aa66ff';
+      const rowStyle   = isActive
+        ? `background:${isThief?'rgba(0,212,255,.08)':'rgba(170,102,255,.08)'};outline:1px solid ${isThief?'rgba(0,212,255,.3)':'rgba(170,102,255,.3)'}`
+        : '';
+      const succPct    = d.count > 0 ? Math.round(d.successCount / d.count * 100) : 0;
+      const succCol    = succPct >= 70 ? '#00ff88' : succPct >= 50 ? '#ffaa00' : '#ff4455';
+      const codeStyle  = isActive ? `border-color:${accentCol};color:${accentCol}` : '';
+      const nameStyle  = isActive ? `font-weight:700;color:${accentCol}` : 'color:#b8c8c8';
+      return `<tr style="${rowStyle}" onclick="__wpA.lbOpFilter('${esc(isActive ? 'all' : code)}')" style="cursor:pointer">
+        <td><span class="wtag" style="cursor:pointer;${codeStyle}">${esc(code)}</span></td>
+        <td style="${nameStyle};cursor:pointer">${esc(d.opName || code)}</td>
         <td>${catLabel}</td>
-        <td style="text-align:right;font-family:monospace">${d.count}</td>
+        <td style="text-align:right;font-family:monospace;${isActive?'font-weight:700':''}">${d.count}</td>
         <td style="text-align:right;font-family:monospace">${fK(d.damage) || '—'}</td>
         <td style="text-align:right;font-family:monospace">${fK(d.gain) || '—'}</td>
+        <td style="text-align:right;font-family:monospace;color:${succCol}">${succPct}%</td>
       </tr>`;
     }).join('');
 
   const opTable = `
-    <div style="margin-top:20px" class="wsech">Op Breakdown by Type</div>
+    <div style="margin-top:20px" class="wsech">Op Breakdown by Type ${opf !== 'all' ? '<span style="font-size:15px;font-weight:400;letter-spacing:0;text-transform:none;color:#617070">— click a row to filter, click again to clear</span>' : '<span style="font-size:15px;font-weight:400;letter-spacing:0;text-transform:none;color:#617070">— click a row to filter by that op</span>'}</div>
     <table class="wtbl">
       <thead><tr>
         <th>Op</th><th>Full Name</th><th>Type</th>
         <th style="text-align:right">Count</th>
         <th style="text-align:right">Total Damage</th>
         <th style="text-align:right">Total Gain</th>
+        <th style="text-align:right">Success%</th>
       </tr></thead>
       <tbody>${opRows}</tbody>
     </table>`;
 
-  return filterBar + viewToggle + summaryCards + mainTable + opTable;
+  return filterBar + opPills + opContextBar + viewToggle + summaryCards + mainTable + opTable;
+}
+
+// ── Op type pill row ─────────────────────────────────────────────────────────
+
+function _buildOpPillRow(byOp, activeOpf) {
+  // Sort: thieves first, then spells; within each group by count desc
+  const sorted = Object.entries(byOp).sort((a, b) => {
+    const ac = a[1].category, bc = b[1].category;
+    if (ac !== bc) return ac === 'thief_sabotage' ? -1 : 1;
+    return b[1].count - a[1].count;
+  });
+
+  const allActive = activeOpf === 'all';
+
+  const pills = sorted.map(([code, d]) => {
+    const isThief  = d.category === 'thief_sabotage';
+    const isActive = code === activeOpf;
+    const accentCol = isThief ? '#00d4ff' : '#aa66ff';
+    const accentBg  = isThief ? 'rgba(0,212,255,.15)' : 'rgba(170,102,255,.15)';
+    const accentBrd = isThief ? 'rgba(0,212,255,.45)' : 'rgba(170,102,255,.45)';
+    const badge     = isThief
+      ? `<span style="font-size:13px;padding:0 4px;border-radius:2px;background:rgba(0,212,255,.18);color:#00d4ff;font-weight:700;font-family:monospace">T</span>`
+      : `<span style="font-size:13px;padding:0 4px;border-radius:2px;background:rgba(170,102,255,.18);color:#aa66ff;font-weight:700;font-family:monospace">S</span>`;
+
+    const baseStyle  = `display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid;transition:all .12s`;
+    const activeStyle= `background:${accentBg};border-color:${accentBrd};color:${accentCol};font-weight:700`;
+    const idleStyle  = `background:#2b3333;border-color:#617070;color:#b8c8c8`;
+    const countStyle = isActive ? `color:${accentCol};opacity:.7;font-size:15px` : `color:#617070;font-size:15px`;
+
+    return `<button style="${baseStyle};${isActive ? activeStyle : idleStyle}"
+      onclick="__wpA.lbOpFilter('${isActive ? 'all' : esc(code)}')"
+      title="${esc(d.opName || code)} — click to ${isActive ? 'clear filter' : 'filter by this op'}">
+      ${badge} ${esc(d.opName || code)} <span style="${countStyle}">&times;${d.count}</span>
+    </button>`;
+  }).join('');
+
+  const allStyle = allActive
+    ? `background:#ffd400;border-color:#ffd400;color:#1e2828;font-weight:700`
+    : `background:#2b3333;border-color:#617070;color:#b8c8c8`;
+
+  return `
+    <div style="background:#2b3333;border:1px solid #617070;border-radius:4px;padding:10px 14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:4px;white-space:nowrap">Op Type:</span>
+        <button style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid;${allStyle}"
+          onclick="__wpA.lbOpFilter('all')">ALL <span style="font-size:15px;margin-left:5px;opacity:.6">&times;${Object.values(byOp).reduce((s,d)=>s+d.count,0)}</span>
+        </button>
+        ${pills}
+      </div>
+    </div>`;
 }
 
 // ── Filter bar HTML ──────────────────────────────────────────────────────────

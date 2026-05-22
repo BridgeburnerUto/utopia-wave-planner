@@ -222,7 +222,7 @@ function _buildIntel() {
   });
 
   // Interval dropdown
-  const intervals = [4, 6, 8, 12, 24];
+  const intervals = [4, 6, 8, 12, 24, 36, 48, 60, 72];
   const intervalSelect = `
     <div style="display:flex;align-items:center;gap:8px;">
       <span style="font-size:17px;font-weight:700;color:#7a9090;text-transform:uppercase;letter-spacing:1px;">Interval</span>

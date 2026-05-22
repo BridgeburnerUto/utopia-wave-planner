@@ -58,4 +58,5 @@ const S = {
     toYear: null,
     toMonth: null,
   },
+  lbOpFilter: 'all',   // 'all' | opType string e.g. 'ns', 'fb' — filters province table to one op type
 };

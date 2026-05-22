@@ -255,6 +255,7 @@ window.__wpA = {
   setThr,
   lbView,
   lbSetFilter,
+  lbOpFilter,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
