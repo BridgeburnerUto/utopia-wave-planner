@@ -1,0 +1,5 @@
+# Claude Code dev files
+.claude/
+
+# Throwaway mockup files
+mockup-*.html
