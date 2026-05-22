@@ -22,29 +22,68 @@ function _parseUtoDate(s) {
 function _ym(year, month) { return (year || 0) * 100 + (month || 0); }
 
 /**
- * Get war period from IS kingdomNews as {fromYear, fromMonth, toYear, toMonth} or null.
+ * Derive war period by scanning IS kingdomNews.parseString for war declaration
+ * and peace events. Returns {fromYear, fromMonth, toYear, toMonth, fromLabel, toLabel}
+ * or null if no war events found in the news.
+ *
+ * We intentionally do NOT use kingdomNews.startDate/endDate — those are merely
+ * the date boundaries of the news feed that was loaded, not war dates, and can
+ * be stale from a previous age.
  *
  * NOTE — stance-based war detection:
  * The world dump stores kd.stance = ["war","X:Y"] when at war.
- * The snapshot script (scripts/snapshot.js) stores this as stanceLoc on each
- * kd_nw_history document. This means we can derive war start/end for ANY KD pair
- * by querying kd_nw_history for mutual stanceLoc matches (see nwFindWar() in app.js).
- *
- * For own-KD leaderboard filtering, kingdomNews gives the exact in-game dates
- * directly from the intel API and is the better source — no change needed here.
- * The stanceLoc approach is more useful for the NW graph (external KD pairs)
- * and future features like cross-war leaderboard comparisons.
+ * The snapshot script stores this as stanceLoc on kd_nw_history docs, enabling
+ * war period detection for any KD pair via nwFindWar() in app.js.
+ * For own-KD leaderboard filtering, scanning kingdomNews is more reliable since
+ * it gives exact in-game dates from the intel API.
  */
 function _getWarPeriod() {
   try {
-    const IS   = JSON.parse(localStorage.getItem('IntelState') || '{}');
-    const news = IS.kingdomNews;
-    if (!news?.startDate || !news?.endDate) return null;
-    const s = news.startDate, e = news.endDate;
-    // kingdomNews dates have {year, month, day} directly as integers
-    if (!s.year || !s.month) return null;
-    return { fromYear: s.year, fromMonth: s.month, toYear: e.year, toMonth: e.month,
-             fromLabel: s.fullDateString || '', toLabel: e.fullDateString || '' };
+    const IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
+    const news    = IS.kingdomNews?.parseString;
+    const curDate = _parseUtoDate(IS.currentTick?.tickName || '');
+    if (!news || !curDate) return null;
+
+    const curAbs = _utoToAbs(curDate.month, curDate.day, curDate.year);
+
+    // Scan every news line for war/peace keywords
+    const events = []; // { abs, date, type: 'war'|'peace' }
+    news.split('\n').forEach(line => {
+      const parts = line.split('\t');
+      if (parts.length < 2) return;
+      const d = _parseUtoDate(parts[0].trim());
+      if (!d) return;
+      // Skip future dates — guards against stale IS data from a previous age
+      const abs = _utoToAbs(d.month, d.day, d.year);
+      if (abs > curAbs) return;
+      const text = parts[1].toLowerCase();
+      if (text.includes('declared war') || text.includes('war has been declared') || text.includes('at war with')) {
+        events.push({ abs, date: d, type: 'war' });
+      } else if (text.includes('peace') || text.includes('ceasefire') || text.includes('white peace')) {
+        events.push({ abs, date: d, type: 'peace' });
+      }
+    });
+
+    if (!events.length) return null;
+    // Sort descending so we find the most recent war declaration first
+    events.sort((a, b) => b.abs - a.abs);
+
+    const lastWar = events.find(e => e.type === 'war');
+    if (!lastWar) return null;
+
+    // Find the most recent peace event that came after this war declaration
+    const peace = events.find(e => e.type === 'peace' && e.abs >= lastWar.abs);
+
+    const start  = lastWar.date;
+    const end    = peace ? peace.date : curDate;
+    const fmt    = d => `${MONTH_NAMES[d.month]} ${d.day}, YR${d.year}`;
+
+    return {
+      fromYear:  start.year,  fromMonth: start.month,
+      toYear:    end.year,    toMonth:   end.month,
+      fromLabel: fmt(start),
+      toLabel:   peace ? fmt(end) : `${MONTH_NAMES[end.month]} YR${end.year} (ongoing)`,
+    };
   } catch(e) { return null; }
 }
 
