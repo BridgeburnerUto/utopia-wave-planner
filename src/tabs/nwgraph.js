@@ -75,6 +75,41 @@ async function cleanOldSnapshots() {
   }
 }
 
+// ── In-game date ↔ real timestamp conversion ─────────────────────────────────
+// Since 1 tick = 1 real hour, any in-game date is just N hours from now.
+
+/** Parse "July 18, YR1" or "July 18 YR1" → { month, day, year } */
+function _nwParseTickName(s) {
+  if (!s) return null;
+  const m = s.match(/(\w+)\s+(\d+),?\s*YR(\d+)/i);
+  if (!m) return null;
+  const idx = MONTHS_LIST.findIndex(n => n.toLowerCase() === m[1].toLowerCase());
+  if (idx < 0) return null;
+  return { month: idx + 1, day: parseInt(m[2]), year: parseInt(m[3]) };
+}
+
+/**
+ * Convert an in-game { month, day, year } to a real Unix ms timestamp.
+ * Uses the current tick as anchor: 1 tick difference = 1 real hour difference.
+ * Returns null if S.currentTickName is not available.
+ */
+function _utoDateToTs(month, day, year) {
+  const cur = _nwParseTickName(S.currentTickName);
+  if (!cur) return null;
+  const targetAbs  = _utoToAbs(month, day, year);
+  const currentAbs = _utoToAbs(cur.month, cur.day, cur.year);
+  const hoursDiff  = currentAbs - targetAbs;   // positive = target is in the past
+  return Date.now() - hoursDiff * 3_600_000;
+}
+
+/** Build a month <select> element string */
+function _monthSelect(id, selected) {
+  const opts = MONTHS_LIST.map((name, i) =>
+    `<option value="${i+1}"${selected === i+1 ? ' selected' : ''}>${name}</option>`
+  ).join('');
+  return `<select id="${id}" class="wpick" style="width:108px;font-size:17px;padding:4px 6px">${opts}</select>`;
+}
+
 // ── Controls builder ──────────────────────────────────────────────────────────
 
 function _buildNwControls() {
@@ -82,9 +117,48 @@ function _buildNwControls() {
   const isTotal = S.nwView !== 'war';
 
   const presetBtns = presets.map(t =>
-    `<button class="wb${S.nwLookback === t ? ' g' : ''}" style="font-size:17px;padding:3px 10px"
+    `<button class="wb${!S.nwCustom && S.nwLookback === t ? ' g' : ''}" style="font-size:17px;padding:3px 10px"
       onclick="__wpA.nwPreset(${t})">Last ${t}t</button>`
   ).join('');
+
+  const customBtn = `<button class="wb${S.nwCustom ? ' g' : ''}" style="font-size:17px;padding:3px 10px"
+    onclick="__wpA.nwToggleCustom()">Custom</button>`;
+
+  // Custom date row — only shown when S.nwCustom is true
+  let customRow = '';
+  if (S.nwCustom) {
+    // Default from/to: 24 ticks ago → now (in in-game dates if we can compute them)
+    const cur = _nwParseTickName(S.currentTickName);
+    const defFrom = S.nwCustomFrom || (cur ? (() => {
+      const a = _utoToAbs(cur.month, cur.day, cur.year) - 24;
+      return _absToUto(Math.max(1, a));
+    })() : { month: 1, day: 1, year: 1 });
+    const defTo = S.nwCustomTo || cur || { month: 7, day: 24, year: 1 };
+
+    customRow = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #617070">
+        <span style="font-size:17px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;width:36px">From</span>
+        ${_monthSelect('__wpnw_fromM', defFrom.month)}
+        <input id="__wpnw_fromD" type="number" min="1" max="24" value="${defFrom.day}"
+          style="width:52px;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:4px 6px;border-radius:3px;outline:none;text-align:center">
+        <span style="font-size:17px;color:#7a9090">YR</span>
+        <input id="__wpnw_fromY" type="number" min="1" value="${defFrom.year}"
+          style="width:48px;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:4px 6px;border-radius:3px;outline:none;text-align:center">
+
+        <span style="font-size:19px;color:#617070;margin:0 4px">→</span>
+
+        <span style="font-size:17px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;width:16px">To</span>
+        ${_monthSelect('__wpnw_toM', defTo.month)}
+        <input id="__wpnw_toD" type="number" min="1" max="24" value="${defTo.day}"
+          style="width:52px;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:4px 6px;border-radius:3px;outline:none;text-align:center">
+        <span style="font-size:17px;color:#7a9090">YR</span>
+        <input id="__wpnw_toY" type="number" min="1" value="${defTo.year}"
+          style="width:48px;background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:4px 6px;border-radius:3px;outline:none;text-align:center">
+
+        <button class="wb g" style="font-size:17px;padding:3px 14px;margin-left:4px" onclick="__wpA.nwLoad()">Load ▶</button>
+        ${!S.currentTickName ? '<span style="font-size:17px;color:#e09040">⚠ Current tick not loaded — refresh first</span>' : ''}
+      </div>`;
+  }
 
   return `
     <div style="background:#3c4545;border:1px solid #617070;border-radius:4px;padding:12px 16px;margin-bottom:16px">
@@ -104,9 +178,10 @@ function _buildNwControls() {
             onfocus="this.style.borderColor='#ffd400'" onblur="this.style.borderColor='#617070'"
             onkeydown="if(event.key==='Enter')__wpA.nwLoad()">
         </div>
-        <div style="display:flex;gap:4px;margin-left:4px">${presetBtns}</div>
-        <button class="wb g" style="font-size:17px;padding:3px 14px" onclick="__wpA.nwLoad()">Load ▶</button>
+        <div style="display:flex;gap:4px;margin-left:4px">${presetBtns}${customBtn}</div>
+        ${!S.nwCustom ? `<button class="wb g" style="font-size:17px;padding:3px 14px" onclick="__wpA.nwLoad()">Load ▶</button>` : ''}
       </div>
+      ${customRow}
       <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
         <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:4px">View</span>
         <button class="wb${isTotal ? ' g' : ''}" style="font-size:17px;padding:3px 9px" onclick="__wpA.nwView('total')">Total NW</button>
@@ -144,8 +219,29 @@ async function _loadAndRenderNwGraph() {
     return;
   }
 
-  const toTs   = Date.now();
-  const fromTs = toTs - (S.nwLookback * 3600 * 1000);
+  // Determine time range — preset or custom in-game dates
+  let fromTs, toTs;
+  if (S.nwCustom && S.nwCustomFrom && S.nwCustomTo) {
+    fromTs = _utoDateToTs(S.nwCustomFrom.month, S.nwCustomFrom.day, S.nwCustomFrom.year);
+    toTs   = _utoDateToTs(S.nwCustomTo.month,   S.nwCustomTo.day,   S.nwCustomTo.year);
+    if (!fromTs || !toTs) {
+      area.innerHTML = `<div style="color:#e09040;font-size:19px;padding:20px 0">
+        ⚠ Cannot convert dates — current tick not loaded. Try refreshing the tool first.
+      </div>`;
+      return;
+    }
+    // Clamp to present — can't query snapshots that don't exist yet
+    toTs = Math.min(toTs, Date.now());
+    if (fromTs >= toTs) {
+      area.innerHTML = `<div style="color:#E05050;font-size:19px;padding:20px 0">
+        From date must be earlier than To date.
+      </div>`;
+      return;
+    }
+  } else {
+    toTs   = Date.now();
+    fromTs = toTs - (S.nwLookback * 3_600_000);
+  }
 
   try {
     const [docsA, docsB] = await Promise.all([

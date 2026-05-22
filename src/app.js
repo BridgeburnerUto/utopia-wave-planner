@@ -281,16 +281,39 @@ window.__wpA = {
     const inB = $id('__wpnw_locB');
     if (inA) S.nwLocA = inA.value.trim();
     if (inB) S.nwLocB = inB.value.trim();
+    // If in custom mode, read and persist the date inputs before re-rendering
+    if (S.nwCustom) {
+      const fromM = parseInt($id('__wpnw_fromM')?.value);
+      const fromD = parseInt($id('__wpnw_fromD')?.value);
+      const fromY = parseInt($id('__wpnw_fromY')?.value);
+      const toM   = parseInt($id('__wpnw_toM')?.value);
+      const toD   = parseInt($id('__wpnw_toD')?.value);
+      const toY   = parseInt($id('__wpnw_toY')?.value);
+      if (fromM && fromD && fromY) S.nwCustomFrom = { month: fromM, day: fromD, year: fromY };
+      if (toM   && toD   && toY)  S.nwCustomTo   = { month: toM,   day: toD,   year: toY   };
+    }
     renderNwGraph();
   },
 
-  /** Set lookback preset (reads current location inputs too) */
+  /** Set lookback preset — switches off custom mode */
   nwPreset(t) {
     S.nwLookback = t;
+    S.nwCustom   = false;
     const inA = $id('__wpnw_locA');
     const inB = $id('__wpnw_locB');
     if (inA) S.nwLocA = inA.value.trim();
     if (inB) S.nwLocB = inB.value.trim();
+    renderNwGraph();
+  },
+
+  /** Toggle custom date range mode */
+  nwToggleCustom() {
+    // Snapshot location inputs before rebuilding
+    const inA = $id('__wpnw_locA');
+    const inB = $id('__wpnw_locB');
+    if (inA) S.nwLocA = inA.value.trim();
+    if (inB) S.nwLocB = inB.value.trim();
+    S.nwCustom = !S.nwCustom;
     renderNwGraph();
   },
 

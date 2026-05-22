@@ -41,7 +41,10 @@ const S = {
   nwView: 'total',
   nwLocA: '',         // KD A location for world NW graph (defaults to own on first open)
   nwLocB: '',         // KD B location for world NW graph (defaults to enemy on first open)
-  nwLookback: 24,     // lookback in hours/ticks for world NW graph
+  nwLookback: 24,     // lookback in hours/ticks for world NW graph (preset mode)
+  nwCustom: false,    // true = custom in-game date range active
+  nwCustomFrom: null, // { month, day, year } in-game date
+  nwCustomTo:   null, // { month, day, year } in-game date
   ageStartDate: 0,    // Unix ms — when current age started; GitHub Actions cleans data before this
   kddbAge:       '',             // current age string e.g. "a114" — persisted in localStorage
   intelSort:     { col: 'slot', dir: 1 },
