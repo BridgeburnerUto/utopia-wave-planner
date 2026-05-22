@@ -65,7 +65,8 @@ window.__wpA = {
                 ownPeasLow:     t.ownPeasLow     ?? 0,
               };
             }
-            S.discordWebhook = parsed.discordWebhook || '';
+            S.discordWebhook  = parsed.discordWebhook || '';
+            S.ageStartDate    = parsed.ageStartDate   || 0;
           } catch (e) { /* malformed saved plan — start fresh */ }
         }
       }
@@ -89,6 +90,12 @@ window.__wpA = {
       renderSummary();
       renderPlayer();
       this.setRole('leader');
+
+      // Load age start date from Firestore (authoritative source for GitHub Actions)
+      fbGet('meta/nw_cleanup').then(doc => {
+        const ts = doc?.fields?.ageStartDate ? parseInt(doc.fields.ageStartDate.integerValue || 0) : 0;
+        if (ts > S.ageStartDate) S.ageStartDate = ts; // Firestore wins if newer
+      }).catch(() => {});
 
       // Discord alert check — only fires on state changes
       checkAndSendDiscordAlerts();
@@ -171,6 +178,7 @@ window.__wpA = {
         columns:         S.cols,
         thresholds:      S.thresholds,
         discordWebhook:  S.discordWebhook || '',
+        ageStartDate:    S.ageStartDate   || 0,
       });
       const r = await postWarPlan(S.own.location, { json, warPlanId: S.wpId });
       setSav(r ? 'Saved ✓' : 'Failed', r ? 'ok' : 'err');
@@ -266,6 +274,40 @@ window.__wpA = {
   setNote(slot, v) { if (slot != null) _pp(slot).notes = v; },
   setIntelInterval(v) { S.intelInterval = v; renderIntel(); },
   nwView(v) { S.nwView = v; renderNwGraph(); },
+
+  /** Read current location inputs + reload graph */
+  nwLoad() {
+    const inA = $id('__wpnw_locA');
+    const inB = $id('__wpnw_locB');
+    if (inA) S.nwLocA = inA.value.trim();
+    if (inB) S.nwLocB = inB.value.trim();
+    renderNwGraph();
+  },
+
+  /** Set lookback preset (reads current location inputs too) */
+  nwPreset(t) {
+    S.nwLookback = t;
+    const inA = $id('__wpnw_locA');
+    const inB = $id('__wpnw_locB');
+    if (inA) S.nwLocA = inA.value.trim();
+    if (inB) S.nwLocB = inB.value.trim();
+    renderNwGraph();
+  },
+
+  /** Set the age start date (leader action) — writes to Firestore for GitHub Actions */
+  async setAgeStart(dateStr) {
+    const ts = dateStr ? new Date(dateStr).getTime() : 0;
+    S.ageStartDate = ts;
+    // Write to dedicated meta doc so GitHub Actions can read it
+    await fbWrite('meta/nw_cleanup', {
+      ageStartDate: ts,
+      setBy:        S.own?.kingdomName || S.own?.location || '',
+      setAt:        Date.now(),
+    });
+    setSav(ts ? 'Age start saved — Actions will clean old data next run' : 'Age start cleared', 'ok');
+    setTimeout(() => setSav('', ''), 4000);
+    renderAlerts(); // refresh the hint text under the date input
+  },
   setDiscordWebhook(url) { S.discordWebhook = url.trim(); setSav('Webhook saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
   testDiscord() { testDiscordWebhook(S.discordWebhook).then(ok => alert(ok ? '✅ Test ping sent!' : '❌ Failed — check webhook URL')); },
 

@@ -62,6 +62,60 @@ async function fbDelete(path) {
   return r?.ok || false;
 }
 
+/**
+ * Query kd_nw_history for a specific location within a storedAt time range.
+ * Requires a composite index on (loc ASC, storedAt ASC) in Firestore.
+ * Returns array of plain JS objects sorted ascending by storedAt.
+ */
+async function fbQueryNWHistory(loc, fromTs, toTs) {
+  const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: 'kd_nw_history' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            {
+              fieldFilter: {
+                field: { fieldPath: 'loc' },
+                op: 'EQUAL',
+                value: { stringValue: loc },
+              },
+            },
+            {
+              fieldFilter: {
+                field: { fieldPath: 'storedAt' },
+                op: 'GREATER_THAN_OR_EQUAL',
+                value: { integerValue: String(fromTs) },
+              },
+            },
+            {
+              fieldFilter: {
+                field: { fieldPath: 'storedAt' },
+                op: 'LESS_THAN_OR_EQUAL',
+                value: { integerValue: String(toTs) },
+              },
+            },
+          ],
+        },
+      },
+      orderBy: [{ field: { fieldPath: 'storedAt' }, direction: 'ASCENDING' }],
+      limit: 500,
+    },
+  };
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!r || !r.ok) return [];
+  const data = await r.json();
+  return (data || [])
+    .filter(d => d.document)
+    .map(d => Object.fromEntries(Object.entries(d.document.fields || {}).map(([k, v]) => [k, _fromFB(v)])));
+}
+
 async function fbQuery(collection, filters = []) {
   const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
   const where = filters.map(f => ({

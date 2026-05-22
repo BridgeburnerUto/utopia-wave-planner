@@ -64,6 +64,26 @@ function _buildAlerts() {
       </div>
     </div>` : '';
 
+  // ── Age data settings (leader only) ─────────────────────────────────────
+  const ageStartStr = S.ageStartDate > 0 ? new Date(S.ageStartDate).toISOString().slice(0, 10) : '';
+  const ageHtml = isLeader ? `
+    <div class="wthr" style="border-color:#7a909033;margin-top:12px">
+      <div class="wthr-title">
+        Age Data
+        <span>When a new age starts, set this date. GitHub Actions deletes old NW history on its next hourly run.</span>
+      </div>
+      <div class="wthr-row">
+        <div class="wthr-label" style="width:80px;font-size:17px">Age start</div>
+        <input type="date" class="wthr-input" style="width:150px;font-size:17px;padding:4px 8px"
+          value="${esc(ageStartStr)}"
+          onchange="__wpA.setAgeStart(this.value)">
+        <div class="wthr-hint">${S.ageStartDate > 0
+          ? `Cutoff: <span style="color:#b8c8c8">${new Date(S.ageStartDate).toDateString()}</span> — history before this will be deleted next Actions run`
+          : 'Not set — all history is kept'
+        }</div>
+      </div>
+    </div>` : '';
+
   // ── Discord settings (leader only) ───────────────────────────────────────
   const discordHtml = isLeader ? `
     <div class="wthr" style="border-color:#5865F233">
@@ -133,9 +153,9 @@ function _buildAlerts() {
     });
   }
 
-  // Two-column layout: settings+discord left, live alerts right
+  // Two-column layout: settings+discord+age left, live alerts right
   return `<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start;">
-    <div>${settingsHtml}${discordHtml}</div>
+    <div>${settingsHtml}${ageHtml}${discordHtml}</div>
     <div>${aHtml}</div>
   </div>`;
 }
