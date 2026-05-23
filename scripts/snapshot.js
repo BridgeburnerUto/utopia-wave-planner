@@ -15,10 +15,11 @@
 
 'use strict';
 
-const FB_PROJECT = process.env.FB_PROJECT || 'utopia-leaderboard';
-const FB_API_KEY = process.env.FB_API_KEY;
-const FB_BASE    = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
-const DUMP_URL   = process.env.DUMP_URL   || 'https://utopia-game.com/wol/game/kingdoms_dump/';
+const FB_PROJECT  = process.env.FB_PROJECT || 'utopia-leaderboard';
+const FB_API_KEY  = process.env.FB_API_KEY;
+const FB_BASE     = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
+const FB_DOC_ROOT = `projects/${FB_PROJECT}/databases/(default)/documents`;
+const DUMP_URL    = process.env.DUMP_URL   || 'https://utopia-game.com/wol/game/kingdoms_dump/';
 
 if (!FB_API_KEY) {
   console.error('[snapshot] FB_API_KEY env var is required');
@@ -118,7 +119,7 @@ async function main() {
     .filter(kd => kd.loc)
     .map(kd => {
       const locKey  = kd.loc.replace(':', '_');
-      const docName = `${FB_BASE}/kd_nw_history/${locKey}_${hourId}`;
+      const docName = `${FB_DOC_ROOT}/kd_nw_history/${locKey}_${hourId}`;
 
       // stance is either the string "Normal" or the array ["war", "X:Y"]
       // Store stanceLoc as the enemy location when at war, empty string when at peace.
