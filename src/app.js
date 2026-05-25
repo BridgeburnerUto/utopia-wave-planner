@@ -417,6 +417,13 @@ window.__wpA = {
   },
   setDiscordWebhook(url) { S.discordWebhook = url.trim(); setSav('Webhook saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
   testDiscord() { testDiscordWebhook(S.discordWebhook).then(ok => alert(ok ? '✅ Test ping sent!' : '❌ Failed — check webhook URL')); },
+  async resetDiscordState() {
+    await resetDiscordAlertState();
+    await checkAndSendDiscordAlerts();
+    renderAlerts();
+    setSav('Alert state reset — active alerts re-sent', 'ok');
+    setTimeout(() => setSav('', ''), 3000);
+  },
 
   async clearPlan() {
     if (!confirm('Clear all war plan data?\n\nThis will:\n• Reset all wave assignments\n• Clear all raze/massacre targets\n• Clear all op assignments and notes\n• Reset thresholds\n\nDiscord webhook is kept.\nThis cannot be undone.')) return;

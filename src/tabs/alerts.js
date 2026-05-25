@@ -95,10 +95,11 @@ function _buildAlerts() {
           style="width:320px;font-size:17px"
           onblur="__wpA.setDiscordWebhook(this.value)" onkeydown="if(event.key==='Enter')__wpA.setDiscordWebhook(this.value)">
         <button class="wb" style="font-size:17px;padding:3px 9px;margin-left:8px" onclick="__wpA.testDiscord()">Test</button>
+        <button class="wb" style="font-size:17px;padding:3px 9px;margin-left:4px;color:#e09040;border-color:#e09040" onclick="__wpA.resetDiscordState()" title="Clear saved alert state — all active conditions will re-fire on next check">↺ Reset</button>
       </div>
       <div style="font-size:17px;color:#7a9090;margin-top:6px;line-height:1.6">
-        In Discord: Channel Settings → Integrations → Webhooks → New Webhook → Copy URL<br>
-        Alerts fire automatically on tool open when status changes. Save plan to persist URL.
+        Alerts fire on tool open when status <i>changes</i>. Use Reset if an alert was missed.<br>
+        In Discord: Channel Settings → Integrations → Webhooks → New Webhook → Copy URL
       </div>
     </div>` : '';
 
