@@ -7,28 +7,88 @@
 // (runs until all docs before that date are gone, 500 at a time).
 //
 // Required env vars:
-//   FB_PROJECT  — Firestore project ID (e.g. utopia-leaderboard)
-//   FB_API_KEY  — Firestore REST API key (store as GitHub Actions secret)
+//   FIREBASE_SA_KEY — full JSON content of a Firebase service account key
+//   FB_PROJECT      — Firestore project ID (default: utopia-leaderboard)
 //
 // Optional env vars:
-//   DUMP_URL    — defaults to https://utopia-game.com/wol/game/kingdoms_dump/
+//   DUMP_URL        — defaults to https://utopia-game.com/wol/game/kingdoms_dump/
 
 'use strict';
 
+const crypto = require('crypto');
+
 const FB_PROJECT  = process.env.FB_PROJECT || 'utopia-leaderboard';
-const FB_API_KEY  = process.env.FB_API_KEY;
 const FB_BASE     = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 const FB_DOC_ROOT = `projects/${FB_PROJECT}/databases/(default)/documents`;
-const DUMP_URL    = process.env.DUMP_URL   || 'https://utopia-game.com/wol/game/kingdoms_dump/';
+const DUMP_URL    = process.env.DUMP_URL || 'https://utopia-game.com/wol/game/kingdoms_dump/';
 
-if (!FB_API_KEY) {
-  console.error('[snapshot] FB_API_KEY env var is required');
+if (!process.env.FIREBASE_SA_KEY) {
+  console.error('[snapshot] FIREBASE_SA_KEY env var is required');
+  process.exit(1);
+}
+
+let _sa;
+try {
+  _sa = JSON.parse(process.env.FIREBASE_SA_KEY);
+} catch (e) {
+  console.error('[snapshot] FIREBASE_SA_KEY is not valid JSON:', e.message);
   process.exit(1);
 }
 
 const now      = Date.now();
 const hourId   = Math.floor(now / 3_600_000);
 const storedAt = now;
+
+// ── Service account JWT auth ──────────────────────────────────────────────────
+
+let _accessToken    = null;
+let _accessTokenExp = 0;
+
+async function getAccessToken() {
+  if (_accessToken && Date.now() < _accessTokenExp) return _accessToken;
+
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 3600;
+
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss:   _sa.client_email,
+    scope: 'https://www.googleapis.com/auth/datastore',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat,
+    exp,
+  })).toString('base64url');
+
+  const toSign    = `${header}.${payload}`;
+  const signer    = crypto.createSign('RSA-SHA256');
+  signer.update(toSign);
+  const signature = signer.sign(_sa.private_key, 'base64url');
+  const jwt       = `${toSign}.${signature}`;
+
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`Token exchange failed: ${r.status} — ${text.slice(0, 300)}`);
+  }
+
+  const data      = await r.json();
+  _accessToken    = data.access_token;
+  _accessTokenExp = Date.now() + (data.expires_in - 60) * 1000;
+  return _accessToken;
+}
+
+async function _authHeaders() {
+  const token = await getAccessToken();
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type':  'application/json',
+  };
+}
 
 // ── Firestore field helpers ───────────────────────────────────────────────────
 
@@ -51,16 +111,17 @@ function _fromFB(v) {
 // ── Firestore REST helpers ────────────────────────────────────────────────────
 
 async function fbGet(path) {
-  const r = await fetch(`${FB_BASE}/${path}?key=${FB_API_KEY}`);
+  const headers = await _authHeaders();
+  const r = await fetch(`${FB_BASE}/${path}`, { headers });
   if (!r.ok) return null;
   return r.json();
 }
 
 async function fbBatchWrite(writes) {
-  const url = `${FB_BASE}:batchWrite?key=${FB_API_KEY}`;
-  const r = await fetch(url, {
+  const headers = await _authHeaders();
+  const r = await fetch(`${FB_BASE}:batchWrite`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body:    JSON.stringify({ writes }),
   });
   if (!r.ok) {
@@ -71,7 +132,7 @@ async function fbBatchWrite(writes) {
 }
 
 async function fbQueryOldDocs(cutoffTs) {
-  const url = `${FB_BASE}:runQuery?key=${FB_API_KEY}`;
+  const headers = await _authHeaders();
   const body = {
     structuredQuery: {
       from:  [{ collectionId: 'kd_nw_history' }],
@@ -85,9 +146,9 @@ async function fbQueryOldDocs(cutoffTs) {
       limit: 500,
     },
   };
-  const r = await fetch(url, {
+  const r = await fetch(`${FB_BASE}:runQuery`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body:    JSON.stringify(body),
   });
   if (!r.ok) return [];
@@ -123,14 +184,12 @@ async function main() {
 
       // stance is either the string "Normal" or the array ["war", "X:Y"]
       // Store stanceLoc as the enemy location when at war, empty string when at peace.
-      // This lets us detect mutual wars: find snapshots where A.stanceLoc === locB && B.stanceLoc === locA
       const stance    = kd.stance;
       const stanceLoc = Array.isArray(stance) && stance[0] === 'war'
         ? (stance[1] || '')
         : '';
 
       // wars is an array of integer war IDs assigned by the game.
-      // Store as comma-separated string for simple Firestore storage.
       const wars = Array.isArray(kd.wars) ? kd.wars.join(',') : '';
 
       return {
@@ -141,8 +200,8 @@ async function main() {
             name:       _toFB(kd.name   || ''),
             nw:         _toFB(Math.round(kd.nw   || 0)),
             land:       _toFB(Math.round(kd.land  || 0)),
-            stanceLoc:  _toFB(stanceLoc),  // enemy KD location if at war, '' if at peace
-            wars:       _toFB(wars),        // e.g. "1,2" — war IDs from the game
+            stanceLoc:  _toFB(stanceLoc),
+            wars:       _toFB(wars),
             storedAt:   _toFB(storedAt),
           },
         },
@@ -158,8 +217,7 @@ async function main() {
   }
 
   // ── 3. Cleanup old age data ───────────────────────────────────────────────
-  // Read the age start date that the leader set in the tool
-  const cleanupDoc = await fbGet('meta/nw_cleanup');
+  const cleanupDoc   = await fbGet('meta/nw_cleanup');
   const ageStartDate = cleanupDoc?.fields?.ageStartDate
     ? _fromFB(cleanupDoc.fields.ageStartDate)
     : 0;
@@ -168,7 +226,7 @@ async function main() {
     console.log(`[snapshot] Cleanup: deleting docs before ${new Date(ageStartDate).toISOString()}`);
     let totalDeleted = 0;
     let iterations   = 0;
-    const MAX_ITERS  = 300; // safety cap — 300 × 500 = 150,000 docs max per run
+    const MAX_ITERS  = 300;
 
     let batch;
     do {
