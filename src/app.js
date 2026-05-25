@@ -67,6 +67,8 @@ window.__wpA = {
             }
             S.discordWebhook  = parsed.discordWebhook || '';
             S.ageStartDate    = parsed.ageStartDate   || 0;
+            S.apiEndpoint     = parsed.apiEndpoint    || '';
+            S.apiKey          = parsed.apiKey         || '';
           } catch (e) { /* malformed saved plan — start fresh */ }
         }
       }
@@ -85,6 +87,7 @@ window.__wpA = {
 
       // Render all tabs
       this.meta();
+
       renderBoard();
       renderAlerts();
       renderSummary();
@@ -99,6 +102,9 @@ window.__wpA = {
 
       // Discord alert check — only fires on state changes
       checkAndSendDiscordAlerts();
+
+      // Sync IS dump to Cloud Run backend (for mobile companion)
+      this.syncBackend();
 
       // NW snapshot (war only) + cleanup old snapshots
       snapshotNW();
@@ -157,6 +163,7 @@ window.__wpA = {
       renderRitualBadges();
       snapshotNW();
       checkAndSendDiscordAlerts();
+      this.syncBackend();
       renderBoard();
       renderAlerts();
       renderSummary();
@@ -179,6 +186,8 @@ window.__wpA = {
         thresholds:      S.thresholds,
         discordWebhook:  S.discordWebhook || '',
         ageStartDate:    S.ageStartDate   || 0,
+        apiEndpoint:     S.apiEndpoint    || '',
+        apiKey:          S.apiKey         || '',
       });
       const r = await postWarPlan(S.own.location, { json, warPlanId: S.wpId });
       setSav(r ? 'Saved ✓' : 'Failed', r ? 'ok' : 'err');
@@ -423,6 +432,31 @@ window.__wpA = {
     renderAlerts();
     setSav('Alert state reset — active alerts re-sent', 'ok');
     setTimeout(() => setSav('', ''), 3000);
+  },
+
+  // ── Backend sync (mobile companion) ─────────────────────────────────────────
+  setApiEndpoint(url) { S.apiEndpoint = url.trim(); setSav('API endpoint saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
+  setApiKey(key) { S.apiKey = key.trim(); setSav('API key saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
+
+  async syncBackend() {
+    if (!S.apiEndpoint) return;
+    try {
+      const payload = JSON.stringify({
+        own:             S.own,
+        enemy:           S.enemy,
+        provinces:       S.provinces,
+        thresholds:      S.thresholds,
+        currentTickName: S.currentTickName,
+      });
+      const url = S.apiEndpoint.replace(/\/$/, '') + '/api.php?is_dump';
+      const hdrs = { 'Content-Type': 'application/json' };
+      if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
+      const r = await fetch(url, { method: 'POST', headers: hdrs, body: payload });
+      if (!r.ok) console.warn('[WavePlanner] Backend sync failed:', r.status);
+      else console.log('[WavePlanner] IS dump synced to backend');
+    } catch(e) {
+      console.warn('[WavePlanner] Backend sync error:', e.message);
+    }
   },
 
   async clearPlan() {

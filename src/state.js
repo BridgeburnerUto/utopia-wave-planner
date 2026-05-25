@@ -50,7 +50,11 @@ const S = {
   intelSort:     { col: 'slot', dir: 1 },
   boardSort:     { col: 'slot', dir: 1 },
   intelInterval: 24,       // NW graph view: 'total'|'war'
-  discordWebhook: '',    // Discord webhook URL — saved with war plan  // leaderboard sort: 'damage'|'ops'|'gain'
+  discordWebhook: '',    // Discord webhook URL — saved with war plan
+  apiEndpoint:    '',    // Cloud Run backend URL for mobile companion sync
+  apiKey:         '',    // API key matching WP_API_KEY env var on Cloud Run
+
+  // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
     mode: 'all',       // 'all' | 'war' | 'custom'
     fromYear: null,    // in-game year number (e.g. 1 for YR1)

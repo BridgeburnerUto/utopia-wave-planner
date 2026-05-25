@@ -84,6 +84,30 @@ function _buildAlerts() {
       </div>
     </div>` : '';
 
+  // ── Mobile backend settings (leader only) ───────────────────────────────────
+  const backendHtml = isLeader ? `
+    <div class="wthr" style="border-color:#50905033;margin-top:12px">
+      <div style="font-size:17px;font-weight:700;color:#508070;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-left:2px solid #305040;padding-left:8px;">Mobile Companion <span style="color:#7a9090;font-weight:400;text-transform:none;letter-spacing:0;font-size:17px;">— backend sync</span></div>
+      <div style="margin-bottom:8px">
+        <div class="wthr-label" style="width:auto;font-size:17px;margin-bottom:6px">API Endpoint</div>
+        <input class="wthr-input" type="url" placeholder="https://your-cloud-run-url"
+          value="${esc(S.apiEndpoint || '')}"
+          style="width:100%;box-sizing:border-box;font-size:17px;display:block"
+          onblur="__wpA.setApiEndpoint(this.value)" onkeydown="if(event.key==='Enter')__wpA.setApiEndpoint(this.value)">
+      </div>
+      <div style="margin-bottom:8px">
+        <div class="wthr-label" style="width:auto;font-size:17px;margin-bottom:6px">API Key</div>
+        <input class="wthr-input" type="password" placeholder="matches WP_API_KEY on Cloud Run"
+          value="${esc(S.apiKey || '')}"
+          style="width:100%;box-sizing:border-box;font-size:17px;display:block"
+          onblur="__wpA.setApiKey(this.value)" onkeydown="if(event.key==='Enter')__wpA.setApiKey(this.value)">
+      </div>
+      <div style="font-size:17px;color:#7a9090;margin-top:6px;line-height:1.6">
+        Syncs own + enemy data to Cloud Run on each tool open.<br>
+        Members open <b>war-companion.html</b> on phone — use the share link in the app's settings.
+      </div>
+    </div>` : '';
+
   // ── Discord settings (leader only) ───────────────────────────────────────
   const discordHtml = isLeader ? `
     <div class="wthr" style="border-color:#5865F233">
@@ -156,9 +180,9 @@ function _buildAlerts() {
     });
   }
 
-  // Two-column layout: settings+discord+age left, live alerts right
+  // Two-column layout: settings+discord+age+backend left, live alerts right
   return `<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start;">
-    <div>${settingsHtml}${ageHtml}${discordHtml}</div>
+    <div>${settingsHtml}${ageHtml}${discordHtml}${backendHtml}</div>
     <div>${aHtml}</div>
   </div>`;
 }
