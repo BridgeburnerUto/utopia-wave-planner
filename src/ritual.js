@@ -76,9 +76,9 @@ function _parseRitualNews(parseString) {
 function _parseNewsDate(s) {
   const m = s.match(/(\w+)\s+(\d+)\s+of\s+YR(\d+)/i);
   if (!m) return null;
-  const month = MONTH_MAP[m[1].toLowerCase()];
-  if (!month) return null;
-  return { month, day: parseInt(m[2]), year: parseInt(m[3]) };
+  const idx = MONTHS_LIST.findIndex(n => n.toLowerCase() === m[1].toLowerCase());
+  if (idx < 0) return null;
+  return { month: idx + 1, day: parseInt(m[2]), year: parseInt(m[3]) };
 }
 
 /**
@@ -154,12 +154,12 @@ function renderRitualBadges() {
     html += `
       <div class="wkb writ-badge" id="__wprit_own" onclick="__wpA.toggleRitual('own')" style="cursor:pointer;border-color:${col}22">
         <div class="l">Own Ritual</div>
-        <div class="v" style="color:${col};font-family:monospace">${own.ritualDuration}t</div>
+        <div class="v" style="color:${col};font-family:monospace">${own.ritualDuration ?? '?'}t</div>
       <div class="writ-drop" id="__wprit_own_drop" style="display:none">
         <div class="writ-drop-title">${esc(own.ritual)}</div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${own.ritualDuration}</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Real hours</span><span style="font-family:monospace">${own.ritualDuration}h</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${own.ritualEff?.toFixed(1)}%</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${own.ritualDuration ?? '?'}</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Real hours</span><span style="font-family:monospace">${own.ritualDuration ?? '?'}h</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${own.ritualEff?.toFixed(1) ?? '—'}%</span></div>
         ${expiry ? `<div class="writ-drop-row"><span class="writ-drop-l">Expires</span><span style="font-family:monospace;color:#ffaa00">${esc(expiry.label)}</span></div>` : ''}
       </div></div>`;
   }
@@ -182,12 +182,12 @@ function renderRitualBadges() {
     html += `
       <div class="wkb writ-badge" id="__wprit_ene" onclick="__wpA.toggleRitual('ene')" style="cursor:pointer;border-color:${col}22">
         <div class="l">Enemy Ritual</div>
-        <div class="v" style="color:${col};font-family:monospace">${enemy.ritualDuration}t</div>
+        <div class="v" style="color:${col};font-family:monospace">${enemy.ritualDuration ?? '?'}t</div>
       <div class="writ-drop" id="__wprit_ene_drop" style="display:none">
         <div class="writ-drop-title">${esc(enemy.ritual)}</div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${enemy.ritualDuration}</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Real hours</span><span style="font-family:monospace">${enemy.ritualDuration}h</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${enemy.ritualEff?.toFixed(1)}%</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${enemy.ritualDuration ?? '?'}</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Real hours</span><span style="font-family:monospace">${enemy.ritualDuration ?? '?'}h</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Effectiveness</span><span style="font-family:monospace;color:#00d4ff">${enemy.ritualEff?.toFixed(1) ?? '—'}%</span></div>
         ${expiry ? `<div class="writ-drop-row"><span class="writ-drop-l">Expires</span><span style="font-family:monospace;color:#ffaa00">${esc(expiry.label)}</span></div>` : ''}
         ${castingHtml}
       </div></div>`;

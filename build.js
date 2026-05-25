@@ -42,7 +42,7 @@ const BOOTSTRAP = `
 const TOKEN    = window.__wp_token  || sessionStorage.getItem('Utopia-Token');
 const _IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
 const SERVER   = window.__wp_server || parseInt(_IS.server || '1');
-const ENEMY_KD = _IS.enemyKd || '5:3';
+const ENEMY_KD = _IS.enemyKd || '';
 
 if (!TOKEN) { alert('Wave Planner: No token found. Open from intel.utopia.site.'); return; }
 if (document.getElementById('__wp_overlay')) {
