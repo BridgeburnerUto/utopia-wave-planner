@@ -67,13 +67,14 @@ async function checkAndSendDiscordAlerts() {
 
   const prev = await loadAlertState();
   const next  = {};
-  const toSend = []; // array of {content, embeds}
+  const toSend = []; // array of {content, embeds, _key} — _key marks which next[] entry to revert on send failure
 
   // ── 1. Dragon on own KD — does not need enemy data ────────────────────
   const ownDragon = S.own.kdEffects?.dragon || '';
   next.dragon_own = ownDragon;
   if (ownDragon && ownDragon !== (prev.dragon_own || '')) {
     toSend.push({
+      _key: 'dragon_own',
       content: '@everyone',
       embeds: [{
         title: '🐉 Dragon incoming',
@@ -89,14 +90,15 @@ async function checkAndSendDiscordAlerts() {
   const foodThr = S.thresholds.ownFoodLow || 0;
   if (foodThr > 0) {
     const lowFood = (S.own.provinces || [])
-      .filter(p => p.sot && (p.sot.food || 0) < foodThr)
-      .map(p => ({ name: p.name, food: p.sot.food || 0 }));
+      .filter(p => p.sot && p.sot.food != null && p.sot.food < foodThr)
+      .map(p => ({ name: p.name, food: p.sot.food }));
     next.own_food_low = lowFood.map(p => p.name);
     const prevLowFood = prev.own_food_low || [];
     const newLowFood  = lowFood.filter(p => !prevLowFood.includes(p.name));
     if (newLowFood.length) {
       const foodLines = newLowFood.map(p => `· ${p.name} — ${fK(p.food)} food`).join('\n');
       toSend.push({
+        _key: 'own_food_low',
         content: '',
         embeds: [{
           title: `🍞 Own food critical — ${newLowFood.length} province${newLowFood.length > 1 ? 's' : ''}`,
@@ -116,16 +118,17 @@ async function checkAndSendDiscordAlerts() {
   if (peasThr > 0) {
     const lowPeas = (S.own.provinces || [])
       .filter(p => {
-        const peas = p.sot?.peasants || p.sot?.peons || 0;
-        return peas > 0 && peas < peasThr;
+        const peas = p.sot?.peasants ?? p.sot?.peons;
+        return peas != null && peas > 0 && peas < peasThr;
       })
-      .map(p => ({ name: p.name, peas: p.sot?.peasants || p.sot?.peons || 0 }));
+      .map(p => ({ name: p.name, peas: p.sot?.peasants ?? p.sot?.peons }));
     next.own_peas_low = lowPeas.map(p => p.name);
     const prevLowPeas = prev.own_peas_low || [];
     const newLowPeas  = lowPeas.filter(p => !prevLowPeas.includes(p.name));
     if (newLowPeas.length) {
       const peasLines = newLowPeas.map(p => `· ${p.name} — ${fK(p.peas)} peasants`).join('\n');
       toSend.push({
+        _key: 'own_peas_low',
         content: '',
         embeds: [{
           title: `👥 Own population critical — ${newLowPeas.length} province${newLowPeas.length > 1 ? 's' : ''}`,
@@ -142,12 +145,13 @@ async function checkAndSendDiscordAlerts() {
 
   // ── Enemy-dependent checks — skip and preserve prev state if not loaded ─
   if (S.enemy) {
-    // ── 2. Dragon slayed on enemy ────────────────────────────────────────
+    // ── Dragon slayed on enemy ───────────────────────────────────────────
     const eneDragon = S.enemy.kdEffects?.dragon || '';
     next.dragon_enemy = eneDragon;
     const prevEneDragon = prev.dragon_enemy || '';
     if (!eneDragon && prevEneDragon) {
       toSend.push({
+        _key: 'dragon_enemy',
         content: `<@&${DISCORD.COUNCIL_ROLE}>`,
         embeds: [{
           title: '⚔️ Enemy dragon gone',
@@ -159,7 +163,7 @@ async function checkAndSendDiscordAlerts() {
       });
     }
 
-    // ── 3. Missing SoM (new provinces only) ──────────────────────────────
+    // ── Missing SoM (new provinces only) ─────────────────────────────────
     const missingSom = (S.enemy.provinces || [])
       .filter(p => (p.sot?.opa || 0) > 80 && !p.som)
       .map(p => p.name);
@@ -173,6 +177,7 @@ async function checkAndSendDiscordAlerts() {
         return `· ${name}${opa ? ' (' + opa + ' OPA)' : ''}`;
       }).join('\n');
       toSend.push({
+        _key: 'missing_som',
         content: `<@&${DISCORD.ATTACKER_ROLE}>`,
         embeds: [{
           title: `⚠️ Missing SoM — ${newMissing.length} province${newMissing.length > 1 ? 's' : ''}`,
@@ -184,16 +189,17 @@ async function checkAndSendDiscordAlerts() {
       });
     }
 
-    // ── 6. Enemy food rich ────────────────────────────────────────────────
+    // ── Enemy food rich ───────────────────────────────────────────────────
     const foodRichThr = S.thresholds.enemyFoodRich || 0;
     if (foodRichThr > 0) {
       const richFood = (S.enemy.provinces || [])
-        .filter(p => p.sot && (p.sot.food || 0) > foodRichThr)
-        .map(p => ({ name: p.name, food: p.sot.food || 0 }));
+        .filter(p => p.sot && p.sot.food != null && p.sot.food > foodRichThr)
+        .map(p => ({ name: p.name, food: p.sot.food }));
       next.enemy_food_rich = richFood.map(p => p.name);
       const newRichFood = richFood.filter(p => !(prev.enemy_food_rich || []).includes(p.name));
       if (newRichFood.length) {
         toSend.push({
+          _key: 'enemy_food_rich',
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🍞 Enemy food target — ${newRichFood.length} province${newRichFood.length > 1 ? 's' : ''}`,
@@ -206,16 +212,17 @@ async function checkAndSendDiscordAlerts() {
       }
     } else { next.enemy_food_rich = []; }
 
-    // ── 7. Enemy food low / starvation risk ──────────────────────────────
+    // ── Enemy food low / starvation risk ─────────────────────────────────
     const foodLowThr = S.thresholds.enemyFoodLow || 0;
     if (foodLowThr > 0) {
       const starveProv = (S.enemy.provinces || [])
-        .filter(p => p.sot && (p.sot.food || 0) < foodLowThr)
-        .map(p => ({ name: p.name, food: p.sot.food || 0 }));
+        .filter(p => p.sot && p.sot.food != null && p.sot.food < foodLowThr)
+        .map(p => ({ name: p.name, food: p.sot.food }));
       next.enemy_food_low = starveProv.map(p => p.name);
       const newStarve = starveProv.filter(p => !(prev.enemy_food_low || []).includes(p.name));
       if (newStarve.length) {
         toSend.push({
+          _key: 'enemy_food_low',
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💀 Enemy starvation risk — ${newStarve.length} province${newStarve.length > 1 ? 's' : ''}`,
@@ -228,16 +235,17 @@ async function checkAndSendDiscordAlerts() {
       }
     } else { next.enemy_food_low = []; }
 
-    // ── 8. Enemy GC rich ──────────────────────────────────────────────────
+    // ── Enemy GC rich ─────────────────────────────────────────────────────
     const gcRichThr = S.thresholds.enemyGcRich || 0;
     if (gcRichThr > 0) {
       const richGc = (S.enemy.provinces || [])
-        .filter(p => p.sot && (p.sot.money || 0) > gcRichThr)
-        .map(p => ({ name: p.name, gc: p.sot.money || 0 }));
+        .filter(p => p.sot && p.sot.money != null && p.sot.money > gcRichThr)
+        .map(p => ({ name: p.name, gc: p.sot.money }));
       next.enemy_gc_rich = richGc.map(p => p.name);
       const newRichGc = richGc.filter(p => !(prev.enemy_gc_rich || []).includes(p.name));
       if (newRichGc.length) {
         toSend.push({
+          _key: 'enemy_gc_rich',
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💰 Enemy GC target — ${newRichGc.length} province${newRichGc.length > 1 ? 's' : ''}`,
@@ -250,16 +258,17 @@ async function checkAndSendDiscordAlerts() {
       }
     } else { next.enemy_gc_rich = []; }
 
-    // ── 9. Enemy runes rich ───────────────────────────────────────────────
+    // ── Enemy runes rich ──────────────────────────────────────────────────
     const runesRichThr = S.thresholds.enemyRunesRich || 0;
     if (runesRichThr > 0) {
       const richRunes = (S.enemy.provinces || [])
-        .filter(p => p.sot && (p.sot.runes || 0) > runesRichThr)
-        .map(p => ({ name: p.name, runes: p.sot.runes || 0 }));
+        .filter(p => p.sot && p.sot.runes != null && p.sot.runes > runesRichThr)
+        .map(p => ({ name: p.name, runes: p.sot.runes }));
       next.enemy_runes_rich = richRunes.map(p => p.name);
       const newRichRunes = richRunes.filter(p => !(prev.enemy_runes_rich || []).includes(p.name));
       if (newRichRunes.length) {
         toSend.push({
+          _key: 'enemy_runes_rich',
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🔮 Enemy runes target — ${newRichRunes.length} province${newRichRunes.length > 1 ? 's' : ''}`,
@@ -275,27 +284,34 @@ async function checkAndSendDiscordAlerts() {
   } else {
     // Enemy not loaded — carry forward previous enemy state so we don't
     // lose track of what was already alerted and avoid false re-fires later.
-    next.dragon_enemy    = prev.dragon_enemy    || '';
-    next.missing_som     = prev.missing_som     || [];
-    next.enemy_food_rich = prev.enemy_food_rich || [];
-    next.enemy_food_low  = prev.enemy_food_low  || [];
-    next.enemy_gc_rich   = prev.enemy_gc_rich   || [];
+    next.dragon_enemy     = prev.dragon_enemy     || '';
+    next.missing_som      = prev.missing_som      || [];
+    next.enemy_food_rich  = prev.enemy_food_rich  || [];
+    next.enemy_food_low   = prev.enemy_food_low   || [];
+    next.enemy_gc_rich    = prev.enemy_gc_rich    || [];
     next.enemy_runes_rich = prev.enemy_runes_rich || [];
   }
 
   // ── Send all queued alerts ─────────────────────────────────────────────
-  for (const msg of toSend) {
-    await sendDiscordEmbed(webhookUrl, msg);
-    // Small delay between messages to avoid Discord rate limiting
+  // For each message: if the send fails, revert that state key to its previous
+  // value so the alert retries on the next tool open instead of being lost.
+  const savedNext = { ...next };
+  let sentCount = 0;
+  for (const { _key, content, embeds } of toSend) {
+    const ok = await sendDiscordEmbed(webhookUrl, { content, embeds });
+    if (ok) {
+      sentCount++;
+    } else if (_key) {
+      savedNext[_key] = prev[_key] ?? null; // revert — will retry next open
+    }
     await new Promise(r => setTimeout(r, 500));
   }
 
   // ── Save new state ────────────────────────────────────────────────────
-  await saveAlertState(next);
+  await saveAlertState(savedNext);
 
-  if (toSend.length) {
-    console.log(`[WavePlanner] Sent ${toSend.length} Discord alert(s)`);
-  }
+  if (sentCount) console.log(`[WavePlanner] Sent ${sentCount}/${toSend.length} Discord alert(s)`);
+  if (sentCount < toSend.length) console.warn(`[WavePlanner] ${toSend.length - sentCount} alert(s) failed — will retry on next open`);
 }
 
 // ── Reset Discord alert state ─────────────────────────────────────────────────
