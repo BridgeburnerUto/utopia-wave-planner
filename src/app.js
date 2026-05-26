@@ -504,4 +504,7 @@ window.__wpA = {
   kddbTagAll:     () => _kddbOpenTagView(),
   kddbTagBack:    () => { _kddbView = 'main'; renderKddb(); },
   kddbTagConfirm: (snapId, identityId) => _kddbConfirm(snapId, identityId),
+
+  // Manual stat overrides for My Orders tab
+  setManualStat,
 };
