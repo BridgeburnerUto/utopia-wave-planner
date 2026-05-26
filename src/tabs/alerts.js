@@ -7,6 +7,8 @@ function setThr(key, val) {
 
 function renderAlerts() {
   renderTab('__wpc_alerts', _buildAlerts);
+  // Populate the status line after the DOM is updated
+  setTimeout(_refreshBackendStatus, 0);
 }
 
 function _buildAlerts() {
@@ -102,9 +104,14 @@ function _buildAlerts() {
           style="width:100%;box-sizing:border-box;font-size:17px;display:block"
           onblur="__wpA.setApiKey(this.value)" onkeydown="if(event.key==='Enter')__wpA.setApiKey(this.value)">
       </div>
-      <div style="font-size:17px;color:#7a9090;margin-top:6px;line-height:1.6">
-        Syncs own + enemy data to Cloud Run on each tool open.<br>
-        Members open <b>war-companion.html</b> on phone — use the share link in the app's settings.
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <button class="wb" style="font-size:17px;padding:4px 12px;background:#305040;border-color:#508070;color:#a0d0b0"
+          onclick="__wpA.syncBackend()">↑ Sync Now</button>
+        <span id="__wp_backend_status" style="font-size:17px"></span>
+      </div>
+      <div style="font-size:17px;color:#7a9090;margin-top:8px;line-height:1.6">
+        Auto-syncs on tool open and refresh. <b>Save plan</b> after setting endpoint/key so they persist.<br>
+        Members open <b>war-companion.html</b> on phone — use the share link in the app's ⚙ settings.
       </div>
     </div>` : '';
 

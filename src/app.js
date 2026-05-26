@@ -17,6 +17,21 @@ async function _runBackfillOnce() {
   }
 }
 
+/** Update only the sync status line in the Alerts tab without full re-render */
+function _refreshBackendStatus() {
+  const el = document.getElementById('__wp_backend_status');
+  if (!el) return;
+  if (S.lastBackendError) {
+    el.innerHTML = '<span style="color:#E05050">✗ ' + esc(S.lastBackendError) + '</span>';
+  } else if (S.lastBackendSync) {
+    const mins = Math.round((Date.now() - S.lastBackendSync) / 60000);
+    const ago  = mins < 1 ? 'just now' : mins + 'm ago';
+    el.innerHTML = '<span style="color:#60C040">✓ Synced ' + ago + '</span>';
+  } else {
+    el.innerHTML = '<span style="color:#7a9090">Not synced yet this session</span>';
+  }
+}
+
 window.__wpA = {
 
   // ── Initialisation ──────────────────────────────────────────────────────
@@ -435,11 +450,30 @@ window.__wpA = {
   },
 
   // ── Backend sync (mobile companion) ─────────────────────────────────────────
-  setApiEndpoint(url) { S.apiEndpoint = url.trim(); setSav('API endpoint saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
-  setApiKey(key) { S.apiKey = key.trim(); setSav('API key saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
+  setApiEndpoint(url) {
+    S.apiEndpoint = url.trim();
+    S.lastBackendError = '';
+    setSav('API endpoint saved — save plan to persist', 'ok');
+    setTimeout(() => setSav('',''), 3000);
+    _refreshBackendStatus();
+  },
+  setApiKey(key) {
+    S.apiKey = key.trim();
+    setSav('API key saved — save plan to persist', 'ok');
+    setTimeout(() => setSav('',''), 3000);
+  },
 
   async syncBackend() {
-    if (!S.apiEndpoint) return;
+    if (!S.apiEndpoint) {
+      S.lastBackendError = 'No API endpoint set — enter it in Alerts tab and save the plan';
+      _refreshBackendStatus();
+      return;
+    }
+    if (!S.own) {
+      S.lastBackendError = 'Own kingdom data not loaded yet';
+      _refreshBackendStatus();
+      return;
+    }
     try {
       const payload = JSON.stringify({
         own:             S.own,
@@ -452,11 +486,19 @@ window.__wpA = {
       const hdrs = { 'Content-Type': 'application/json' };
       if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
       const r = await fetch(url, { method: 'POST', headers: hdrs, body: payload });
-      if (!r.ok) console.warn('[WavePlanner] Backend sync failed:', r.status);
-      else console.log('[WavePlanner] IS dump synced to backend');
+      if (!r.ok) {
+        S.lastBackendError = 'Server returned ' + r.status + (r.status === 401 ? ' — check API key' : '');
+        console.warn('[WavePlanner] Backend sync failed:', r.status);
+      } else {
+        S.lastBackendSync  = new Date();
+        S.lastBackendError = '';
+        console.log('[WavePlanner] IS dump synced to backend');
+      }
     } catch(e) {
+      S.lastBackendError = 'Network error: ' + e.message;
       console.warn('[WavePlanner] Backend sync error:', e.message);
     }
+    _refreshBackendStatus();
   },
 
   async clearPlan() {

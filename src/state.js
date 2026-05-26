@@ -53,6 +53,8 @@ const S = {
   discordWebhook: '',    // Discord webhook URL — saved with war plan
   apiEndpoint:    '',    // Cloud Run backend URL for mobile companion sync
   apiKey:         '',    // API key matching WP_API_KEY env var on Cloud Run
+  lastBackendSync: null, // Date of last successful IS dump POST (runtime only)
+  lastBackendError: '',  // Error message from last failed sync (runtime only)
 
   // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
