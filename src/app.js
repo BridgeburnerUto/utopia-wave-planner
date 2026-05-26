@@ -121,6 +121,12 @@ window.__wpA = {
       // Sync IS dump to Cloud Run backend (for mobile companion)
       this.syncBackend();
 
+      // Background auto-sync every 2 minutes while IS tab is open.
+      // War leader just needs to keep the IS tab open during a wave.
+      if (!window.__wpBackendTimer) {
+        window.__wpBackendTimer = setInterval(() => window.__wpA.syncBackend(), 120000);
+      }
+
       // NW snapshot (war only) + cleanup old snapshots
       snapshotNW();
       cleanOldSnapshots();

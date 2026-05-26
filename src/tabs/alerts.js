@@ -110,7 +110,8 @@ function _buildAlerts() {
         <span id="__wp_backend_status" style="font-size:17px"></span>
       </div>
       <div style="font-size:17px;color:#7a9090;margin-top:8px;line-height:1.6">
-        Auto-syncs on tool open and refresh. <b>Save plan</b> after setting endpoint/key so they persist.<br>
+        Auto-syncs on open, refresh, and <b>every 2 min</b> while this tab is open.<br>
+        <b>Save plan</b> after setting endpoint/key so they persist.<br>
         Members open <b>war-companion.html</b> on phone — use the share link in the app's ⚙ settings.
       </div>
     </div>` : '';
