@@ -507,6 +507,71 @@ window.__wpA = {
     _refreshBackendStatus();
   },
 
+  /**
+   * Refresh enemy NW for all wave-assigned target provinces.
+   * Fetches each province_profile page silently from intel.utopia.site (same
+   * origin — no CORS, no new tabs), posts the HTML to our Cloud Run intel.php
+   * exactly as Munk would, then immediately syncs the IS dump.
+   * War companion picks up fresh NW data on its next auto-refresh (≤90 s).
+   */
+  async refreshEnemyNW() {
+    if (!S.enemy || !S.enemy.provinces) {
+      setSav('Load enemy data first', 'err'); setTimeout(() => setSav('',''), 3000); return;
+    }
+    if (!S.apiEndpoint) {
+      setSav('Set API endpoint in Alerts tab first', 'err'); setTimeout(() => setSav('',''), 3000); return;
+    }
+
+    const [kd, island] = (S.eLoc || '').split(':');
+    if (!kd || !island) {
+      setSav('Enemy location not set', 'err'); setTimeout(() => setSav('',''), 3000); return;
+    }
+
+    // All provinces assigned to any wave
+    const targets = S.enemy.provinces.filter(p => S.provinces[p.slot]?.wave);
+    if (!targets.length) {
+      setSav('No wave targets assigned yet', 'err'); setTimeout(() => setSav('',''), 3000); return;
+    }
+
+    setSav('⟳ Fetching NW for ' + targets.length + ' targets…');
+    const postBase = S.apiEndpoint.replace(/\/$/, '') + '/';
+    let ok = 0, fail = 0;
+
+    for (const prov of targets) {
+      const path = '/province_profile/' + kd + '/' + island + '/' + prov.slot;
+      try {
+        const html = await fetch(path).then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        });
+
+        // Extract readable text for data_simple (same as Munk's simple field)
+        const doc    = new DOMParser().parseFromString(html, 'text/html');
+        const simple = (doc.body?.innerText || '').replace(/[ \t]+/g, ' ').trim();
+
+        // POST to Cloud Run intel.php exactly as Munk does
+        const body = new FormData();
+        body.append('prov',        prov.name);
+        body.append('url',         path);
+        body.append('data_simple', simple);
+        body.append('data_html',   html);
+        await fetch(postBase, { method: 'POST', body });
+        ok++;
+      } catch(e) {
+        console.warn('[WavePlanner] NW refresh failed for', prov.name, ':', e.message);
+        fail++;
+      }
+    }
+
+    // Push fresh IS dump so companion sees updated data immediately
+    await this.syncBackend();
+
+    const msg = '✓ NW refreshed: ' + ok + '/' + targets.length
+              + (fail ? '  (' + fail + ' failed — check console)' : '');
+    setSav(msg, 'ok');
+    setTimeout(() => setSav('', ''), 6000);
+  },
+
   async clearPlan() {
     if (!confirm('Clear all war plan data?\n\nThis will:\n• Reset all wave assignments\n• Clear all raze/massacre targets\n• Clear all op assignments and notes\n• Reset thresholds\n\nDiscord webhook is kept.\nThis cannot be undone.')) return;
     // Reset in-memory state
@@ -555,4 +620,5 @@ window.__wpA = {
 
   // Manual stat overrides for My Orders tab
   setManualStat,
+  refreshEnemyNW,
 };

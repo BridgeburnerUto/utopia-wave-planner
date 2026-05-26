@@ -166,7 +166,15 @@ function _buildPlayer() {
     byWave[wn].push(atk);
   });
 
-  h += `<div class="wsech">// ATTACK PLAN</div>`;
+  h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="wsech" style="margin-bottom:0">// ATTACK PLAN</div>
+    <button onclick="__wpA.refreshEnemyNW()"
+      style="padding:4px 12px;background:#1a2828;border:1px solid #617070;color:#a0d0b0;
+             font-size:17px;font-weight:700;cursor:pointer;border-radius:3px"
+      title="Fetch fresh NW &amp; def for all wave targets from intel site">
+      ⟳ Refresh NW
+    </button>
+  </div>`;
   Object.entries(byWave).forEach(([wave, list]) => {
     h += _buildAttackCard(wave, list, aOff, totalGenerals);
   });
