@@ -548,7 +548,7 @@ window.__wpA = {
     targets.forEach(p => {
       const slot = parseInt((p.slot + '').replace(/\[|\]/g, ''));
       window.open(
-        `https://www.utopia-game.com/wol/game/province_profile/${eLocPath}/${slot}`,
+        `https://utopia-game.com/wol/game/province_profile/${eLocPath}/${slot}`,
         '_blank'
       );
     });
