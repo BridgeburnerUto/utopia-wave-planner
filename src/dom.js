@@ -33,10 +33,12 @@ function buildOverlay() {
   </div>
   <button class="wb g" id="__wpsavebtn" onclick="__wpA.save()">💾 Save</button>
   <button class="wb" id="__wpsynbtn" onclick="__wpA.syncBackend()" title="Push current data to the companion app">⟳ Sync</button>
-  <button class="wb" id="__wpnwbtn"  onclick="__wpA.refreshEnemyNW()" title="Re-fetch enemy kingdom NW from IS and sync — use before a wave to get fresh target NW">⟳ NW</button>
+  <button class="wb" id="__wpnwbtn"  onclick="__wpA.toggleNWPanel()" title="Open wave target province pages to get real-time NW during a wave">⟳ NW</button>
   <button class="wb" onclick="__wpA.refresh()">↻ Refresh</button>
   <button class="wb r" onclick="document.getElementById('__wp_overlay').style.display='none'">✕ Close</button>
 </div>
+
+<div id="__wpnwpanel"></div>
 
 <div id="__wptl">
   <div class="wkb"><div class="l">Own KD</div><div class="v" id="__wpown">—</div></div>

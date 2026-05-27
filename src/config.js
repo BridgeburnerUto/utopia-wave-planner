@@ -81,6 +81,12 @@ const CSS = `
 .wb:hover{border-color:#ffd400;color:#ffd400}
 .wb.g{border-color:#2a6614;color:#60C040}.wb.g:hover{background:rgba(96,192,64,.1)}
 .wb.r{border-color:#8B1414;color:#E05050}.wb.r:hover{background:rgba(224,80,80,.1)}
+#__wpnwpanel{background:#1e2a2a;border-bottom:2px solid #4a6060;padding:10px 24px;display:none;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0}
+#__wpnwpanel .wnwlabel{font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7a9090;white-space:nowrap}
+.wnwlink{color:#7adcdc;font-size:16px;font-weight:600;text-decoration:none;padding:5px 11px;border:1px solid #4a6060;border-radius:3px;transition:all .15s;white-space:nowrap}
+.wnwlink:hover{border-color:#7adcdc;background:rgba(122,220,220,.08)}
+.wnwlink.wv{color:#60C040;border-color:#2a6614}
+#__wpnwpanel .wdiv{width:1px;height:24px;background:#4a6060;flex-shrink:0}
 #__wptb{background:#2b3333;border-bottom:1px solid #617070;display:flex;padding:0 24px;flex-shrink:0;gap:4px}
 .wt{padding:14px 22px;font-size:17px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#7a9090;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
 .wt:hover{color:#b8c8c8}.wt.on{color:#ffd400;border-bottom-color:#ffd400}.wt.ong{color:#60C040;border-bottom-color:#60C040}

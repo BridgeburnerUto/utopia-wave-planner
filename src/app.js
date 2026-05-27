@@ -512,22 +512,24 @@ window.__wpA = {
   },
 
   /**
-   * Refresh enemy NW for all wave-assigned target provinces.
+   * Toggle the NW refresh panel below the header.
+   * Shows a list of wave-target province page links the war leader can click
+   * one-by-one (direct anchor clicks bypass popup blockers).  Once the pages
+   * have loaded and the IS integration has POSTed their data to the backend,
+   * the war leader clicks "↺ Load fresh NW" to pull the updated values.
    *
-   * The IS API's EnemyKingdom endpoint caches NW at kingdom-page load time, which
-   * lags during a wave (provinces lose NW as attacks land).  The only source of
-   * truly real-time NW is the game's own province_profile page — so this function
-   * opens each target's province profile page in a new tab.  The IS browser
-   * integration auto-POSTs that page to the backend (intel.php) within a few
-   * seconds of the tab loading.  After a short wait we fetch the fresh values from
-   * the backend's ?targets endpoint and merge them into S.enemy.provinces so the
-   * attack plan re-renders with up-to-date defence / NW numbers.
-   *
-   * Province profile URL format:
-   *   https://www.utopia-game.com/wol/game/province_profile/{eLoc_as_path}/{slot}
-   *   e.g. eLoc = "1:6", slot = 3  →  /province_profile/1/6/3
+   * Province profile URL: https://utopia-game.com/wol/game/province_profile/X/Y/slot
    */
-  async refreshEnemyNW() {
+  toggleNWPanel() {
+    const panel = $id('__wpnwpanel');
+    if (!panel) return;
+
+    // Second click = close
+    if (panel.style.display === 'flex') {
+      panel.style.display = 'none';
+      return;
+    }
+
     if (!S.enemy?.provinces) {
       setSav('Load enemy data first', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
@@ -535,48 +537,54 @@ window.__wpA = {
       setSav('Enemy location not set', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
 
-    // All provinces assigned to any wave
     const targets = S.enemy.provinces.filter(p => S.provinces[p.slot]?.wave);
     if (!targets.length) {
-      setSav('No wave targets assigned yet', 'err'); setTimeout(() => setSav('',''), 3000); return;
+      setSav('No wave targets assigned', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
 
-    // Open each wave target's province profile page — IS integration auto-POSTs data to backend.
-    // Triggered inside a user-click handler so browsers allow the popup cascade.
     const eLocPath = S.eLoc.replace(':', '/');
-    setSav('⟳ Opening ' + targets.length + ' province page(s)…');
-    targets.forEach(p => {
+    const links = targets.map(p => {
       const slot = parseInt((p.slot + '').replace(/\[|\]/g, ''));
-      window.open(
-        `https://utopia-game.com/wol/game/province_profile/${eLocPath}/${slot}`,
-        '_blank'
-      );
-    });
+      const url  = `https://utopia-game.com/wol/game/province_profile/${eLocPath}/${slot}`;
+      const nw   = p.networth ? fK(p.networth) : '?';
+      return `<a class="wnwlink" href="${esc(url)}" target="_blank"
+        onclick="this.classList.add('wv')"
+      >${esc(p.name)} <span style="color:#7a9090;font-size:14px">${esc(nw)}</span></a>`;
+    }).join('');
 
-    // If no backend endpoint configured, inform and bail — user can Refresh manually
+    panel.innerHTML = `
+      <span class="wnwlabel">Open pages →</span>
+      ${links}
+      <div class="wdiv"></div>
+      <button class="wb" onclick="__wpA.fetchFreshNW()" title="Pull latest NW from backend after opening the pages">↺ Load fresh NW</button>
+      <button class="wb r" onclick="document.getElementById('__wpnwpanel').style.display='none'" style="padding:7px 10px">✕</button>
+    `;
+    panel.style.display = 'flex';
+  },
+
+  /**
+   * Pull fresh NW values from the backend's ?targets endpoint and merge into
+   * S.enemy.provinces.  Only uses data backed by an actual province_profile
+   * page visit (last_province_profile timestamp present).
+   * Called by the "↺ Load fresh NW" button in the NW panel.
+   */
+  async fetchFreshNW() {
     if (!S.apiEndpoint) {
-      setSav('⟳ Opened ' + targets.length + ' page(s) — wait ~10s then click ↻ Refresh', 'ok');
-      setTimeout(() => setSav('', ''), 10000);
-      return;
+      setSav('No backend endpoint — set in Alerts tab', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
-
-    // Wait for the pages to load and POST their data to the backend
-    setSav('⟳ Opened ' + targets.length + ' page(s) — waiting for fresh data…');
-    await new Promise(r => setTimeout(r, 12000));
-
+    setSav('⟳ Loading fresh NW…');
     try {
       const url  = S.apiEndpoint.replace(/\/$/, '') + '/api.php?targets';
       const hdrs = {};
       if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
       const resp = await fetch(url, { headers: hdrs });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const fresh = await resp.json();  // [{name, networth, last_province_profile, ...}]
+      const fresh = await resp.json();
 
-      // Merge fresh NW values — only trust entries backed by an actual profile visit
       let updated = 0;
       for (const ti of fresh) {
         if (!ti.last_province_profile) continue;
-        const p = S.enemy.provinces.find(x => x.name === ti.name);
+        const p = S.enemy.provinces?.find(x => x.name === ti.name);
         if (p && ti.networth != null) {
           p.networth = ti.networth;
           updated++;
@@ -585,11 +593,11 @@ window.__wpA = {
 
       if (updated) {
         renderPlayer();
-        setSav('✓ NW refreshed — ' + updated + ' province(s) updated from profile page', 'ok');
+        setSav('✓ NW refreshed — ' + updated + ' province(s) updated', 'ok');
       } else {
-        setSav('⟳ Pages opened — no profile data yet (pages may still be loading)', 'waw');
+        setSav('⟳ No fresh profile data yet — open the pages first, then try again', 'waw');
       }
-      setTimeout(() => setSav('', ''), 6000);
+      setTimeout(() => setSav('', ''), 5000);
     } catch(e) {
       setSav('✗ NW fetch failed: ' + e.message, 'err');
       setTimeout(() => setSav('', ''), 4000);
@@ -645,5 +653,5 @@ window.__wpA = {
   // Manual stat overrides + raze/massacre claims (defined in player.js)
   setManualStat,
   claimAction,
-  // Note: refreshEnemyNW is defined as an async method above — do NOT add a shorthand here.
+  // Note: toggleNWPanel and fetchFreshNW are defined as methods above — no shorthand needed.
 };
