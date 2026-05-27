@@ -513,21 +513,23 @@ window.__wpA = {
 
   /**
    * Refresh enemy NW for all wave-assigned target provinces.
-   * Re-fetches the enemy kingdom from the IS API (same origin as the bookmarklet —
-   * no CORS issues), which gives the latest NW for ALL enemy provinces at once.
-   * Then immediately syncs the IS dump to Cloud Run so the war companion picks up
-   * fresh NW data on its next auto-refresh (≤90 s).
    *
-   * Note: province_profile pages live on utopia-game.com — a different origin from
-   * intel.utopia.site — so cross-origin fetching those pages is not possible from
-   * the bookmarklet. Using the IS API is the correct approach.
+   * The IS API's EnemyKingdom endpoint caches NW at kingdom-page load time, which
+   * lags during a wave (provinces lose NW as attacks land).  The only source of
+   * truly real-time NW is the game's own province_profile page — so this function
+   * opens each target's province profile page in a new tab.  The IS browser
+   * integration auto-POSTs that page to the backend (intel.php) within a few
+   * seconds of the tab loading.  After a short wait we fetch the fresh values from
+   * the backend's ?targets endpoint and merge them into S.enemy.provinces so the
+   * attack plan re-renders with up-to-date defence / NW numbers.
+   *
+   * Province profile URL format:
+   *   https://www.utopia-game.com/wol/game/province_profile/{eLoc_as_path}/{slot}
+   *   e.g. eLoc = "1:6", slot = 3  →  /province_profile/1/6/3
    */
   async refreshEnemyNW() {
-    if (!S.enemy || !S.enemy.provinces) {
+    if (!S.enemy?.provinces) {
       setSav('Load enemy data first', 'err'); setTimeout(() => setSav('',''), 3000); return;
-    }
-    if (!S.apiEndpoint) {
-      setSav('Set API endpoint in Alerts tab first', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
     if (!S.eLoc) {
       setSav('Enemy location not set', 'err'); setTimeout(() => setSav('',''), 3000); return;
@@ -539,18 +541,57 @@ window.__wpA = {
       setSav('No wave targets assigned yet', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
 
-    setSav('⟳ Refreshing enemy NW via IS…');
+    // Open each wave target's province profile page — IS integration auto-POSTs data to backend.
+    // Triggered inside a user-click handler so browsers allow the popup cascade.
+    const eLocPath = S.eLoc.replace(':', '/');
+    setSav('⟳ Opening ' + targets.length + ' province page(s)…');
+    targets.forEach(p => {
+      const slot = parseInt((p.slot + '').replace(/\[|\]/g, ''));
+      window.open(
+        `https://www.utopia-game.com/wol/game/province_profile/${eLocPath}/${slot}`,
+        '_blank'
+      );
+    });
+
+    // If no backend endpoint configured, inform and bail — user can Refresh manually
+    if (!S.apiEndpoint) {
+      setSav('⟳ Opened ' + targets.length + ' page(s) — wait ~10s then click ↻ Refresh', 'ok');
+      setTimeout(() => setSav('', ''), 10000);
+      return;
+    }
+
+    // Wait for the pages to load and POST their data to the backend
+    setSav('⟳ Opened ' + targets.length + ' page(s) — waiting for fresh data…');
+    await new Promise(r => setTimeout(r, 12000));
+
     try {
-      // Re-fetch enemy kingdom from the IS API — same origin, always accessible.
-      // This pulls the latest NW for ALL enemy provinces in a single call.
-      await this.loadEnemy(S.eLoc);
-      // Push the fresh data to Cloud Run so the companion sees it within 90 s.
-      await this.syncBackend();
-      renderPlayer(); // Update the attack plan display with fresh NW values
-      setSav('✓ NW refreshed — ' + targets.length + ' wave targets updated', 'ok');
-      setTimeout(() => setSav('', ''), 5000);
+      const url  = S.apiEndpoint.replace(/\/$/, '') + '/api.php?targets';
+      const hdrs = {};
+      if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
+      const resp = await fetch(url, { headers: hdrs });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const fresh = await resp.json();  // [{name, networth, last_province_profile, ...}]
+
+      // Merge fresh NW values — only trust entries backed by an actual profile visit
+      let updated = 0;
+      for (const ti of fresh) {
+        if (!ti.last_province_profile) continue;
+        const p = S.enemy.provinces.find(x => x.name === ti.name);
+        if (p && ti.networth != null) {
+          p.networth = ti.networth;
+          updated++;
+        }
+      }
+
+      if (updated) {
+        renderPlayer();
+        setSav('✓ NW refreshed — ' + updated + ' province(s) updated from profile page', 'ok');
+      } else {
+        setSav('⟳ Pages opened — no profile data yet (pages may still be loading)', 'waw');
+      }
+      setTimeout(() => setSav('', ''), 6000);
     } catch(e) {
-      setSav('✗ NW refresh failed: ' + e.message, 'err');
+      setSav('✗ NW fetch failed: ' + e.message, 'err');
       setTimeout(() => setSav('', ''), 4000);
     }
   },
