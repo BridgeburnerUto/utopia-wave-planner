@@ -107,25 +107,25 @@ function calcAttacks(prov) {
     return 1;
   }
 
-  // ── Score all targets ────────────────────────────────────────────────────────
+  // ── Enrich all targets (sorted by def ASC — lowest def = fewest gens = most attacks) ──
+  // NW quality is for display only; it does NOT influence selection order.
+  // The war leader chose these targets; our job is to hit as many as possible.
   const scored = waveTargets.map(item => {
-    const tp      = pd(item.province.slot);
-    const tDef    = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
-    const tNW     = tp?.networth || 0;
-    const nwQ     = nwQuality(tNW);
-    const away    = tp?.som?.armiesAway?.length > 0;
-    const dAge    = tp?.calcs?.defPointsSummary?.ageSeconds;
-    const mg      = minGens(tDef, gensHome);
+    const tp       = pd(item.province.slot);
+    const tDef     = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
+    const tNW      = tp?.networth || 0;
+    const nwQ      = nwQuality(tNW);
+    const away     = tp?.som?.armiesAway?.length > 0;
+    const dAge     = tp?.calcs?.defPointsSummary?.ageSeconds;
+    const mg       = minGens(tDef, gensHome);
     const canBreak = (mg * offPerGen) > (tDef * 1.01);
-    // Priority: NW quality > breakability > army away; penalise very high def
-    const score   = nwQ * 100 + (canBreak ? 80 : 0) + (away ? 30 : 0) - (tDef / 10000);
-    return { item, tp, tDef, tNW, nwQ, nwOk: nwQ >= 2, away, breaks: canBreak, dAge, score, waveName: item.waveName };
-  }).sort((a, b) => b.score - a.score);
+    return { item, tp, tDef, tNW, nwQ, nwOk: nwQ >= 2, away, breaks: canBreak, dAge, waveName: item.waveName };
+  }).sort((a, b) => a.tDef - b.tDef); // ASC: smallest def first
 
   const best = scored[0];
   if (!best) return { attacks: [], reason: 'no_range' };
 
-  // If nothing is breakable at all, return a warning card
+  // If nothing is breakable at all, show a warning card for the easiest target
   if (!scored.some(t => t.breaks)) {
     const mg      = minGens(best.tDef, gensHome);
     const sentOff = mg * offPerGen;
@@ -140,17 +140,21 @@ function calcAttacks(prov) {
     };
   }
 
-  // ── Greedy: maximise attacks, minimum gens each ──────────────────────────────
+  // ── Greedy: lowest-def target first, prefer unvisited, then cycle ────────────
+  // This maximises total attack count (= most offense used = most land gained).
   const attacks  = [];
   let gensLeft   = gensHome;
   const hitCount = {}; // rawSlot → times targeted, for SoD reminders
 
+  function canBreakWith(c, gens) {
+    return (minGens(c.tDef, gens) * offPerGen) > (c.tDef * 1.01);
+  }
+
   for (let iter = 0; iter < 20 && gensLeft > 0; iter++) {
-    // Best target we can cleanly break with remaining gens
-    const t = scored.find(c => {
-      const mg = minGens(c.tDef, gensLeft);
-      return (mg * offPerGen) > (c.tDef * 1.01);
-    });
+    // Prefer unvisited breakable targets first (cover all war-leader targets before cycling),
+    // then fall back to already-hit breakable targets.
+    const t = scored.find(c => !hitCount[c.item.province.rawSlot] && canBreakWith(c, gensLeft))
+           || scored.find(c => canBreakWith(c, gensLeft));
 
     if (!t) {
       // No breakable target remains — bundle leftover gens onto last attack
