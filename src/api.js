@@ -23,7 +23,7 @@ async function fetchEnemyKingdom(location) {
   const r = await fetch(_url(`/Kingdom/v1/EnemyKingdom?server=${S.server}&location=${location}`), { headers: _headers() })
     .catch(() => null);
   if (!r || !r.ok) return null;
-  return r.json();
+  return r.json().catch(() => null);
 }
 
 /** Fetch all op logs for the own kingdom (~24h window) */

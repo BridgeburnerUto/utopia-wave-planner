@@ -236,26 +236,27 @@ function _gatherAlerts(thr) {
       const age = da != null ? ` <span style="color:#7a9090">(intel ${fA(da)} old)</span>` : '';
 
       if (p.sot) {
-        const food  = p.sot.food  || 0;
-        const gc    = p.sot.money || 0;
-        const runes = p.sot.runes || 0;
+        // Use != null so we only alert when data actually exists (0 food is valid; missing is not)
+        const food  = p.sot.food  != null ? p.sot.food  : null;
+        const gc    = p.sot.money != null ? p.sot.money : null;
+        const runes = p.sot.runes != null ? p.sot.runes : null;
 
-        if (thr.enemyFoodRich > 0 && food > thr.enemyFoodRich)
+        if (food  != null && thr.enemyFoodRich  > 0 && food  > thr.enemyFoodRich)
           al.push({ group: 'enemy_rich', badge: 'FOOD', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
             t: `<b>${esc(p.name)}</b> has ${fK(food)} food — steal / vermin${age}` });
 
-        if (thr.enemyGcRich > 0 && gc > thr.enemyGcRich)
+        if (gc    != null && thr.enemyGcRich    > 0 && gc    > thr.enemyGcRich)
           al.push({ group: 'enemy_rich', badge: 'GC', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
             t: `<b>${esc(p.name)}</b> has ${fK(gc)} gc — fools gold / steal${age}` });
 
-        if (thr.enemyRunesRich > 0 && runes > thr.enemyRunesRich)
+        if (runes != null && thr.enemyRunesRich > 0 && runes > thr.enemyRunesRich)
           al.push({ group: 'enemy_rich', badge: 'RUNES', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
             t: `<b>${esc(p.name)}</b> has ${fK(runes)} runes — lightning strike / steal${age}` });
 
-        if (thr.enemyFoodLow > 0 && food < thr.enemyFoodLow)
+        if (food  != null && thr.enemyFoodLow   > 0 && food  < thr.enemyFoodLow)
           al.push({ group: 'enemy_low', badge: 'STARVE', cls: 'wau',
             bg: 'background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);',
             t: `<b>${esc(p.name)}</b> only ${fK(food)} food — vermin + drought + gluttony${age}` });
@@ -285,15 +286,15 @@ function _gatherAlerts(thr) {
   if (S.own) {
     S.own.provinces.forEach(p => {
       if (p.sot) {
-        const food = p.sot.food     || 0;
-        const peas = p.sot.peasants || p.sot.peons || 0;
+        const food = p.sot.food     != null ? p.sot.food     : null;
+        const peas = p.sot.peasants != null ? p.sot.peasants : (p.sot.peons != null ? p.sot.peons : null);
 
-        if (thr.ownFoodLow > 0 && food < thr.ownFoodLow)
+        if (food != null && thr.ownFoodLow > 0 && food < thr.ownFoodLow)
           al.push({ group: 'own', badge: 'FOOD', cls: 'waw2',
             bg: 'background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);',
             t: `<b>${esc(p.name)}</b> only ${fK(food)} food — send aid!` });
 
-        if (thr.ownPeasLow > 0 && peas > 0 && peas < thr.ownPeasLow)
+        if (peas != null && thr.ownPeasLow > 0 && peas < thr.ownPeasLow)
           al.push({ group: 'own', badge: 'PEONS', cls: 'wau',
             bg: 'background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);',
             t: `<b>${esc(p.name)}</b> only ${fK(peas)} peasants — beware!` });

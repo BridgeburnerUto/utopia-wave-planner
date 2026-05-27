@@ -189,7 +189,11 @@ window.__wpA = {
       renderAlerts();
       renderSummary();
       renderPlayer();
-    } catch (e) { /* silent — board will show stale data */ }
+    } catch (e) {
+      setSav('Refresh failed: ' + e.message, 'err');
+      setTimeout(() => setSav('', ''), 5000);
+      console.error('[WavePlanner] refresh error:', e);
+    }
   },
 
   // ── War plan persistence ────────────────────────────────────────────────

@@ -43,6 +43,13 @@ function setProvNeedsMassacre(slot, val) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderBoard() {
+  // Inject board-row hover style once per page load
+  if (!document.getElementById('__wp_board_style')) {
+    const st = document.createElement('style');
+    st.id = '__wp_board_style';
+    st.textContent = '.wp-brow:hover{background:#3c4545!important}';
+    document.head.appendChild(st);
+  }
   renderTab('__wpc_board', _buildBoard);
 }
 
@@ -154,8 +161,7 @@ function _buildBoard() {
       ? r.requiredOps.map(o => `<span class="wtag" style="cursor:default;font-size:15px;">${o}</span>`).join('')
       : '';
 
-    return `<tr style="border-bottom:1px solid rgba(97,112,112,.25);${r.wave==='current'?'background:rgba(224,80,80,.04);':r.wave==='preplan'?'background:rgba(212,160,23,.03);':''}"
-      onmouseover="this.style.background='#3c4545'" onmouseout="this.style.background='${r.wave==='current'?'rgba(224,80,80,.04)':r.wave==='preplan'?'rgba(212,160,23,.03)':''}'">
+    return `<tr class="wp-brow" style="border-bottom:1px solid rgba(97,112,112,.25);${r.wave==='current'?'background:rgba(224,80,80,.04);':r.wave==='preplan'?'background:rgba(212,160,23,.03);':''}">
       <td style="padding:7px 10px;font-weight:700;color:#ffffff;">${r.slot}</td>
       <td style="padding:7px 10px;color:#ffffff;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
         <span onclick="__wpA.openOps(${r.slot})" style="cursor:pointer;" title="Click to assign ops">${esc(r.name)}</span>
@@ -288,11 +294,8 @@ function togOp(slot, c) {
   const idx = plan.requiredOps.indexOf(c);
   if (idx >= 0) plan.requiredOps.splice(idx, 1);
   else          plan.requiredOps.push(c);
-  // Update button state in panel without full re-render
-  document.querySelectorAll('#__wpops .wop').forEach(btn => {
-    const bc = btn.getAttribute('onclick')?.match(/,'([^']+)'\)/)?.[1];
-    if (bc) btn.classList.toggle('sel', plan.requiredOps.includes(bc));
-  });
+  // renderBoard replaces the whole board HTML — the manual DOM update below was
+  // redundant (immediately overwritten). Keep only the re-render.
   renderBoard();
 }
 

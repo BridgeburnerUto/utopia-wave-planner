@@ -211,11 +211,12 @@ function _buildProvPicker() {
 
 function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
   const genColor = gensHome >= 3 ? '#60C040' : gensHome >= 1 ? '#e09040' : '#E05050';
-  const ms = loadManual(prov.name);
+  const ms = loadManual(prov.name);  // single localStorage read for the whole header
   const apiOff  = prov.som?.offPointsHome || 0;
   const apiNW   = prov.networth || 0;
   const apiGens = prov.som?.standingArmy?.generals ?? prov.sot?.generals ?? 5;
-  const pn = esc(prov.name).replace(/'/g, "\\'");
+  // Escape province name for safe embedding in both HTML attrs and JS string literals
+  const pn = prov.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '&lt;');
 
   const inputStyle = 'background:#1a2828;border:1px solid #617070;color:#ffffff;font-family:monospace;' +
     'font-size:17px;padding:4px 8px;border-radius:3px;width:100%;box-sizing:border-box;margin-top:3px';
@@ -235,25 +236,31 @@ function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
 
     <div style="background:#1a2828;border:1px solid #617070;border-radius:3px;padding:12px 14px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7a9090;margin-bottom:10px">
-        My Stats — enter your current values
+        My Stats — enter your current values (saves on Tab/Enter/click away)
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div>
           <div style="font-size:13px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Max Offense</div>
           <input type="number" value="${ms.off || apiOff || ''}" placeholder="${apiOff ? fK(apiOff)+' (API)' : 'e.g. 85000'}"
-            style="${inputStyle}" oninput="__wpA.setManualStat('${pn}','off',this.value)">
+            style="${inputStyle}"
+            onchange="__wpA.setManualStat('${pn}','off',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
           ${ms.off ? '<div style="'+hintStyle+'">✎ manual</div>' : (apiOff ? '<div style="'+hintStyle+'">from SoM</div>' : '')}
         </div>
         <div>
           <div style="font-size:13px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Net Worth</div>
           <input type="number" value="${ms.nw || apiNW || ''}" placeholder="${apiNW ? fK(apiNW)+' (API)' : 'e.g. 250000'}"
-            style="${inputStyle}" oninput="__wpA.setManualStat('${pn}','nw',this.value)">
+            style="${inputStyle}"
+            onchange="__wpA.setManualStat('${pn}','nw',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
           ${ms.nw ? '<div style="'+hintStyle+'">✎ manual</div>' : (apiNW ? '<div style="'+hintStyle+'">from IS</div>' : '')}
         </div>
         <div>
           <div style="font-size:13px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Generals</div>
           <input type="number" min="0" max="5" value="${ms.gens != null ? ms.gens : (apiGens || '')}" placeholder="${apiGens || '1-5'}"
-            style="${inputStyle}" oninput="__wpA.setManualStat('${pn}','gens',this.value)">
+            style="${inputStyle}"
+            onchange="__wpA.setManualStat('${pn}','gens',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
           ${ms.gens != null ? '<div style="'+hintStyle+'">✎ manual</div>' : (apiGens ? '<div style="'+hintStyle+'">from SoM</div>' : '')}
         </div>
       </div>
@@ -317,11 +324,13 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
 }
 
 function _buildContextTable(waveTargets, prov, aOff) {
+  // Use effective NW (manual override wins over API) for range check — same as calcAttacks()
+  const aNW = _eff(prov.name, 'nw', prov.networth || 0);
   const rows = waveTargets.map(item => {
     const tp    = pd(item.province.slot);
     const tDef  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
     const tNW   = tp?.networth || 0;
-    const nwOk  = canHit(prov.networth, tNW);
+    const nwOk  = canHit(aNW, tNW);
     const pct   = tDef > 0 ? Math.round(aOff / tDef * 100) : 0;
     const away  = tp?.som?.armiesAway?.length > 0;
     const cls   = !nwOk ? 'wmno' : aOff > tDef * 1.01 ? 'wmyes' : 'wmcl';
