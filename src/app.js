@@ -216,7 +216,11 @@ window.__wpA = {
       });
       const r = await postWarPlan(S.own.location, { json, warPlanId: S.wpId });
       setSav(r ? 'Saved ✓' : 'Failed', r ? 'ok' : 'err');
-      if (r) setTimeout(() => setSav('', ''), 3000);
+      if (r) {
+        setTimeout(() => setSav('', ''), 3000);
+        // Keep companion in sync — push updated plan (including provinces) to backend
+        this.syncBackend();
+      }
     } catch (e) {
       setSav('Error', 'err');
     }
@@ -583,8 +587,18 @@ window.__wpA = {
 
       let updated = 0;
       for (const ti of fresh) {
-        if (!ti.last_province_profile) continue;
-        const p = S.enemy.provinces?.find(x => x.name === ti.name);
+        if (!ti.last_province_profile || !ti.coords) continue;
+        // Match by slot from coords (X:Y:slot) — more reliable than name matching.
+        // Also filter to current enemy KD only.
+        const parts   = ti.coords.split(':');
+        if (parts.length < 3) continue;
+        const tiLoc   = parts[0] + ':' + parts[1];
+        const tiSlot  = parseInt(parts[2]);
+        if (tiLoc !== S.eLoc) continue;                  // wrong KD
+        if (!S.provinces[tiSlot]?.wave) continue;        // not a wave target
+        const p = S.enemy.provinces?.find(
+          x => parseInt((x.slot + '').replace(/\[|\]/g, '')) === tiSlot
+        );
         if (p && ti.networth != null) {
           p.networth = ti.networth;
           updated++;
