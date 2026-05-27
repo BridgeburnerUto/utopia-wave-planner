@@ -53,95 +53,143 @@ function claimAction(slot, type) {
 
 /**
  * Pure function: given a province, return an ordered attack plan.
- * Returns {attacks, totalGenerals, gensHome, best, reason}
+ *
+ * Key mechanics:
+ *  - sentOff = gens × (aOff / gensHome)   — scales by gens HOME, NOT max-5
+ *  - No hard NW cutoff; all targets are hittable, sorted by NW quality
+ *  - Greedy: use minimum gens per attack to maximise attack count
+ *  - Leftover gens that can't start a new attack are bundled onto the last attack
+ *  - Second attack on same target gets a SoD reminder
+ *
+ * Returns {attacks, gensHome, best, gensLeft, homeOffRemaining, reason}
  */
 function calcAttacks(prov) {
-  // Wave targets: all provinces assigned to current wave or pre-plan
+  // ── Collect wave targets ─────────────────────────────────────────────────────
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => ({
-      province: { slot: '['+p.slot+']', rawSlot: p.slot, name: p.name, race: p.race,
-                  requiredOps:   S.provinces[p.slot]?.requiredOps   || [],
-                  notes:         S.provinces[p.slot]?.notes         || '',
-                  needsRaze:     S.provinces[p.slot]?.needsRaze     || false,
-                  needsMassacre: S.provinces[p.slot]?.needsMassacre || false },
+      province: {
+        slot: '['+p.slot+']', rawSlot: p.slot, name: p.name, race: p.race,
+        requiredOps:   S.provinces[p.slot]?.requiredOps   || [],
+        notes:         S.provinces[p.slot]?.notes         || '',
+        needsRaze:     S.provinces[p.slot]?.needsRaze     || false,
+        needsMassacre: S.provinces[p.slot]?.needsMassacre || false,
+      },
       waveName: S.provinces[p.slot]?.wave === 'current' ? 'Current Wave' : 'Pre-Plan',
     })) : [];
   if (!waveTargets.length) return { attacks: [], reason: 'no_targets' };
 
-  const aOff        = _eff(prov.name, 'off',  prov.som?.offPointsHome || 0);
-  const aNW         = _eff(prov.name, 'nw',   prov.networth || 0);
-  const gensHome    = _eff(prov.name, 'gens', prov.som?.standingArmy?.generals ?? prov.sot?.generals ?? 5);
-  const totalGenerals = 5; // standard max
+  const aOff     = _eff(prov.name, 'off',  prov.som?.offPointsHome || 0);
+  const aNW      = _eff(prov.name, 'nw',   prov.networth || 0);
+  const gensHome = _eff(prov.name, 'gens', prov.som?.standingArmy?.generals ?? prov.sot?.generals ?? 5);
 
-  if (!aOff) return { attacks: [], reason: 'no_off' };
+  if (!aOff)     return { attacks: [], reason: 'no_off' };
+  if (!gensHome) return { attacks: [], reason: 'no_gens' };
 
-  // Score each wave target
-  const scored = waveTargets.map(item => {
-    const tp   = pd(item.province.slot);
-    const tDef = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
-    const tNW  = tp?.networth || aNW || 1;
-    const nwOk = canHit(aNW, tNW);
-    const away = tp?.som?.armiesAway?.length > 0;
-    const pct  = tDef > 0 ? aOff / tDef : 0;
-    const dAge = tp?.calcs?.defPointsSummary?.ageSeconds;
-    const score = (nwOk ? 100 : 0) + (pct > 1.01 ? 80 : 0) + (away ? 30 : 0)
-                + (pct > 1.5 ? 20 : pct > 1.2 ? 10 : 0) - (tDef / 10000);
-    return { item, tp, tDef, tNW, nwOk, away, breaks: pct > 1.01, pct, dAge, score, waveName: item.waveName };
-  }).sort((a, b) => b.score - a.score);
+  // CORRECT formula: offense per general = total_home_offense / generals_home
+  const offPerGen = aOff / gensHome;
 
-  const best = scored.find(t => t.nwOk && t.breaks) || scored.find(t => t.nwOk) || scored[0];
-  if (!best) return { attacks: [], reason: 'no_range' };
-
-  /** Fewest generals needed to break a target (simplified linear scaling model) */
-  function minGens(off, def, maxG) {
-    if (!def || !off) return maxG;
-    for (let n = 1; n <= maxG; n++) {
-      if (off * (n / maxG) > def * 1.01) return n;
-    }
-    return maxG;
+  /** Fewest generals needed to break tDef with at most gensAvail generals */
+  function minGens(tDef, gensAvail) {
+    if (!tDef) return 1;
+    return Math.min(Math.ceil((tDef * 1.01) / offPerGen), gensAvail);
   }
 
-  const breakable = scored.filter(t => t.nwOk && t.breaks);
+  /**
+   * NW quality score — NO hard cutoff, any target is hittable.
+   * 3 = optimal (90–110%), 2 = good (75–133%), 1 = marginal (outside 75–133%)
+   */
+  function nwQuality(tNW) {
+    if (!aNW || !tNW) return 1;
+    const r = aNW / tNW;
+    if (r >= 0.90 && r <= 1.10) return 3;
+    if (r >= 0.75 && r <= 1.33) return 2;
+    return 1;
+  }
 
-  if (!breakable.length) {
-    // Can't break anything clean — show best option with a warning
-    const mg = minGens(aOff, best.tDef, totalGenerals);
+  // ── Score all targets ────────────────────────────────────────────────────────
+  const scored = waveTargets.map(item => {
+    const tp      = pd(item.province.slot);
+    const tDef    = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
+    const tNW     = tp?.networth || 0;
+    const nwQ     = nwQuality(tNW);
+    const away    = tp?.som?.armiesAway?.length > 0;
+    const dAge    = tp?.calcs?.defPointsSummary?.ageSeconds;
+    const mg      = minGens(tDef, gensHome);
+    const canBreak = (mg * offPerGen) > (tDef * 1.01);
+    // Priority: NW quality > breakability > army away; penalise very high def
+    const score   = nwQ * 100 + (canBreak ? 80 : 0) + (away ? 30 : 0) - (tDef / 10000);
+    return { item, tp, tDef, tNW, nwQ, nwOk: nwQ >= 2, away, breaks: canBreak, dAge, score, waveName: item.waveName };
+  }).sort((a, b) => b.score - a.score);
+
+  const best = scored[0];
+  if (!best) return { attacks: [], reason: 'no_range' };
+
+  // If nothing is breakable at all, return a warning card
+  if (!scored.some(t => t.breaks)) {
+    const mg      = minGens(best.tDef, gensHome);
+    const sentOff = mg * offPerGen;
     return {
       attacks: [{
-        n: 1, target: best, gens: mg, result: 'marginal',
-        pct: Math.round(best.pct * 100),
-        note: 'Cannot cleanly break — consider waiting for enemy army to return or fresher intel',
+        n: 1, target: best, gens: mg, sentOff, result: 'marginal',
+        pct: Math.round(sentOff / (best.tDef || 1) * 100),
+        note: 'Cannot cleanly break any target — check intel age, or wait for enemy armies to return',
       }],
-      prov, totalGenerals, gensHome, best,
+      prov, gensHome, best,
+      gensLeft: gensHome - mg, homeOffRemaining: (gensHome - mg) * offPerGen,
     };
   }
 
-  // Greedy: assign generals across up to 5 attacks cycling through breakable targets
-  const attacks = [];
-  let gensAvailable = gensHome;
-  const cycleTargets = [...breakable];
+  // ── Greedy: maximise attacks, minimum gens each ──────────────────────────────
+  const attacks  = [];
+  let gensLeft   = gensHome;
+  const hitCount = {}; // rawSlot → times targeted, for SoD reminders
 
-  for (let i = 0; i < Math.min(5, Math.max(gensAvailable, 1)); i++) {
-    const t          = cycleTargets[i % cycleTargets.length];
-    const mg         = minGens(aOff, t.tDef, totalGenerals);
-    const actualGens = Math.min(mg, gensAvailable);
-    const scaledOff  = aOff * (actualGens / totalGenerals);
-    attacks.push({
-      n:         attacks.length + 1,
-      target:    t,
-      gens:      actualGens,
-      minGens:   mg,
-      result:    scaledOff > t.tDef * 1.01 ? 'yes' : 'close',
-      pct:       Math.round(scaledOff / (t.tDef || 1) * 100),
-      scaledOff,
-      note:      i > 0 ? 'Send after previous attack is away' : null,
+  for (let iter = 0; iter < 20 && gensLeft > 0; iter++) {
+    // Best target we can cleanly break with remaining gens
+    const t = scored.find(c => {
+      const mg = minGens(c.tDef, gensLeft);
+      return (mg * offPerGen) > (c.tDef * 1.01);
     });
-    gensAvailable -= actualGens;
-    if (gensAvailable <= 0) break;
+
+    if (!t) {
+      // No breakable target remains — bundle leftover gens onto last attack
+      if (attacks.length > 0) {
+        const last     = attacks[attacks.length - 1];
+        last.gens     += gensLeft;
+        last.sentOff   = last.gens * offPerGen;
+        last.pct       = Math.round(last.sentOff / (last.target.tDef || 1) * 100);
+        last.bundleNote = `+${gensLeft} extra gen${gensLeft > 1 ? 's' : ''} bundled — not enough offense left for a new attack`;
+      }
+      gensLeft = 0;
+      break;
+    }
+
+    const mg      = minGens(t.tDef, gensLeft);
+    const sentOff = mg * offPerGen;
+    const rs      = t.item.province.rawSlot;
+    hitCount[rs]  = (hitCount[rs] || 0) + 1;
+    gensLeft     -= mg;
+
+    attacks.push({
+      n:          attacks.length + 1,
+      target:     t,
+      gens:       mg,
+      sentOff,
+      result:     'yes',
+      pct:        Math.round(sentOff / (t.tDef || 1) * 100),
+      sodNote:    hitCount[rs] > 1
+                    ? `Take a fresh SoD on ${t.item.province.name} before sending this attack`
+                    : null,
+      waveName:   t.waveName,
+    });
   }
 
-  return { attacks, prov, totalGenerals, gensHome, best };
+  return {
+    attacks, prov, gensHome, best,
+    gensLeft,
+    homeOffRemaining: gensLeft * offPerGen,
+  };
 }
 
 function renderPlayer() {
@@ -153,7 +201,7 @@ function _buildPlayer() {
   if (!S.playerProv)      return _buildProvPicker();
 
   const prov = S.playerProv;
-  const { attacks, totalGenerals, gensHome, reason } = calcAttacks(prov);
+  const { attacks, gensHome, gensLeft, homeOffRemaining, reason } = calcAttacks(prov);
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => ({
@@ -166,7 +214,7 @@ function _buildPlayer() {
     })) : [];
   const aOff        = _eff(prov.name, 'off',  prov.som?.offPointsHome || 0);
 
-  let h = _playerHeader(prov, aOff, gensHome, totalGenerals, waveTargets.length);
+  let h = _playerHeader(prov, aOff, gensHome, waveTargets.length);
 
   if (!waveTargets.length) {
     return h + `<div class="watk-notarget">// No wave targets assigned yet<br>
@@ -177,8 +225,8 @@ function _buildPlayer() {
       <span style="font-size:17px">SoM data needed to calculate attacks</span></div>`;
   }
   if (!attacks.length) {
-    return h + `<div class="watk-notarget">// No valid targets in NW range<br>
-      <span style="font-size:17px">Your NW (${fK(prov.networth)}) doesn't overlap with any wave target</span></div>`;
+    return h + `<div class="watk-notarget">// No attack plan generated<br>
+      <span style="font-size:17px">No wave targets found — check wave assignments in the War Board tab</span></div>`;
   }
 
   // Group attacks by wave name
@@ -199,8 +247,16 @@ function _buildPlayer() {
     </button>
   </div>`;
   Object.entries(byWave).forEach(([wave, list]) => {
-    h += _buildAttackCard(wave, list, aOff, totalGenerals);
+    h += _buildAttackCard(wave, list);
   });
+
+  if (gensLeft > 0 && homeOffRemaining > 0) {
+    h += `<div style="margin:10px 0;padding:8px 12px;background:#1a2828;border:1px solid #617070;
+                      border-radius:3px;font-family:monospace;font-size:17px;color:#7a9090">
+      🏠 ${gensLeft} gen${gensLeft > 1 ? 's' : ''} remaining home
+      — ${fK(Math.round(homeOffRemaining))} off available for ambush / defense
+    </div>`;
+  }
 
   h += _buildContextTable(waveTargets, prov, aOff);
   return h;
@@ -232,7 +288,7 @@ function _buildProvPicker() {
     </div>`;
 }
 
-function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
+function _playerHeader(prov, aOff, gensHome, targetCount) {
   const genColor = gensHome >= 3 ? '#60C040' : gensHome >= 1 ? '#e09040' : '#E05050';
   const ms = loadManual(prov.name);  // single localStorage read for the whole header
   const apiOff  = prov.som?.offPointsHome || 0;
@@ -292,14 +348,14 @@ function _playerHeader(prov, aOff, gensHome, totalGenerals, targetCount) {
     <div class="watk-summary">
       <div class="watk-sstat"><div class="l">Off Home</div><div class="v">${fK(aOff)}</div></div>
       <div class="watk-sstat"><div class="l">Generals Home</div>
-        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:19px;color:#7a9090"> / ${totalGenerals}</span></div>
+        <div class="v" style="color:${genColor}">${gensHome}<span style="font-size:19px;color:#7a9090"> / 5</span></div>
       </div>
       <div class="watk-sstat"><div class="l">Own NW</div><div class="v">${fK(aOff ? (ms.nw || apiNW) : 0)}</div></div>
       <div class="watk-sstat"><div class="l">Targets Set</div><div class="v">${targetCount}</div><div class="s">by war leader</div></div>
     </div>`;
 }
 
-function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
+function _buildAttackCard(wave, atkList) {
   let h = `
     <div class="watk-card">
       <div class="watk-header">
@@ -318,7 +374,7 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     const genColor  = atk.gens <= 2 ? '#60C040' : atk.gens <= 3 ? '#e09040' : '#ffffff';
     const resCls    = atk.result === 'yes' ? 'watk-yes' : atk.result === 'close' ? 'watk-cl' : 'watk-no';
     const resLabel  = atk.result === 'yes' ? 'BREAKS' : atk.result === 'close' ? 'CLOSE' : 'RISKY';
-    const sentOff   = atk.scaledOff || aOff * (atk.gens / totalGenerals);
+    const sentOff   = atk.sentOff || 0;
     const rs        = t.item.province.rawSlot;
     const razeClaim = claims['raze_'     + rs];
     const massClaim = claims['massacre_' + rs];
@@ -334,7 +390,9 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
           <div class="watk-detail">
             ${fK(t.tDef)} def · ${fK(sentOff)} off sent · ${atk.pct}% ratio
             ${da != null ? ` · intel <span class="${aC(da)}">${fA(da)}</span> old` : ''}
-            ${atk.note ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
+            ${atk.note       ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
+            ${atk.sodNote    ? `<br><span style="color:#ffd400;font-weight:700">⚠ ${esc(atk.sodNote)}</span>` : ''}
+            ${atk.bundleNote ? `<br><span style="color:#7a9090;font-style:italic">ℹ ${esc(atk.bundleNote)}</span>` : ''}
           </div>
           ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
           ${t.item.province.notes ? `<div style="margin-top:4px;font-size:17px;color:#ffffff;background:#2b3333;padding:4px 6px;border-radius:2px;border-left:2px solid #ffd400">${esc(t.item.province.notes)}</div>` : ''}
@@ -381,10 +439,14 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const tp    = pd(item.province.slot);
     const tDef  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
     const tNW   = tp?.networth || 0;
-    const nwOk  = canHit(aNW, tNW);
-    const pct   = tDef > 0 ? Math.round(aOff / tDef * 100) : 0;
     const away  = tp?.som?.armiesAway?.length > 0;
-    const cls   = !nwOk ? 'wmno' : aOff > tDef * 1.01 ? 'wmyes' : 'wmcl';
+    // NW quality (no hard cutoff — any target is hittable)
+    const nwQ   = (!aNW || !tNW) ? 1
+                : (() => { const r = aNW / tNW; return r >= 0.90 && r <= 1.10 ? 3 : r >= 0.75 && r <= 1.33 ? 2 : 1; })();
+    const nwLabel = nwQ === 3 ? '✓ optimal' : nwQ === 2 ? '✓ good' : '~ marginal';
+    const nwCls   = nwQ === 3 ? 'wmyes' : nwQ === 2 ? 'wmyes' : 'wmcl';
+    const pct   = tDef > 0 && aOff > 0 ? Math.round(aOff / tDef * 100) : 0;
+    const breaksCls = !aOff || !tDef ? 'wmcl' : aOff > tDef * 1.01 ? 'wmyes' : 'wmno';
     const rs    = item.province.rawSlot;
     const razeClaim = ctxClaims['raze_' + rs];
     const massClaim = ctxClaims['massacre_' + rs];
@@ -396,8 +458,8 @@ function _buildContextTable(waveTargets, prov, aOff) {
       <td style="padding:6px 8px;font-weight:600">${esc(item.province.name)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tDef)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tNW)}</td>
-      <td style="padding:6px 8px"><span class="wmatch ${cls}">${pct}%</span></td>
-      <td style="padding:6px 8px"><span class="wmatch ${nwOk ? 'wmyes' : 'wmno'}">${nwOk ? '✓ in range' : '✗ out'}</span></td>
+      <td style="padding:6px 8px"><span class="wmatch ${breaksCls}">${pct}%</span></td>
+      <td style="padding:6px 8px"><span class="wmatch ${nwCls}">${nwLabel}</span></td>
       <td style="padding:6px 8px">${away ? '<span style="color:#60C040;font-family:monospace;font-size:17px">AWAY</span>' : '—'}</td>
       <td style="padding:6px 8px">${taskHtml}</td>
     </tr>`;
