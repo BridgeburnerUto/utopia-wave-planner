@@ -509,10 +509,14 @@ window.__wpA = {
 
   /**
    * Refresh enemy NW for all wave-assigned target provinces.
-   * Fetches each province_profile page silently from intel.utopia.site (same
-   * origin — no CORS, no new tabs), posts the HTML to our Cloud Run intel.php
-   * exactly as Munk would, then immediately syncs the IS dump.
-   * War companion picks up fresh NW data on its next auto-refresh (≤90 s).
+   * Re-fetches the enemy kingdom from the IS API (same origin as the bookmarklet —
+   * no CORS issues), which gives the latest NW for ALL enemy provinces at once.
+   * Then immediately syncs the IS dump to Cloud Run so the war companion picks up
+   * fresh NW data on its next auto-refresh (≤90 s).
+   *
+   * Note: province_profile pages live on utopia-game.com — a different origin from
+   * intel.utopia.site — so cross-origin fetching those pages is not possible from
+   * the bookmarklet. Using the IS API is the correct approach.
    */
   async refreshEnemyNW() {
     if (!S.enemy || !S.enemy.provinces) {
@@ -521,9 +525,7 @@ window.__wpA = {
     if (!S.apiEndpoint) {
       setSav('Set API endpoint in Alerts tab first', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
-
-    const [kd, island] = (S.eLoc || '').split(':');
-    if (!kd || !island) {
+    if (!S.eLoc) {
       setSav('Enemy location not set', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
 
@@ -533,43 +535,20 @@ window.__wpA = {
       setSav('No wave targets assigned yet', 'err'); setTimeout(() => setSav('',''), 3000); return;
     }
 
-    setSav('⟳ Fetching NW for ' + targets.length + ' targets…');
-    const postBase = S.apiEndpoint.replace(/\/$/, '') + '/';
-    let ok = 0, fail = 0;
-
-    for (const prov of targets) {
-      const path = '/province_profile/' + kd + '/' + island + '/' + prov.slot;
-      try {
-        const html = await fetch(path).then(r => {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.text();
-        });
-
-        // Extract readable text for data_simple (same as Munk's simple field)
-        const doc    = new DOMParser().parseFromString(html, 'text/html');
-        const simple = (doc.body?.innerText || '').replace(/[ \t]+/g, ' ').trim();
-
-        // POST to Cloud Run intel.php exactly as Munk does
-        const body = new FormData();
-        body.append('prov',        prov.name);
-        body.append('url',         path);
-        body.append('data_simple', simple);
-        body.append('data_html',   html);
-        await fetch(postBase, { method: 'POST', body });
-        ok++;
-      } catch(e) {
-        console.warn('[WavePlanner] NW refresh failed for', prov.name, ':', e.message);
-        fail++;
-      }
+    setSav('⟳ Refreshing enemy NW via IS…');
+    try {
+      // Re-fetch enemy kingdom from the IS API — same origin, always accessible.
+      // This pulls the latest NW for ALL enemy provinces in a single call.
+      await this.loadEnemy(S.eLoc);
+      // Push the fresh data to Cloud Run so the companion sees it within 90 s.
+      await this.syncBackend();
+      renderPlayer(); // Update the attack plan display with fresh NW values
+      setSav('✓ NW refreshed — ' + targets.length + ' wave targets updated', 'ok');
+      setTimeout(() => setSav('', ''), 5000);
+    } catch(e) {
+      setSav('✗ NW refresh failed: ' + e.message, 'err');
+      setTimeout(() => setSav('', ''), 4000);
     }
-
-    // Push fresh IS dump so companion sees updated data immediately
-    await this.syncBackend();
-
-    const msg = '✓ NW refreshed: ' + ok + '/' + targets.length
-              + (fail ? '  (' + fail + ' failed — check console)' : '');
-    setSav(msg, 'ok');
-    setTimeout(() => setSav('', ''), 6000);
   },
 
   async clearPlan() {
@@ -618,7 +597,7 @@ window.__wpA = {
   kddbTagBack:    () => { _kddbView = 'main'; renderKddb(); },
   kddbTagConfirm: (snapId, identityId) => _kddbConfirm(snapId, identityId),
 
-  // Manual stat overrides for My Orders tab
+  // Manual stat overrides for My Orders tab (setManualStat defined in player.js)
   setManualStat,
-  refreshEnemyNW,
+  // Note: refreshEnemyNW is defined as an async method above — do NOT add a shorthand here.
 };
