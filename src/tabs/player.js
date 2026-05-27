@@ -32,6 +32,25 @@ function _eff(provName, field, apiVal) {
   return ms[field] != null ? ms[field] : (apiVal || 0);
 }
 
+// ── Raze / Massacre claim storage (per war, per device) ──────────────────────
+// Stored as { "raze_18": "My Province", "massacre_5": "My Province" }
+// Key is scoped to enemy location so it resets each new war automatically.
+
+function _claimKey() { return 'wc_raze_' + (S.eLoc || ''); }
+function loadClaims() {
+  try { return JSON.parse(localStorage.getItem(_claimKey()) || '{}'); }
+  catch(e) { return {}; }
+}
+
+/** Toggle a raze/massacre claim for a slot. Called from inline onclick. */
+function claimAction(slot, type) {
+  const c = loadClaims();
+  const k = type + '_' + slot;
+  if (c[k]) delete c[k]; else c[k] = S.playerProv?.name || '✓';
+  localStorage.setItem(_claimKey(), JSON.stringify(c));
+  renderPlayer();
+}
+
 /**
  * Pure function: given a province, return an ordered attack plan.
  * Returns {attacks, totalGenerals, gensHome, best, reason}
@@ -41,9 +60,11 @@ function calcAttacks(prov) {
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => ({
-      province: { slot: '['+p.slot+']', name: p.name, race: p.race,
-                  requiredOps: S.provinces[p.slot]?.requiredOps || [],
-                  notes: S.provinces[p.slot]?.notes || '' },
+      province: { slot: '['+p.slot+']', rawSlot: p.slot, name: p.name, race: p.race,
+                  requiredOps:   S.provinces[p.slot]?.requiredOps   || [],
+                  notes:         S.provinces[p.slot]?.notes         || '',
+                  needsRaze:     S.provinces[p.slot]?.needsRaze     || false,
+                  needsMassacre: S.provinces[p.slot]?.needsMassacre || false },
       waveName: S.provinces[p.slot]?.wave === 'current' ? 'Current Wave' : 'Pre-Plan',
     })) : [];
   if (!waveTargets.length) return { attacks: [], reason: 'no_targets' };
@@ -136,9 +157,11 @@ function _buildPlayer() {
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => ({
-      province: { slot: '['+p.slot+']', name: p.name, race: p.race,
-                  requiredOps: S.provinces[p.slot]?.requiredOps || [],
-                  notes: S.provinces[p.slot]?.notes || '' },
+      province: { slot: '['+p.slot+']', rawSlot: p.slot, name: p.name, race: p.race,
+                  requiredOps:   S.provinces[p.slot]?.requiredOps   || [],
+                  notes:         S.provinces[p.slot]?.notes         || '',
+                  needsRaze:     S.provinces[p.slot]?.needsRaze     || false,
+                  needsMassacre: S.provinces[p.slot]?.needsMassacre || false },
       waveName: S.provinces[p.slot]?.wave === 'current' ? 'Current Wave' : 'Pre-Plan',
     })) : [];
   const aOff        = _eff(prov.name, 'off',  prov.som?.offPointsHome || 0);
@@ -285,6 +308,8 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
       </div>
       <div class="watk-body">`;
 
+  const claims = loadClaims();
+
   atkList.forEach(atk => {
     const t         = atk.target;
     const away      = t.tp?.som?.armiesAway?.length > 0;
@@ -294,6 +319,9 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
     const resCls    = atk.result === 'yes' ? 'watk-yes' : atk.result === 'close' ? 'watk-cl' : 'watk-no';
     const resLabel  = atk.result === 'yes' ? 'BREAKS' : atk.result === 'close' ? 'CLOSE' : 'RISKY';
     const sentOff   = atk.scaledOff || aOff * (atk.gens / totalGenerals);
+    const rs        = t.item.province.rawSlot;
+    const razeClaim = claims['raze_'     + rs];
+    const massClaim = claims['massacre_' + rs];
 
     h += `
       <div class="watk-row">
@@ -310,6 +338,26 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
           </div>
           ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
           ${t.item.province.notes ? `<div style="margin-top:4px;font-size:17px;color:#ffffff;background:#2b3333;padding:4px 6px;border-radius:2px;border-left:2px solid #ffd400">${esc(t.item.province.notes)}</div>` : ''}
+          ${t.item.province.needsRaze ? `
+          <div class="watk-task${razeClaim ? ' claimed' : ''}">
+            <span>🔥</span>
+            <span style="font-weight:700;color:${razeClaim ? '#ffd400' : '#E05050'}">${razeClaim ? 'RAZE — you claimed this' : 'RAZE NEEDED'}</span>
+            <label class="watk-claim">
+              <input type="checkbox" ${razeClaim ? 'checked' : ''} onchange="__wpA.claimAction(${rs},'raze')"
+                style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400">
+              <span style="font-size:17px;color:${razeClaim ? '#ffd400' : '#7a9090'}">${razeClaim ? 'unclaim' : 'claim'}</span>
+            </label>
+          </div>` : ''}
+          ${t.item.province.needsMassacre ? `
+          <div class="watk-task${massClaim ? ' claimed' : ''}">
+            <span>💀</span>
+            <span style="font-weight:700;color:${massClaim ? '#ffd400' : '#E05050'}">${massClaim ? 'MASSACRE — you claimed this' : 'MASSACRE NEEDED'}</span>
+            <label class="watk-claim">
+              <input type="checkbox" ${massClaim ? 'checked' : ''} onchange="__wpA.claimAction(${rs},'massacre')"
+                style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400">
+              <span style="font-size:17px;color:${massClaim ? '#ffd400' : '#7a9090'}">${massClaim ? 'unclaim' : 'claim'}</span>
+            </label>
+          </div>` : ''}
         </div>
         <div class="watk-gen">
           <div class="watk-gen-num" style="color:${genColor}">${atk.gens}</div>
@@ -326,6 +374,9 @@ function _buildAttackCard(wave, atkList, aOff, totalGenerals) {
 function _buildContextTable(waveTargets, prov, aOff) {
   // Use effective NW (manual override wins over API) for range check — same as calcAttacks()
   const aNW = _eff(prov.name, 'nw', prov.networth || 0);
+  const ctxClaims = loadClaims();
+  const thStyle   = 'text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070';
+
   const rows = waveTargets.map(item => {
     const tp    = pd(item.province.slot);
     const tDef  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
@@ -334,6 +385,13 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const pct   = tDef > 0 ? Math.round(aOff / tDef * 100) : 0;
     const away  = tp?.som?.armiesAway?.length > 0;
     const cls   = !nwOk ? 'wmno' : aOff > tDef * 1.01 ? 'wmyes' : 'wmcl';
+    const rs    = item.province.rawSlot;
+    const razeClaim = ctxClaims['raze_' + rs];
+    const massClaim = ctxClaims['massacre_' + rs];
+    const taskHtml  = [
+      item.province.needsRaze     ? `<span style="color:${razeClaim?'#ffd400':'#E05050'};font-weight:700">🔥${razeClaim?' ✓':''}</span>` : '',
+      item.province.needsMassacre ? `<span style="color:${massClaim?'#ffd400':'#E05050'};font-weight:700">💀${massClaim?' ✓':''}</span>` : '',
+    ].filter(Boolean).join(' ') || '—';
     return `<tr style="border-bottom:1px solid #617070">
       <td style="padding:6px 8px;font-weight:600">${esc(item.province.name)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tDef)}</td>
@@ -341,6 +399,7 @@ function _buildContextTable(waveTargets, prov, aOff) {
       <td style="padding:6px 8px"><span class="wmatch ${cls}">${pct}%</span></td>
       <td style="padding:6px 8px"><span class="wmatch ${nwOk ? 'wmyes' : 'wmno'}">${nwOk ? '✓ in range' : '✗ out'}</span></td>
       <td style="padding:6px 8px">${away ? '<span style="color:#60C040;font-family:monospace;font-size:17px">AWAY</span>' : '—'}</td>
+      <td style="padding:6px 8px">${taskHtml}</td>
     </tr>`;
   }).join('');
 
@@ -348,12 +407,13 @@ function _buildContextTable(waveTargets, prov, aOff) {
     <div style="margin-top:20px" class="wsech">// ALL WAVE TARGETS (context)</div>
     <table style="width:100%;border-collapse:collapse;font-size:17px">
       <thead><tr>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Province</th>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Def Home</th>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">NW</th>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Off/Def</th>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">NW Range</th>
-        <th style="text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070">Army</th>
+        <th style="${thStyle}">Province</th>
+        <th style="${thStyle}">Def Home</th>
+        <th style="${thStyle}">NW</th>
+        <th style="${thStyle}">Off/Def</th>
+        <th style="${thStyle}">NW Range</th>
+        <th style="${thStyle}">Army</th>
+        <th style="${thStyle}">Task</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

@@ -154,6 +154,9 @@ const CSS = `
 .watk-cl{background:rgba(180,100,20,.12);color:#e09040;border:1px solid #c87030}
 .watk-no{background:rgba(160,30,30,.12);color:#E05050;border:1px solid #8B1414}
 .watk-ops{margin-top:5px;display:flex;flex-wrap:wrap;gap:4px}
+.watk-task{margin-top:6px;padding:5px 8px;background:rgba(224,80,80,.07);border:1px solid rgba(224,80,80,.22);border-radius:2px;display:flex;align-items:center;gap:8px;font-size:17px}
+.watk-task.claimed{background:rgba(255,212,0,.06);border-color:rgba(255,212,0,.22)}
+.watk-claim{display:flex;align-items:center;gap:5px;margin-left:auto;cursor:pointer}
 .watk-summary{background:#2b3333;border:1px solid #617070;border-radius:4px;padding:16px 18px;margin-bottom:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
 .watk-sstat .l{font-size:17px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
 .watk-sstat .v{font-size:22px;color:#ffd400}

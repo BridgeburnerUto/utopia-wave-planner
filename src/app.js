@@ -601,7 +601,8 @@ window.__wpA = {
   kddbTagBack:    () => { _kddbView = 'main'; renderKddb(); },
   kddbTagConfirm: (snapId, identityId) => _kddbConfirm(snapId, identityId),
 
-  // Manual stat overrides for My Orders tab (setManualStat defined in player.js)
+  // Manual stat overrides + raze/massacre claims (defined in player.js)
   setManualStat,
+  claimAction,
   // Note: refreshEnemyNW is defined as an async method above — do NOT add a shorthand here.
 };
