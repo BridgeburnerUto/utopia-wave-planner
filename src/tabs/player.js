@@ -107,10 +107,12 @@ function calcAttacks(prov) {
     return 1;
   }
 
-  // ── Enrich all targets (sorted by def ASC — lowest def = fewest gens = most attacks) ──
-  // NW quality is for display only; it does NOT influence selection order.
-  // The war leader chose these targets; our job is to hit as many as possible.
-  const scored = waveTargets.map(item => {
+  // ── Enrich all targets, split into in-range and out-of-range ───────────────────
+  // Within each group, sort by tDef ASC (lowest def = fewest gens = most attacks).
+  // NW range is the primary filter: in-range targets (75–133%) first.
+  // Out-of-range targets are only used with leftover gens, or as a last resort
+  // when own offense is too low to break anything in range.
+  const enriched = waveTargets.map(item => {
     const tp       = pd(item.province.slot);
     const tDef     = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
     const tNW      = tp?.networth || 0;
@@ -120,9 +122,13 @@ function calcAttacks(prov) {
     const mg       = minGens(tDef, gensHome);
     const canBreak = (mg * offPerGen) > (tDef * 1.01);
     return { item, tp, tDef, tNW, nwQ, nwOk: nwQ >= 2, away, breaks: canBreak, dAge, waveName: item.waveName };
-  }).sort((a, b) => a.tDef - b.tDef); // ASC: smallest def first
+  });
+  // Keep a flat scored list (for context table + fallback display)
+  const scored   = [...enriched].sort((a, b) => a.tDef - b.tDef);
+  const inRange  = enriched.filter(t => t.nwQ >= 2).sort((a, b) => a.tDef - b.tDef);
+  const outRange = enriched.filter(t => t.nwQ  < 2).sort((a, b) => a.tDef - b.tDef);
 
-  const best = scored[0];
+  const best = inRange[0] || scored[0];
   if (!best) return { attacks: [], reason: 'no_range' };
 
   // If nothing is breakable at all, show a warning card for the easiest target
@@ -140,8 +146,12 @@ function calcAttacks(prov) {
     };
   }
 
-  // ── Greedy: lowest-def target first, prefer unvisited, then cycle ────────────
-  // This maximises total attack count (= most offense used = most land gained).
+  // ── Greedy: in-range first (by def ASC), out-of-range only with spare gens ───
+  // Priority order each iteration:
+  //   1. Unvisited in-range breakable  (cover all war-leader in-range targets first)
+  //   2. Visited   in-range breakable  (cycle back if gens remain)
+  //   3. Unvisited out-of-range breakable  (spare gens / fallback)
+  //   4. Visited   out-of-range breakable  (spare gens, cycling)
   const attacks  = [];
   let gensLeft   = gensHome;
   const hitCount = {}; // rawSlot → times targeted, for SoD reminders
@@ -151,10 +161,12 @@ function calcAttacks(prov) {
   }
 
   for (let iter = 0; iter < 20 && gensLeft > 0; iter++) {
-    // Prefer unvisited breakable targets first (cover all war-leader targets before cycling),
-    // then fall back to already-hit breakable targets.
-    const t = scored.find(c => !hitCount[c.item.province.rawSlot] && canBreakWith(c, gensLeft))
-           || scored.find(c => canBreakWith(c, gensLeft));
+    const rs = c => c.item.province.rawSlot;
+    const t =
+      inRange.find( c => !hitCount[rs(c)] && canBreakWith(c, gensLeft)) ||
+      inRange.find( c =>                     canBreakWith(c, gensLeft)) ||
+      outRange.find(c => !hitCount[rs(c)] && canBreakWith(c, gensLeft)) ||
+      outRange.find(c =>                     canBreakWith(c, gensLeft));
 
     if (!t) {
       // No breakable target remains — bundle leftover gens onto last attack
