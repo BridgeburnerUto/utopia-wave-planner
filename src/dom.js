@@ -32,6 +32,8 @@ function buildOverlay() {
     </select>
   </div>
   <button class="wb g" id="__wpsavebtn" onclick="__wpA.save()">💾 Save</button>
+  <button class="wb" id="__wpsynbtn" onclick="__wpA.syncBackend()" title="Push current data to the companion app">⟳ Sync</button>
+  <button class="wb" id="__wpnwbtn"  onclick="__wpA.refreshEnemyNW()" title="Re-fetch enemy kingdom NW from IS and sync — use before a wave to get fresh target NW">⟳ NW</button>
   <button class="wb" onclick="__wpA.refresh()">↻ Refresh</button>
   <button class="wb r" onclick="document.getElementById('__wp_overlay').style.display='none'">✕ Close</button>
 </div>
