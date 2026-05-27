@@ -159,14 +159,14 @@ function calcAttacks(prov) {
   function canBreakWith(c, gens) {
     return (minGens(c.tDef, gens) * offPerGen) > (c.tDef * 1.01);
   }
+  const slotOf = c => c.item.province.rawSlot; // helper — defined once outside loop
 
   for (let iter = 0; iter < 20 && gensLeft > 0; iter++) {
-    const rs = c => c.item.province.rawSlot;
     const t =
-      inRange.find( c => !hitCount[rs(c)] && canBreakWith(c, gensLeft)) ||
-      inRange.find( c =>                     canBreakWith(c, gensLeft)) ||
-      outRange.find(c => !hitCount[rs(c)] && canBreakWith(c, gensLeft)) ||
-      outRange.find(c =>                     canBreakWith(c, gensLeft));
+      inRange.find( c => !hitCount[slotOf(c)] && canBreakWith(c, gensLeft)) ||
+      inRange.find( c =>                         canBreakWith(c, gensLeft)) ||
+      outRange.find(c => !hitCount[slotOf(c)] && canBreakWith(c, gensLeft)) ||
+      outRange.find(c =>                         canBreakWith(c, gensLeft));
 
     if (!t) {
       // No breakable target remains — bundle leftover gens onto last attack
@@ -183,7 +183,7 @@ function calcAttacks(prov) {
 
     const mg      = minGens(t.tDef, gensLeft);
     const sentOff = mg * offPerGen;
-    const rs      = t.item.province.rawSlot;
+    const rs      = slotOf(t);
     hitCount[rs]  = (hitCount[rs] || 0) + 1;
     gensLeft     -= mg;
 
