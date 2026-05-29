@@ -141,10 +141,12 @@ function calcAttacks(prov) {
       // No survey — simplified fallback
       _rawLS = _land * 25;
     }
-    const _modLS = _rawLS * _racePopMult; // science/honor bonuses not available in SoT
+    const _modLS = _rawLS * _racePopMult; // science/honor bonuses not yet applied
     ownPop = _modLS > 0
       ? Math.min(Math.round(_totalPop / _modLS * 100), 150)
       : null;
+    // DEBUG — remove once sos structure confirmed:
+    console.log('[WP sos]', JSON.stringify(prov.sos), '| ownPop=', ownPop);
   }
 
   if (!aOff)          return { attacks: [], gensHome, attackableGens, ownPop, reason: 'no_off' };
