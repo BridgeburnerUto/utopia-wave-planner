@@ -78,14 +78,19 @@ function _waveDisplayName(wave) {
  * Pure function: given a province, return an ordered attack plan.
  *
  * Key mechanics:
- *  - attackableGens = gensHome - 1  (1 general ALWAYS stays home)
- *  - offPerGen = aOff / gensHome     (proportional scaling)
- *  - Assigned targets (assignedTo includes me) always processed first
- *  - KD pool (unassigned) only with spare gens; pop% strategy determines types
+ *  - attackableGens = gensHome - 1   (1 general ALWAYS stays home)
+ *  - Offense and generals are TWO INDEPENDENT pools:
+ *      offLeft  starts at aOff, depleted by (target_def + 1) per attack
+ *      gensLeft starts at attackableGens, depleted by N per attack
+ *  - Normally 1 general per attack; extra generals only when offLeft ≤ tDef,
+ *    each adds 5% to offense: effective = offLeft × (1 + 0.05×(N−1))
+ *  - Assigned RAZE/MASS → single hit each (war leader flag always honoured)
+ *  - Assigned TM → multi-hit loop with min gens until can't break or gens/off gone
+ *  - KD pool uses remaining gens/off; pop% strategy determines types
  *  - Bloat targets never TM — only raze/mass when flagged by war leader
  *  - Gains estimated for TM attacks using RPNW × RKNW × modifiers
  *
- * Returns {attacks, gensHome, attackableGens, gensLeft, homeOffRemaining,
+ * Returns {attacks, gensHome, attackableGens, gensLeft, offLeft,
  *          ownPop, totalGains, reason}
  */
 function calcAttacks(prov) {
@@ -155,18 +160,22 @@ function calcAttacks(prov) {
   if (!aOff)          return { attacks: [], gensHome, attackableGens, ownPop, reason: 'no_off' };
   if (!attackableGens) return { attacks: [], gensHome, attackableGens, ownPop, reason: 'no_gens' };
 
-  const offPerGen = aOff / gensHome; // proportional: aOff split across gensHome
-
-  // ── Helper: minimum generals needed to break tDef ─────────────────────────
-  function minGens(tDef, gensAvail) {
-    if (!tDef)       return 1;
-    if (!gensAvail)  return 0;
-    return Math.min(Math.ceil((tDef * 1.01) / offPerGen), gensAvail);
+  // ── Helpers: generals and offense are independent pools ───────────────────
+  // Min gens to break tDef given current offLeft:
+  //   1 gen if offLeft > tDef (normal case)
+  //   N gens if extra bonus needed: offLeft × (1 + 0.05×(N−1)) > tDef
+  //   Returns 0 if impossible with gensAvail available
+  function minGensToBreak(tDef, offLeft, gensAvail) {
+    if (!gensAvail || offLeft <= 0) return 0;
+    if (!tDef)                      return 1;
+    if (offLeft > tDef)             return 1;
+    // Need gen bonus: solve offLeft*(1+0.05*(N-1)) > tDef → N > 1+(tDef/offLeft-1)/0.05
+    const n = Math.ceil(1 + (tDef / offLeft - 1) / 0.05);
+    return n <= gensAvail ? n : 0;
   }
 
-  function canBreakWith(enriched, gens) {
-    const mg = minGens(enriched.tDef, gens);
-    return mg > 0 && (mg * offPerGen) > (enriched.tDef * 1.01);
+  function canBreak(tDef, offLeft, gensAvail) {
+    return minGensToBreak(tDef, offLeft, gensAvail) > 0;
   }
 
   // ── NW quality score ───────────────────────────────────────────────────────
@@ -258,7 +267,7 @@ function calcAttacks(prov) {
     const dAge  = tp?.calcs?.defPointsSummary?.ageSeconds;
     const tPop  = tp?.sot?.ppa != null ? Math.min(Math.round(tp.sot.ppa / 25 * 100), 150) : null;
     const nwQ   = nwQuality(tNW);
-    const canBr = canBreakWith({ tDef }, attackableGens);
+    const canBr = canBreak(tDef, aOff, attackableGens); // uses full initial offense for display
     const gains = estimateTMGains(tNW, tLand, tp);
     return { item, tp, tDef, tNW, tLand, tPop, nwQ, away, breaks: canBr, dAge, gains };
   }
@@ -346,26 +355,31 @@ function calcAttacks(prov) {
   const poolRazeMassMax = (ownPop !== null && ownPop >= 70 && ownPop <= 99) ? 1 : Infinity;
   const poolTMMax       = (ownPop !== null && ownPop < 70) ? 2 : Infinity;
 
-  // ── Greedy attack loop ────────────────────────────────────────────────────
+  // ── Attack loop state ─────────────────────────────────────────────────────
   const attacks   = [];
   let gensLeft    = attackableGens;
+  let offLeft     = aOff;                 // depleted by (tDef+1) per attack
   let poolTMCount = 0, poolRMCount = 0;
-  const hitCount  = {}; // rawSlot → hit count for SoD reminders
+  const hitCount  = {};                   // rawSlot → hit count for SoD reminders
 
   function addAttack(enriched, isTM, isPool) {
-    const mg      = minGens(enriched.tDef, gensLeft);
-    const sentOff = mg * offPerGen;
-    const rs      = enriched.item.province.rawSlot;
-    hitCount[rs]  = (hitCount[rs] || 0) + 1;
-    gensLeft     -= mg;
+    const mg = minGensToBreak(enriched.tDef, offLeft, gensLeft);
+    // mg === 0 means can't break — still record as marginal if it's an assigned target
+    const sentOff = mg > 0
+      ? Math.round(offLeft * (1 + 0.05 * (mg - 1)))  // effective off with gen bonus
+      : 0;
+    const rs = enriched.item.province.rawSlot;
+    hitCount[rs] = (hitCount[rs] || 0) + 1;
+    gensLeft     = Math.max(0, gensLeft - mg);
+    offLeft      = Math.max(0, offLeft - (enriched.tDef + 1)); // spend minimum needed
     if (isPool) { if (isTM) poolTMCount++; else poolRMCount++; }
     attacks.push({
       n:          attacks.length + 1,
       target:     enriched,
       gens:       mg,
       sentOff,
-      result:     enriched.breaks ? 'yes' : 'marginal',
-      pct:        Math.round(sentOff / (enriched.tDef || 1) * 100),
+      result:     mg > 0 ? 'yes' : 'marginal',
+      pct:        sentOff > 0 ? Math.round(sentOff / (enriched.tDef || 1) * 100) : 0,
       attackType: isTM ? 'TM' : (enriched.item.province.needsRaze ? 'RAZE' : 'MASS'),
       isAssigned: !isPool,
       gains:      isTM ? enriched.gains : null,
@@ -383,29 +397,29 @@ function calcAttacks(prov) {
 
   // Pass 1A: assigned RAZE / MASS — single hit each, ordered by wave priority
   for (const t of myRM) {
-    if (gensLeft <= 0) break;
+    if (gensLeft <= 0 || offLeft <= 0) break;
     addAttack(t, false, false);  // single hit; addAttack marks result marginal if can't break
   }
 
-  // Pass 1B: assigned TM — use MINIMUM gens per hit, repeat until gens run out or can't break.
-  // Any remaining gens after the loop fall through to the pool pass below.
+  // Pass 1B: assigned TM — min gens per hit, repeat until can't break or resources gone.
+  // Remaining gens/off fall through to the pool pass below.
   for (const t of myTM) {
-    if (gensLeft <= 0) break;
-    if (!canBreakWith(t, gensLeft)) {
-      // Assigned but unbreakable with remaining gens — show as warning, don't loop
+    if (gensLeft <= 0 || offLeft <= 0) break;
+    if (!canBreak(t.tDef, offLeft, gensLeft)) {
+      // Assigned but unbreakable — show as warning, don't loop
       addAttack(t, true, false);
       continue;
     }
-    // Multi-hit: each iteration uses minimum gens to break, leaving extras for the next hit
-    while (gensLeft > 0 && canBreakWith(t, gensLeft)) {
+    // Multi-hit: each iteration uses minimum gens, leaving the rest for another round
+    while (gensLeft > 0 && offLeft > 0 && canBreak(t.tDef, offLeft, gensLeft)) {
       addAttack(t, true, false);
     }
   }
 
-  // Pass 2: pool/opportunity targets (spare gens, pop% strategy applies)
+  // Pass 2: pool/opportunity targets (spare gens/off, pop% strategy applies)
   for (const t of activePool) {
-    if (gensLeft <= 0) break;
-    if (!canBreakWith(t, gensLeft)) continue; // pool: skip unbreakable
+    if (gensLeft <= 0 || offLeft <= 0) break;
+    if (!canBreak(t.tDef, offLeft, gensLeft)) continue; // skip unbreakable
     const aType = attackType(t);
     if (!aType) continue;
     const isTM = aType === 'TM';
@@ -419,7 +433,7 @@ function calcAttacks(prov) {
 
   return {
     attacks, prov, gensHome, attackableGens,
-    gensLeft, homeOffRemaining: gensLeft * offPerGen,
+    gensLeft, offLeft,
     ownPop, totalGains,
     best: myEnriched[0] || poolEnriched[0] || null,
   };
@@ -671,9 +685,8 @@ function _buildAttackCard(wave, atkList) {
             ${da != null ? ` · intel <span class="${aC(da)}">${fA(da)}</span> old` : ''}
             ${gainsNote ? ` · ${gainsNote}` : ''}
             ${tPopNote  ? ` · ${tPopNote}`  : ''}
-            ${atk.note       ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
-            ${atk.sodNote    ? `<br><span style="color:#ffd400;font-weight:700">⚠ ${esc(atk.sodNote)}</span>` : ''}
-            ${atk.bundleNote ? `<br><span style="color:#7a9090;font-style:italic">ℹ ${esc(atk.bundleNote)}</span>` : ''}
+            ${atk.note    ? `<br><span style="color:#e09040">⚠ ${esc(atk.note)}</span>` : ''}
+            ${atk.sodNote ? `<br><span style="color:#ffd400;font-weight:700">⚠ ${esc(atk.sodNote)}</span>` : ''}
           </div>
           ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
           ${t.item.province.notes ? `<div style="margin-top:4px;font-size:17px;color:#ffffff;background:#2b3333;padding:4px 6px;border-radius:2px;border-left:2px solid #ffd400">${esc(t.item.province.notes)}</div>` : ''}
