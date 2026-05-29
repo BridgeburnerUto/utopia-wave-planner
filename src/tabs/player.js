@@ -100,9 +100,9 @@ function calcAttacks(prov) {
 
   // Own pop% — Utopia formula:
   //   Current Population = peasants + totalTroops + thieves + wizards
-  //   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*50
+  //   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35
   //   Pop%               = Current Population / Raw Living Space * 100
-  // (Race/science/honor bonuses skipped — not in SoT; Homes capacity = 50/acre assumed)
+  // (Race/science/honor bonuses skipped — not in SoT; Homes = 25 built + 10 bonus = 35/acre)
   // sot.ppa is peasants-per-acre only, NOT total people — don't use it directly.
   const _sot  = prov.sot || {};
   const _land = prov.land || _sot.land || 0;
@@ -125,7 +125,7 @@ function calcAttacks(prov) {
       const _barrenAcres = _land * _barrenPct / 100;
       const _homesAcres  = _land * _homesPct  / 100;
       const _builtAcres  = _land - _barrenAcres - _homesAcres;
-      _livingSpace = _builtAcres * 25 + _barrenAcres * 15 + _homesAcres * 50;
+      _livingSpace = _builtAcres * 25 + _barrenAcres * 15 + _homesAcres * 35; // Homes = 25 built + 10 bonus
     } else {
       // No survey — simplified fallback (all built, no homes)
       _livingSpace = _land * 25;
