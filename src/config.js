@@ -190,4 +190,24 @@ const CSS = `
 .writ-drop-l{color:#7a9090;font-size:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 #__wprit{display:flex;gap:10px;align-items:center}
 @keyframes __wpspin{to{transform:rotate(360deg)}}
+/* ── Attack type badges ─────────────────────────────────────────────────── */
+.watk-type{font-size:13px;padding:2px 7px;border-radius:2px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:inline-block;margin-right:4px}
+.watk-type-tm{background:rgba(40,80,160,.15);color:#80a8f0;border:1px solid #304880}
+.watk-type-rz{background:rgba(200,112,48,.18);color:#e09040;border:1px solid #c87030}
+.watk-type-ms{background:rgba(160,30,30,.18);color:#E05050;border:1px solid #8B1414}
+/* ── Attack source badges ───────────────────────────────────────────────── */
+.watk-src{font-size:13px;padding:2px 7px;border-radius:2px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:inline-block;margin-right:4px}
+.watk-src-a{background:rgba(255,212,0,.08);color:#ffd400;border:1px solid rgba(255,212,0,.3)}
+.watk-src-p{background:rgba(97,112,112,.12);color:#7a9090;border:1px solid #617070}
+/* ── Bloat row tint (board table) ───────────────────────────────────────── */
+.wp-bloat-row{background:rgba(100,60,130,.07)!important}
+/* ── Assignment picker ──────────────────────────────────────────────────── */
+.wp-assign-wrap{position:relative;display:inline-block;vertical-align:top}
+.wp-assign-btn{cursor:pointer;font-size:15px;padding:3px 8px;border:1px solid #617070;border-radius:3px;background:#2b3333;color:#7a9090;white-space:nowrap;min-width:60px;display:block}
+.wp-assign-btn:hover{border-color:#ffd400;color:#b8c8c8}
+.wp-assign-drop{position:absolute;z-index:9999;background:#3c4545;border:1px solid #617070;border-radius:4px;padding:6px;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.8);top:calc(100% + 2px);left:0}
+.wp-assign-drop-hd{display:flex;align-items:center;justify-content:space-between;padding:3px 5px 7px;border-bottom:1px solid #617070;margin-bottom:5px}
+.wp-assign-item{display:flex;align-items:center;gap:8px;padding:5px 7px;cursor:pointer;font-size:17px;border-radius:2px;color:#b8c8c8}
+.wp-assign-item:hover{background:rgba(255,212,0,.08)}
+.wp-assign-item input{cursor:pointer;accent-color:#ffd400;width:14px;height:14px;flex-shrink:0}
 `;

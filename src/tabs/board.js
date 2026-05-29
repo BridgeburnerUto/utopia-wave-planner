@@ -18,8 +18,11 @@ function boardSort(col) {
 /** Get or create the plan entry for a province slot */
 function _pp(slot) {
   if (!S.provinces[slot]) {
-    S.provinces[slot] = { wave: null, needsRaze: false, needsMassacre: false, requiredOps: [], notes: '' };
+    S.provinces[slot] = { wave: null, assignedTo: [], bloat: false, needsRaze: false, needsMassacre: false, requiredOps: [], notes: '' };
   }
+  // Migrate legacy entries that predate assignedTo / bloat
+  if (!Array.isArray(S.provinces[slot].assignedTo)) S.provinces[slot].assignedTo = [];
+  if (S.provinces[slot].bloat === undefined)        S.provinces[slot].bloat = false;
   return S.provinces[slot];
 }
 
@@ -38,6 +41,32 @@ function setProvNeedsRaze(slot, val) {
 function setProvNeedsMassacre(slot, val) {
   _pp(slot).needsMassacre = val;
   renderBoard();
+}
+
+function setProvBloat(slot, val) {
+  _pp(slot).bloat = val;
+  renderBoard();
+  renderPlayer();
+}
+
+// ── Assignment picker ─────────────────────────────────────────────────────────
+// _assignPickerSlot tracks which row's picker is open (UI state, not persisted)
+let _assignPickerSlot = null;
+
+function toggleAssignPicker(slot) {
+  _assignPickerSlot = _assignPickerSlot === slot ? null : slot;
+  renderBoard();
+}
+
+function toggleProvAssign(slot, name, checked) {
+  const plan = _pp(slot);
+  if (checked && !plan.assignedTo.includes(name)) {
+    plan.assignedTo.push(name);
+  } else if (!checked) {
+    plan.assignedTo = plan.assignedTo.filter(n => n !== name);
+  }
+  renderBoard();
+  renderPlayer();
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -89,10 +118,12 @@ function _buildBoard() {
       rtpa, castles, wt,
       intelAge: da,
       wave:          plan.wave,
+      assignedTo:    plan.assignedTo    || [],
+      bloat:         plan.bloat         || false,
       needsRaze:     plan.needsRaze,
       needsMassacre: plan.needsMassacre,
-      requiredOps:   plan.requiredOps || [],
-      notes:         plan.notes || '',
+      requiredOps:   plan.requiredOps   || [],
+      notes:         plan.notes         || '',
     };
   });
 
@@ -123,8 +154,10 @@ function _buildBoard() {
 
   // Wave badge colours
   const waveBadge = (wave) => {
-    if (wave === 'current') return `<span style="background:rgba(224,80,80,.15);color:#E05050;border:1px solid #8B1414;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current Wave</span>`;
-    if (wave === 'preplan') return `<span style="background:rgba(212,160,23,.12);color:#ffd400;border:1px solid #7a6500;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Pre-Plan</span>`;
+    if (wave === 'current')   return `<span style="background:rgba(224,80,80,.15);color:#E05050;border:1px solid #8B1414;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current Wave</span>`;
+    if (wave === 'current 1') return `<span style="background:rgba(224,80,80,.22);color:#ff7070;border:1px solid #c01414;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current P1</span>`;
+    if (wave === 'current 2') return `<span style="background:rgba(224,80,80,.12);color:#e05050;border:1px solid #8B1414;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Current P2</span>`;
+    if (wave === 'preplan')   return `<span style="background:rgba(212,160,23,.12);color:#ffd400;border:1px solid #7a6500;font-size:15px;padding:2px 7px;border-radius:2px;white-space:nowrap;">Pre-Plan</span>`;
     return `<span style="color:#617070;font-size:17px;">—</span>`;
   };
 
@@ -141,10 +174,12 @@ function _buildBoard() {
     const waveSelect = isLeader ? `
       <select onchange="__wpA.setProvWave(${r.slot},this.value)"
         style="background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;
-               padding:3px 6px;border-radius:3px;outline:none;cursor:pointer;max-width:110px;">
-        <option value="" ${!r.wave?'selected':''}>—</option>
-        <option value="current" ${r.wave==='current'?'selected':''}>Current Wave</option>
-        <option value="preplan" ${r.wave==='preplan'?'selected':''}>Pre-Plan</option>
+               padding:3px 6px;border-radius:3px;outline:none;cursor:pointer;max-width:120px;">
+        <option value=""         ${!r.wave                   ?'selected':''}>—</option>
+        <option value="current"  ${r.wave==='current'        ?'selected':''}>Current Wave</option>
+        <option value="current 1"${r.wave==='current 1'      ?'selected':''}>Current P1</option>
+        <option value="current 2"${r.wave==='current 2'      ?'selected':''}>Current P2</option>
+        ${r.wave==='preplan'?`<option value="preplan" selected>Pre-Plan (legacy)</option>`:''}
       </select>` : waveBadge(r.wave);
 
     const razeCheck = isLeader
@@ -157,11 +192,46 @@ function _buildBoard() {
            style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400;">`
       : r.needsMassacre ? '✓' : '—';
 
+    const bloatCheck = isLeader
+      ? `<input type="checkbox" ${r.bloat?'checked':''} onchange="__wpA.setProvBloat(${r.slot},this.checked)"
+           style="cursor:pointer;width:14px;height:14px;accent-color:#9060c0;">`
+      : r.bloat ? '<span style="color:#9060c0">✓</span>' : '—';
+
+    // Assignment picker — own province multi-select
+    const ownProvNames = (S.own?.provinces || []).map(p => p.name);
+    const isPickerOpen = _assignPickerSlot === r.slot;
+    const safeSlot     = r.slot;
+    const assignTags   = r.assignedTo.length === 0
+      ? '<span style="color:#617070;font-size:15px">KD pool</span>'
+      : r.assignedTo.map(n => `<span class="wtag" style="font-size:13px;margin:1px;cursor:default">${esc(n)}</span>`).join('');
+    const assignCell = isLeader
+      ? `<div class="wp-assign-wrap" onclick="event.stopPropagation()">
+           <div class="wp-assign-btn" onclick="__wpA.toggleAssignPicker(${safeSlot})">${assignTags}</div>
+           ${isPickerOpen ? `<div class="wp-assign-drop">
+             <div class="wp-assign-drop-hd">
+               <span style="font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase">Assign to</span>
+               <span onclick="__wpA.toggleAssignPicker(${safeSlot})" style="cursor:pointer;color:#7a9090;font-size:19px;line-height:1;padding:0 4px">✕</span>
+             </div>
+             ${ownProvNames.length
+               ? ownProvNames.map(name => {
+                   const safeName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                   return `<label class="wp-assign-item">
+                     <input type="checkbox" ${r.assignedTo.includes(name)?'checked':''}
+                       onchange="__wpA.toggleProvAssign(${safeSlot},'${safeName}',this.checked)">
+                     <span>${esc(name)}</span>
+                   </label>`;
+                 }).join('')
+               : '<div style="font-size:17px;color:#617070;padding:4px">No own provinces loaded</div>'
+             }
+           </div>` : ''}
+         </div>`
+      : `<div>${assignTags}</div>`;
+
     const opTags = r.requiredOps.length
       ? r.requiredOps.map(o => `<span class="wtag" style="cursor:default;font-size:15px;">${o}</span>`).join('')
       : '';
 
-    return `<tr class="wp-brow" style="border-bottom:1px solid rgba(97,112,112,.25);${r.wave==='current'?'background:rgba(224,80,80,.04);':r.wave==='preplan'?'background:rgba(212,160,23,.03);':''}">
+    return `<tr class="wp-brow${r.bloat?' wp-bloat-row':''}" style="border-bottom:1px solid rgba(97,112,112,.25);${r.wave?.startsWith('current')&&!r.bloat?'background:rgba(224,80,80,.04);':r.wave==='preplan'&&!r.bloat?'background:rgba(212,160,23,.03);':''}">
       <td style="padding:7px 10px;font-weight:700;color:#ffffff;">${r.slot}</td>
       <td style="padding:7px 10px;color:#ffffff;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
         <span onclick="__wpA.openOps(${r.slot})" style="cursor:pointer;" title="Click to assign ops">${esc(r.name)}</span>
@@ -180,13 +250,16 @@ function _buildBoard() {
       <td style="padding:7px 10px;text-align:right;">${r.wt != null ? r.wt.toFixed(1)+'%' : '—'}</td>
       <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
       <td style="padding:7px 10px;text-align:center;">${waveSelect}</td>
+      <td style="padding:5px 7px;vertical-align:middle;">${assignCell}</td>
+      <td style="padding:7px 10px;text-align:center;color:${r.bloat?'#9060c0':'#7a9090'};">${bloatCheck}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.needsRaze?'#ffd400':'#7a9090'};">${razeCheck}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.needsMassacre?'#ffd400':'#7a9090'};">${massCheck}</td>
     </tr>`;
   }).join('');
 
-  // Summary row
-  const assigned = rows.filter(r => r.wave === 'current').length;
+  // Summary counts
+  const assigned   = rows.filter(r => r.wave?.startsWith('current')).length;
+  const bloatCount = rows.filter(r => r.bloat).length;
   const preplanned = rows.filter(r => r.wave === 'preplan').length;
 
   const enemyBar = `
@@ -200,8 +273,9 @@ function _buildBoard() {
       <div style="color:#ffd400;font-weight:700;font-size:19px">${esc(S.enemy?.kingdomName || '—')}</div>
       <div style="font-size:17px;color:#7a9090;margin-left:auto">
         ${rows.length} provinces ·
-        <span style="color:#E05050;">${assigned} current wave</span> ·
-        <span style="color:#ffd400;">${preplanned} pre-plan</span>
+        <span style="color:#E05050;">${assigned} wave targets</span>
+        ${bloatCount ? ` · <span style="color:#9060c0">${bloatCount} bloat</span>` : ''}
+        ${preplanned ? ` · <span style="color:#ffd400">${preplanned} pre-plan</span>` : ''}
       </div>
     </div>`;
 
@@ -223,6 +297,8 @@ function _buildBoard() {
           ${th('wt','WT%',true)}
           ${th('intelAge','Intel',true)}
           ${thS('Wave')}
+          ${thS('Assigned')}
+          ${thS('Bloat')}
           ${thS('Raze')}
           ${thS('Mass.')}
         </tr></thead>
