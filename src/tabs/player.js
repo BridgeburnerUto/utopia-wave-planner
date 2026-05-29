@@ -100,11 +100,12 @@ function calcAttacks(prov) {
 
   // Own pop% — Utopia formula:
   //   Current Population = peasants + totalTroops + thieves + wizards
-  //   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35
-  //   Mod Living Space   = Raw * Race Bonus * Population Science * Honor Pop Bonus
+  //   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35  (survey used when available)
+  //   Mod Living Space   = Raw × Race Bonus × (1 + Housing Science %)
   //   Pop%               = Current Population / Mod Living Space * 100
-  // Race bonuses (from age_details): Halfling +10%, Faery -5%, others ×1.00
-  // Science/honor bonuses: not in SoT — omitted (treated as 1.0)
+  // Race: Halfling ×1.10, Faery ×0.95, others ×1.00  (source: age_details)
+  // Housing science: sos.books[{type:'Housing'}].effect (e.g. 4.5 → ×1.045)
+  // Honor pop bonus: not available in province data — treated as ×1.0
   // sot.ppa is peasants-per-acre only, NOT total people — don't use it directly.
   const _sot  = prov.sot || {};
   const _land = prov.land || _sot.land || 0;
@@ -141,12 +142,14 @@ function calcAttacks(prov) {
       // No survey — simplified fallback
       _rawLS = _land * 25;
     }
-    const _modLS = _rawLS * _racePopMult; // science/honor bonuses not yet applied
+    // Housing science bonus: sos.books[{type:'Housing', effect:N}] → +N% max pop
+    const _housingEffect = prov.sos?.books?.find(b => b.type === 'Housing')?.effect || 0;
+    const _scienceMult   = 1 + (_housingEffect / 100);
+    // Honor population bonus: not available in province data — treated as 1.0
+    const _modLS = _rawLS * _racePopMult * _scienceMult;
     ownPop = _modLS > 0
       ? Math.min(Math.round(_totalPop / _modLS * 100), 150)
       : null;
-    // DEBUG — remove once sos structure confirmed:
-    console.log('[WP sos]', JSON.stringify(prov.sos), '| ownPop=', ownPop);
   }
 
   if (!aOff)          return { attacks: [], gensHome, attackableGens, ownPop, reason: 'no_off' };
