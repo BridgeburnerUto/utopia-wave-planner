@@ -323,9 +323,9 @@ function calcAttacks(prov) {
   }
 
   // ── Attack type per target ─────────────────────────────────────────────────
-  // Bloat: never TM — only RAZE or MASS when war leader has flagged them.
-  // Low pop% (<70%): switch flagged targets to raze/mass.
-  // Otherwise TM.
+  // Bloat: never TM — only RAZE or MASS when war leader explicitly flags them.
+  // Non-bloat: war leader needsRaze/needsMassacre flag always honoured (single hit).
+  // Otherwise TM (pool targets' op type is governed separately by pop% strategy).
   function attackType(enriched) {
     const p = enriched.item.province;
     if (p.bloat) {
@@ -333,10 +333,9 @@ function calcAttacks(prov) {
       if (p.needsMassacre) return 'MASS';
       return null; // bloat with no action flag → never attack
     }
-    if (ownPop !== null && ownPop < 70) {
-      if (p.needsRaze)     return 'RAZE';
-      if (p.needsMassacre) return 'MASS';
-    }
+    // War leader explicit flags always win — regardless of own pop%
+    if (p.needsRaze)     return 'RAZE';
+    if (p.needsMassacre) return 'MASS';
     return 'TM';
   }
 
@@ -378,16 +377,28 @@ function calcAttacks(prov) {
     });
   }
 
-  // Pass 1: assigned targets (always honoured; skip bloat with no flag)
-  for (const t of myEnriched) {
+  // Partition assigned targets: RAZE/MASS (single hit) vs TM (multi-hit)
+  const myRM = myEnriched.filter(t => { const at = attackType(t); return at === 'RAZE' || at === 'MASS'; });
+  const myTM = myEnriched.filter(t => attackType(t) === 'TM');
+
+  // Pass 1A: assigned RAZE / MASS — single hit each, ordered by wave priority
+  for (const t of myRM) {
     if (gensLeft <= 0) break;
-    const aType = attackType(t);
-    if (!aType) continue; // bloat + no flag
+    addAttack(t, false, false);  // single hit; addAttack marks result marginal if can't break
+  }
+
+  // Pass 1B: assigned TM — use MINIMUM gens per hit, repeat until gens run out or can't break.
+  // Any remaining gens after the loop fall through to the pool pass below.
+  for (const t of myTM) {
+    if (gensLeft <= 0) break;
     if (!canBreakWith(t, gensLeft)) {
-      // Can't break but still assigned — show as marginal (assigned duty)
-      addAttack(t, aType === 'TM', false);
-    } else {
-      addAttack(t, aType === 'TM', false);
+      // Assigned but unbreakable with remaining gens — show as warning, don't loop
+      addAttack(t, true, false);
+      continue;
+    }
+    // Multi-hit: each iteration uses minimum gens to break, leaving extras for the next hit
+    while (gensLeft > 0 && canBreakWith(t, gensLeft)) {
+      addAttack(t, true, false);
     }
   }
 
@@ -398,20 +409,10 @@ function calcAttacks(prov) {
     const aType = attackType(t);
     if (!aType) continue;
     const isTM = aType === 'TM';
-    if (!isTM && !poolRazeAllowed) continue;         // >100% pop: skip pool raze/mass
+    if (!isTM && !poolRazeAllowed) continue;             // >100% pop: skip pool raze/mass
     if (!isTM && poolRMCount >= poolRazeMassMax) continue; // 70-99%: 1 raze/mass max
-    if (isTM  && poolTMCount >= poolTMMax)      continue; // <70%: limit TM from pool
+    if (isTM  && poolTMCount >= poolTMMax)       continue; // <70%: limit TM from pool
     addAttack(t, isTM, true);
-  }
-
-  // Bundle leftover gens onto last attack
-  if (gensLeft > 0 && attacks.length > 0) {
-    const last     = attacks[attacks.length - 1];
-    last.gens     += gensLeft;
-    last.sentOff   = last.gens * offPerGen;
-    last.pct       = Math.round(last.sentOff / (last.target.tDef || 1) * 100);
-    last.bundleNote = `+${gensLeft} extra gen${gensLeft > 1 ? 's' : ''} bundled`;
-    gensLeft = 0;
   }
 
   const totalGains = attacks.reduce((s, a) => s + (a.gains || 0), 0);
