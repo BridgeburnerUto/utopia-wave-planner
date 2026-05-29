@@ -98,9 +98,13 @@ function calcAttacks(prov) {
   // Fix: always keep 1 general home
   const attackableGens = Math.max(0, gensHome - 1);
 
-  // Own pop%: 25 ppa = 100% population
-  const ownPop = prov.sot?.ppa != null
-    ? Math.min(Math.round(prov.sot.ppa / 25 * 100), 150)
+  // Own pop%: pull directly from IS field (sot.popPercent = integer like 100).
+  // sot.ppa on own provinces is raw peasants-per-acre, NOT the population %.
+  // Log available sot fields once so we can confirm the exact key if needed.
+  const _sotKeys = prov.sot ? Object.keys(prov.sot) : [];
+  if (_sotKeys.length) console.log('[WavePlanner] own sot fields:', _sotKeys, '| ppa=', prov.sot.ppa, 'popPercent=', prov.sot.popPercent);
+  const ownPop = prov.sot?.popPercent != null
+    ? Math.min(Math.round(prov.sot.popPercent), 150)
     : null;
 
   if (!aOff)          return { attacks: [], gensHome, attackableGens, ownPop, reason: 'no_off' };
