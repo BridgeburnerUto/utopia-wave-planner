@@ -229,6 +229,32 @@ function _gatherAlerts(thr) {
       t: `Enemy has a <b>🐉 ${esc(eneDragon)}</b> active on their lands.` });
   }
 
+  // ── Enemy ritual alerts ────────────────────────────────────────────────
+  const eneRitual    = S.enemy?.kdEffects?.ritual;
+  const eneRitualDur = S.enemy?.kdEffects?.ritualDuration ?? null;
+
+  if (eneRitual) {
+    al.push({ group: 'military', badge: 'RITUAL', cls: 'wai',
+      bg: 'background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);',
+      t: `Enemy ritual active: <b>🔮 ${esc(eneRitual)}</b>${
+        eneRitualDur != null ? ` — ${eneRitualDur}t remaining (${eneRitualDur}h)` : ''
+      }` });
+  }
+
+  const casting = getEnemyRitualCasting();
+  if (casting) {
+    const timeColor = casting.ticksUntilLaunch != null && casting.ticksUntilLaunch <= 12
+      ? '#E05050' : '#ffaa00';
+    const timeStr = casting.ticksUntilLaunch != null
+      ? (casting.ticksUntilLaunch <= 0
+          ? 'OVERDUE — check if launched'
+          : `${casting.ticksUntilLaunch}t until auto-launch (${casting.ticksUntilLaunch}h)`)
+      : `auto-launch: ${casting.launchLabel}`;
+    al.push({ group: 'military', badge: 'CASTING', cls: 'waw2',
+      bg: 'background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);',
+      t: `Enemy casting ritual: <b>⚗️ ${esc(casting.name)}</b> — started ${esc(casting.startLabel)} — <span style="color:${timeColor}">${timeStr}</span>` });
+  }
+
   // ── Enemy province alerts ──────────────────────────────────────────────
   if (S.enemy) {
     S.enemy.provinces.forEach(p => {
