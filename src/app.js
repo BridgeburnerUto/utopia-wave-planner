@@ -492,12 +492,14 @@ window.__wpA = {
       return;
     }
     try {
+      const _syncIS = JSON.parse(localStorage.getItem('IntelState') || '{}');
       const payload = JSON.stringify({
         own:             S.own,
         enemy:           S.enemy,
         provinces:       S.provinces,
         thresholds:      S.thresholds,
         currentTickName: S.currentTickName,
+        kingdomNews:     _syncIS.kingdomNews || null,  // enemy Snatched News data
       });
       const url = S.apiEndpoint.replace(/\/$/, '') + '/api.php?is_dump';
       const hdrs = { 'Content-Type': 'application/json' };
