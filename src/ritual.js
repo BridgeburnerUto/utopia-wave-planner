@@ -179,10 +179,18 @@ function renderRitualBadges() {
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
         ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${casting.ticksUntilLaunch <= 0 ? '#ff4455' : casting.ticksUntilLaunch <= 12 ? '#ffaa00' : '#ffffff'}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
       </div>` : '';
+    const castingSubline = casting
+      ? `<div style="font-family:monospace;font-size:13px;color:#ffaa00;margin-top:2px;line-height:1">⚗ ${
+          casting.ticksUntilLaunch != null
+            ? (casting.ticksUntilLaunch <= 0 ? 'OVERDUE' : casting.ticksUntilLaunch + 't')
+            : '?'
+        }</div>`
+      : '';
     html += `
       <div class="wkb writ-badge" id="__wprit_ene" onclick="__wpA.toggleRitual('ene')" style="cursor:pointer;border-color:${col}22">
         <div class="l">Enemy Ritual</div>
         <div class="v" style="color:${col};font-family:monospace">${enemy.ritualDuration ?? '?'}t</div>
+        ${castingSubline}
       <div class="writ-drop" id="__wprit_ene_drop" style="display:none">
         <div class="writ-drop-title">${esc(enemy.ritual)}</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ticks left</span><span style="color:${col};font-family:monospace">${enemy.ritualDuration ?? '?'}</span></div>
