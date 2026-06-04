@@ -178,6 +178,13 @@ function calcAttacks(prov) {
     return minGensToBreak(tDef, offLeft, gensAvail) > 0;
   }
 
+  // ── Own race/personality offense multiplier ───────────────────────────────
+  // Applied when comparing against enemy defense (breakability check).
+  // Depletion of offLeft still uses raw tDef — troops sent are real troops.
+  const ownRace = (prov.race || '').toLowerCase();
+  const ownPers = (prov.sot?.personality || '').toLowerCase();
+  const ownOffMult = (RACE_OFF_MULT[ownRace] || 1.0) * (PERSONALITY_OFF_MULT[ownPers] || 1.0);
+
   // ── NW quality score ───────────────────────────────────────────────────────
   function nwQuality(tNW) {
     if (!aNW || !tNW) return 1;
@@ -222,7 +229,16 @@ function calcAttacks(prov) {
     // Relations modifier — always war
     const relF = 1.10;
 
-    const raw = tLand * 0.12 * rpnwF * rknwF * relF * mapF * castleF;
+    // Enemy protection ritual — reduces their land loss on each TM hit
+    // Add known ritual names here as you encounter them in-game.
+    let enemyRitualF = 1.0;
+    const eRitual = (S.enemy?.kdEffects?.ritual || '').toLowerCase();
+    if (eRitual.includes('protection') || eRitual.includes('shield') || eRitual.includes('barrier')) {
+      const eff = S.enemy?.kdEffects?.ritualEff || 15;
+      enemyRitualF = Math.max(0.5, 1 - eff / 100);
+    }
+
+    const raw = tLand * 0.12 * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
     const cap = Math.min(ownLand, tLand) * 0.20;
     return Math.round(Math.min(raw, cap));
   }
@@ -265,20 +281,31 @@ function calcAttacks(prov) {
     const tLand = tp?.land || 0;
     const away  = tp?.som?.armiesAway?.length > 0;
     const dAge  = tp?.calcs?.defPointsSummary?.ageSeconds;
+
+    // Apply race/personality defense multiplier to get effective enemy defense.
+    // tDef (raw) is kept for off-depletion math; tDefEff is used for all
+    // breakability checks so Dwarves/Halflings are harder to break than raw points suggest.
+    const eRace = (tp?.race || item.province.race || '').toLowerCase();
+    const ePers = (tp?.sot?.personality || '').toLowerCase();
+    const tDefEff = Math.round(tDef * (RACE_DEF_MULT[eRace] || 1.0) * (PERSONALITY_DEF_MULT[ePers] || 1.0));
+    const raceMod = eRace ? (RACE_DEF_MULT[eRace] || 1.0) : 1.0;
+    const persMod = ePers ? (PERSONALITY_DEF_MULT[ePers] || 1.0) : 1.0;
+    const hasDefMod = (raceMod !== 1.0 || persMod !== 1.0);
+
     // Enemy pop%: same formula as own province — ppa is peasants-only, need total pop.
     // Use component sum if available; fall back to ppa/25*100 if fields absent.
     const _es = tp?.sot || {};
     const _eLand = tp?.land || 0;
     const _eTotalPop = (_es.peasants || 0) + (_es.totalTroops || 0)
                      + (_es.thieves  || 0) + (_es.wizards    || 0);
-    // DEBUG — remove once confirmed: console.log('[WP enemy sot]', Object.keys(_es), '| ppa=', _es.ppa, 'totalPop=', _eTotalPop, 'land=', _eLand);
     const tPop  = _eLand > 0 && _eTotalPop > 0
       ? Math.min(Math.round(_eTotalPop / (_eLand * 25) * 100), 150)
       : _es.ppa != null ? Math.min(Math.round(_es.ppa / 25 * 100), 150) : null;
     const nwQ   = nwQuality(tNW);
-    const canBr = canBreak(tDef, aOff, attackableGens); // uses full initial offense for display
+    // Breakability uses effective values: our racial/pers off bonus vs their racial/pers def bonus
+    const canBr = canBreak(tDefEff, aOff * ownOffMult, attackableGens);
     const gains = estimateTMGains(tNW, tLand, tp);
-    return { item, tp, tDef, tNW, tLand, tPop, nwQ, away, breaks: canBr, dAge, gains };
+    return { item, tp, tDef, tDefEff, hasDefMod, eRace, ePers, tNW, tLand, tPop, nwQ, away, breaks: canBr, dAge, gains };
   }
 
   const myEnriched   = myItems.map(enrich);
@@ -372,7 +399,9 @@ function calcAttacks(prov) {
   const hitCount  = {};                   // rawSlot → hit count for SoD reminders
 
   function addAttack(enriched, isTM, isPool) {
-    const mg = minGensToBreak(enriched.tDef, offLeft, gensLeft);
+    // Use effective offense (with racial/pers bonus) and effective defense for gen calc.
+    // offLeft depletion uses raw tDef — troops physically sent are unchanged by the multiplier.
+    const mg = minGensToBreak(enriched.tDefEff, offLeft * ownOffMult, gensLeft);
     // mg === 0 means can't break — still record as marginal if it's an assigned target
     const sentOff = mg > 0
       ? Math.round(offLeft * (1 + 0.05 * (mg - 1)))  // effective off with gen bonus
@@ -380,7 +409,7 @@ function calcAttacks(prov) {
     const rs = enriched.item.province.rawSlot;
     hitCount[rs] = (hitCount[rs] || 0) + 1;
     gensLeft     = Math.max(0, gensLeft - mg);
-    offLeft      = Math.max(0, offLeft - (enriched.tDef + 1)); // spend minimum needed
+    offLeft      = Math.max(0, offLeft - (enriched.tDef + 1)); // spend minimum needed (raw)
     if (isPool) { if (isTM) poolTMCount++; else poolRMCount++; }
     attacks.push({
       n:          attacks.length + 1,
@@ -414,13 +443,13 @@ function calcAttacks(prov) {
   // Remaining gens/off fall through to the pool pass below.
   for (const t of myTM) {
     if (gensLeft <= 0 || offLeft <= 0) break;
-    if (!canBreak(t.tDef, offLeft, gensLeft)) {
+    if (!canBreak(t.tDefEff, offLeft * ownOffMult, gensLeft)) {
       // Assigned but unbreakable — show as warning, don't loop
       addAttack(t, true, false);
       continue;
     }
     // Multi-hit: each iteration uses minimum gens, leaving the rest for another round
-    while (gensLeft > 0 && offLeft > 0 && canBreak(t.tDef, offLeft, gensLeft)) {
+    while (gensLeft > 0 && offLeft > 0 && canBreak(t.tDefEff, offLeft * ownOffMult, gensLeft)) {
       addAttack(t, true, false);
     }
   }
@@ -428,7 +457,7 @@ function calcAttacks(prov) {
   // Pass 2: pool/opportunity targets (spare gens/off, pop% strategy applies)
   for (const t of activePool) {
     if (gensLeft <= 0 || offLeft <= 0) break;
-    if (!canBreak(t.tDef, offLeft, gensLeft)) continue; // skip unbreakable
+    if (!canBreak(t.tDefEff, offLeft * ownOffMult, gensLeft)) continue; // skip unbreakable
     const aType = attackType(t);
     if (!aType) continue;
     const isTM = aType === 'TM';
@@ -520,7 +549,7 @@ function _buildPlayer() {
     h += `<div style="margin:6px 0 10px;padding:8px 14px;background:#1a2828;border:1px solid #304880;
                       border-radius:3px;font-size:17px;color:#80a8f0;display:flex;align-items:center;gap:10px">
       <span style="font-weight:700">📊 Total estimated TM gains: ~${fK(totalGains)} acres</span>
-      <span style="font-size:13px;color:#617070">* race, personality, stance, rituals not included</span>
+      <span style="font-size:13px;color:#617070">* rituals, honor not included</span>
     </div>`;
   }
 
@@ -690,7 +719,10 @@ function _buildAttackCard(wave, atkList) {
             ${away ? '<span style="color:#60C040;font-size:17px">↗ army away</span>' : ''}
           </div>
           <div class="watk-detail">
-            ${fK(t.tDef)} def · ${fK(sentOff)} off sent · ${atk.pct}% ratio
+            ${t.hasDefMod
+              ? `${fK(t.tDefEff)} eff def <span style="color:#617070;font-size:15px">(${fK(t.tDef)} raw · ${t.eRace}${t.ePers ? ' ' + t.ePers : ''})</span>`
+              : `${fK(t.tDef)} def`
+            } · ${fK(sentOff)} off sent · ${atk.pct}% ratio
             ${da != null ? ` · intel <span class="${aC(da)}">${fA(da)}</span> old` : ''}
             ${gainsNote ? ` · ${gainsNote}` : ''}
             ${tPopNote  ? ` · ${tPopNote}`  : ''}

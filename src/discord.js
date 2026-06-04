@@ -143,6 +143,15 @@ async function checkAndSendDiscordAlerts() {
     next.own_peas_low = [];
   }
 
+  // ── War end detection → auto-post war summary ─────────────────────────────
+  // Track whether we were at war last check. When it flips from true → false,
+  // compile and post a war summary embed before the state is overwritten.
+  const curAtWar = _atWar();
+  next.war_active = curAtWar;
+  if (prev.war_active === true && !curAtWar) {
+    await _postWarSummary(webhookUrl);
+  }
+
   // ── Enemy-dependent checks — skip and preserve prev state if not loaded ─
   if (S.enemy) {
     // ── Dragon slayed on enemy ───────────────────────────────────────────
@@ -312,6 +321,103 @@ async function checkAndSendDiscordAlerts() {
 
   if (sentCount) console.log(`[WavePlanner] Sent ${sentCount}/${toSend.length} Discord alert(s)`);
   if (sentCount < toSend.length) console.warn(`[WavePlanner] ${toSend.length - sentCount} alert(s) failed — will retry on next open`);
+}
+
+// ── War summary post ──────────────────────────────────────────────────────────
+// Called when war_active transitions true → false. Pulls ops from Firebase,
+// compiles per-player stats, and posts a single summary embed.
+
+async function _postWarSummary(webhookUrl) {
+  try {
+    const kdId = S.own?.location.replace(':', '_');
+    if (!kdId || !webhookUrl) return;
+
+    // War period from kingdomNews (gives in-game date range)
+    const period = _getWarPeriod();
+
+    // Fetch all ops for this KD from Firebase
+    const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
+
+    // Filter to the war period if we could detect one
+    let warOps = allOps;
+    if (period) {
+      warOps = allOps.filter(op => {
+        const ym = _ym(op.utoYear || 0, op.utoMonth || 0);
+        if (!ym && op.utoDate) {
+          const d = _parseUtoDate(op.utoDate);
+          if (d) {
+            const opYm = _ym(d.year, d.month);
+            return opYm >= _ym(period.fromYear, period.fromMonth) && opYm <= _ym(period.toYear, period.toMonth);
+          }
+        }
+        return ym >= _ym(period.fromYear, period.fromMonth) && ym <= _ym(period.toYear, period.toMonth);
+      });
+    }
+
+    // Aggregate per player
+    const byPlayer = {};
+    warOps.forEach(op => {
+      if (!op.provinceName) return;
+      if (!byPlayer[op.provinceName]) byPlayer[op.provinceName] = { ops: 0, success: 0, damage: 0, gain: 0 };
+      const p = byPlayer[op.provinceName];
+      p.ops++;
+      if (op.success) p.success++;
+      p.damage += op.damage || 0;
+      p.gain   += op.gain   || 0;
+    });
+
+    const totalOps    = warOps.length;
+    const totalSucc   = warOps.filter(o => o.success).length;
+    const totalDamage = warOps.reduce((s, o) => s + (o.damage || 0), 0);
+    const totalGain   = warOps.reduce((s, o) => s + (o.gain   || 0), 0);
+    const successRate = totalOps > 0 ? Math.round(totalSucc / totalOps * 100) : 0;
+
+    // Top performers sorted by op count
+    const players = Object.entries(byPlayer)
+      .map(([name, s]) => ({ name, ...s }))
+      .sort((a, b) => b.ops - a.ops)
+      .slice(0, 10);
+
+    const topLines = players.map((p, i) => {
+      const rate   = p.ops > 0 ? Math.round(p.success / p.ops * 100) : 0;
+      const dmgStr = p.damage > 0 ? ` · ${fK(p.damage)} dmg` : '';
+      const gainStr= p.gain   > 0 ? ` · +${fK(p.gain)} acres` : '';
+      return `${i + 1}. **${p.name}** — ${p.ops} ops (${rate}%)${dmgStr}${gainStr}`;
+    }).join('\n');
+
+    const durationLine = period
+      ? `${period.fromLabel} → ${period.toLabel}`
+      : 'Duration unknown';
+
+    const lines = [
+      `**vs ${S.enemy?.kingdomName || S.eLoc || 'Enemy KD'}**  ·  ${durationLine}`,
+      '',
+      `**${totalOps}** ops  ·  **${successRate}%** success rate`,
+      totalDamage ? `**${fK(totalDamage)}** total damage dealt` : null,
+      totalGain   ? `**+${fK(totalGain)}** total land gained` : null,
+    ].filter(l => l !== null);
+
+    if (players.length) {
+      lines.push('', '**Top performers:**', topLines);
+    } else {
+      lines.push('', '_No op data recorded for this war._');
+    }
+
+    await sendDiscordEmbed(webhookUrl, {
+      content: `<@&${DISCORD.COUNCIL_ROLE}>`,
+      embeds: [{
+        title: '⚔️ War ended — Summary',
+        description: lines.join('\n'),
+        color: DISCORD.COLORS.green,
+        timestamp: new Date().toISOString(),
+        footer: { text: 'Wave Planner · War Summary' },
+      }],
+    });
+
+    console.log('[WavePlanner] War summary posted to Discord');
+  } catch(e) {
+    console.warn('[WavePlanner] War summary post failed:', e.message);
+  }
 }
 
 // ── Reset Discord alert state ─────────────────────────────────────────────────

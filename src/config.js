@@ -72,6 +72,65 @@ const OP_SETS = {
 // Anything NOT in this set gets skipped during syncOps
 const TRACKED_OPS = new Set([...OP_SETS.THIEF_SAB, ...OP_SETS.OFFENSIVE_SPELL]);
 
+// ── Race & personality combat modifiers ───────────────────────────────────────
+// Applied on top of the API-reported offense/defense points, which contain raw
+// troop counts but NOT the racial/personality multiplier bonuses.
+//
+// VERIFY these values against the current age spec — race stats change each age.
+// Multipliers are applied as:
+//   effective enemy def = tDef × RACE_DEF_MULT[enemyRace] × PERSONALITY_DEF_MULT[enemyPers]
+//   effective own off   = aOff × RACE_OFF_MULT[ownRace]   × PERSONALITY_OFF_MULT[ownPers]
+
+const RACE_DEF_MULT = {
+  'avian':    1.10,  // aerial units contribute to defense
+  'dwarf':    1.25,  // fortress / stone fortification bonus
+  'halfling': 1.20,  // strong racial defense bonus
+  'gnome':    1.10,  // moderate fortification
+  'human':    1.00,
+  'orc':      1.00,
+  'undead':   0.90,  // poor physical defense
+  'dark elf': 1.00,
+  'elf':      0.90,  // offensive/magic race, lighter def
+  'faery':    0.85,  // fragile physical defense
+};
+
+const RACE_OFF_MULT = {
+  'avian':    1.20,  // bird riders, strong offensive punch
+  'orc':      1.10,  // brute strength
+  'halfling': 1.10,  // surprisingly effective attackers
+  'dark elf': 1.05,
+  'human':    1.00,
+  'undead':   1.00,
+  'elf':      0.95,
+  'faery':    0.95,
+  'gnome':    0.90,  // defense-focused race
+  'dwarf':    0.90,  // defense-focused race
+};
+
+const PERSONALITY_DEF_MULT = {
+  'aggressive':  0.80,  // -20% def stance
+  'warlike':     0.90,  // -10% def stance
+  'restless':    0.95,
+  'diplomatic':  1.00,
+  'scholar':     1.00,
+  'industrious': 1.00,
+  'merchant':    1.00,
+  'peaceful':    1.10,  // +10% def
+  'defensive':   1.20,  // +20% def stance
+};
+
+const PERSONALITY_OFF_MULT = {
+  'aggressive':  1.20,  // +20% off stance
+  'warlike':     1.10,
+  'restless':    1.05,
+  'diplomatic':  1.00,
+  'scholar':     1.00,
+  'industrious': 1.00,
+  'merchant':    1.00,
+  'peaceful':    0.90,
+  'defensive':   0.80,  // -20% off stance
+};
+
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#2b3333;color:#ffffff;font-family:Rajdhani,sans-serif;font-size:19px;display:flex;flex-direction:column;overflow:hidden}
 #__wp_overlay *{box-sizing:border-box;margin:0;padding:0}

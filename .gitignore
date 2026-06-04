@@ -3,3 +3,11 @@
 
 # Throwaway mockup files
 mockup-*.html
+mockup/
+
+# Node build dependencies — never commit these
+node_modules/
+package-lock.json
+
+# Build backup — local only, not needed in repo
+dist/app.js.bak

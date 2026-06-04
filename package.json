@@ -1,0 +1,13 @@
+{
+  "name": "utopia-wave-planner",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "build:prod": "node build.js --minify",
+    "build:watch": "node build.js --watch"
+  },
+  "devDependencies": {
+    "terser": "^5.37.0"
+  }
+}
