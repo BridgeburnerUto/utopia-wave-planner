@@ -94,11 +94,50 @@ function _waveDisplayName(wave) {
  *          ownPop, totalGains, reason}
  */
 function calcAttacks(prov) {
-  // ── Own stats ──────────────────────────────────────────────────────────────
-  const aOff      = _eff(prov.name, 'off',  prov.som?.offPointsHome || 0);
-  const aNW       = _eff(prov.name, 'nw',   prov.networth || 0);
-  const gensHome  = _eff(prov.name, 'gens', prov.som?.standingArmy?.generals ?? prov.sot?.generals ?? 5);
-  const ownLand   = prov.land || prov.sot?.acres || 0;
+  // ── Own stats with army-return auto-correction ────────────────────────────
+  // armiesAway[i].secondsRemaining <= 0 means that army is past its return window.
+  // When ALL armies are overdue, offPointsHome and standingArmy.generals are stale.
+  //
+  // Fix: SoT offPoints = total offense for ALL troops regardless of location,
+  // so it's the best available "all generals home" figure.
+  // SoT generals = total province generals (same logic).
+  // Manual overrides still take full priority via _eff().
+
+  const _armiesAway   = prov.som?.armiesAway || [];
+  const _overdueCount = _armiesAway.filter(
+    a => a.secondsRemaining != null && a.secondsRemaining <= 0
+  ).length;
+  const _anyArmyAway  = _armiesAway.length > 0;
+  const _allOverdue   = _anyArmyAway && _overdueCount === _armiesAway.length;
+  const _anyOverdue   = _anyArmyAway && _overdueCount > 0;
+
+  // Offense: prefer SoT total when all armies are overdue
+  const _sotOff  = prov.sot?.offPoints || 0;
+  const _apiOff  = _allOverdue && _sotOff ? _sotOff : (prov.som?.offPointsHome || 0);
+  const _offSrc  = _allOverdue && _sotOff  ? 'sot'
+                 : _allOverdue && !_sotOff ? 'stale'  // overdue but no SoT — show warning
+                 : 'som';
+
+  // Generals: prefer SoT total when all armies are overdue
+  const _sotGens = prov.sot?.generals;
+  const _apiGens = _allOverdue && _sotGens != null
+    ? _sotGens
+    : (prov.som?.standingArmy?.generals ?? _sotGens ?? 5);
+  const _gensSrc = _allOverdue && _sotGens != null ? 'sot' : 'som';
+
+  // Bundle for UI display
+  const armyStatus = {
+    anyAway:    _anyArmyAway,
+    anyOverdue: _anyOverdue,
+    allOverdue: _allOverdue,
+    offSrc:     _offSrc,   // 'som' | 'sot' | 'stale'
+    gensSrc:    _gensSrc,  // 'som' | 'sot'
+  };
+
+  const aOff     = _eff(prov.name, 'off',  _apiOff);
+  const aNW      = _eff(prov.name, 'nw',   prov.networth || 0);
+  const gensHome = _eff(prov.name, 'gens', _apiGens);
+  const ownLand  = prov.land || prov.sot?.acres || 0;
 
   // Fix: always keep 1 general home
   const attackableGens = Math.max(0, gensHome - 1);
@@ -474,6 +513,7 @@ function calcAttacks(prov) {
     gensLeft, offLeft,
     ownPop, totalGains,
     best: myEnriched[0] || poolEnriched[0] || null,
+    armyStatus,
   };
 }
 
@@ -486,7 +526,7 @@ function _buildPlayer() {
   if (!S.playerProv)      return _buildProvPicker();
 
   const prov = S.playerProv;
-  const { attacks, gensHome, attackableGens, gensLeft, homeOffRemaining, ownPop, totalGains, reason } = calcAttacks(prov);
+  const { attacks, gensHome, attackableGens, gensLeft, homeOffRemaining, ownPop, totalGains, reason, armyStatus } = calcAttacks(prov);
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => {
@@ -504,7 +544,40 @@ function _buildPlayer() {
     }) : [];
   const aOff = _eff(prov.name, 'off', prov.som?.offPointsHome || 0);
 
-  let h = _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, waveTargets.length);
+  // ── Army return banner ───────────────────────────────────────────────────
+  // Show before building the header so it appears above the stat inputs.
+  let armyBanner = '';
+  const ms0 = loadManual(prov.name);
+  if (armyStatus?.allOverdue) {
+    if (armyStatus.offSrc === 'sot') {
+      // Auto-corrected — brief info note only if no manual override
+      if (!ms0.off && !ms0.gens) {
+        armyBanner = `<div style="margin-bottom:10px;padding:8px 14px;background:#1a2820;border:1px solid #305040;
+            border-radius:3px;font-size:17px;color:#60c040;display:flex;align-items:center;gap:8px">
+          <span style="font-size:19px">↩</span>
+          <span><b>All armies returned</b> — offense and generals updated from SoT data automatically.
+          Override the fields below if the SoT is stale.</span>
+        </div>`;
+      }
+    } else {
+      // Overdue but no SoT to fall back on — manual entry required
+      armyBanner = `<div style="margin-bottom:10px;padding:8px 14px;background:#201808;border:1px solid #805020;
+          border-radius:3px;font-size:17px;color:#e09040;display:flex;align-items:center;gap:8px">
+        <span style="font-size:19px">⚠</span>
+        <span><b>All armies returned but no SoT available.</b>
+        Offense data is stale — enter your current max offense in the field below.</span>
+      </div>`;
+    }
+  } else if (armyStatus?.anyOverdue) {
+    armyBanner = `<div style="margin-bottom:10px;padding:8px 14px;background:#201808;border:1px solid #805020;
+        border-radius:3px;font-size:17px;color:#e09040;display:flex;align-items:center;gap:8px">
+      <span style="font-size:19px">⚠</span>
+      <span><b>Some armies have returned</b> — generals and offense may be higher than shown.
+      Verify your stats or enter current values below.</span>
+    </div>`;
+  }
+
+  let h = armyBanner + _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, waveTargets.length, armyStatus);
 
   if (!waveTargets.length) {
     return h + `<div class="watk-notarget">// No wave targets assigned yet<br>
@@ -591,21 +664,45 @@ function _buildProvPicker() {
     </div>`;
 }
 
-function _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, targetCount) {
+function _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, targetCount, armyStatus) {
   const genColor = attackableGens >= 3 ? '#60C040' : attackableGens >= 1 ? '#e09040' : '#E05050';
   const popColor = ownPop === null ? '#7a9090'
                  : ownPop > 100   ? '#60C040'
                  : ownPop >= 70   ? '#ffd400' : '#E05050';
   const popTier  = ownPop === null ? '' : ownPop > 100 ? 'TM focus' : ownPop >= 70 ? 'mixed' : 'raze/mass';
   const ms = loadManual(prov.name);  // single localStorage read for the whole header
-  const apiOff  = prov.som?.offPointsHome || 0;
+
+  // Source-aware API values — when armies are overdue, use the auto-corrected figures
+  const _sotOff  = prov.sot?.offPoints || 0;
+  const _apiOff  = (armyStatus?.allOverdue && _sotOff) ? _sotOff : (prov.som?.offPointsHome || 0);
+  const _sotGens = prov.sot?.generals;
+  const _apiGens = (armyStatus?.allOverdue && _sotGens != null)
+    ? _sotGens : (prov.som?.standingArmy?.generals ?? _sotGens ?? 5);
+
+  const apiOff  = _apiOff;
   const apiNW   = prov.networth || 0;
-  const apiGens = prov.som?.standingArmy?.generals ?? prov.sot?.generals ?? 5;
+  const apiGens = _apiGens;
+
+  // Hint labels for each input — show data source and auto-correction status
+  const offHintRaw  = !ms.off
+    ? (armyStatus?.allOverdue && _sotOff ? '<span style="color:#60c040">↩ SoT (army returned)</span>'
+    : armyStatus?.offSrc === 'stale'     ? '<span style="color:#e09040">⚠ stale — enter max off</span>'
+    : apiOff                             ? 'from SoM' : '')
+    : '✎ manual';
+  const gensHintRaw = !ms.gens
+    ? (armyStatus?.allOverdue && _sotGens != null ? '<span style="color:#60c040">↩ SoT (army returned)</span>'
+    : apiGens                                     ? 'from SoM' : '')
+    : '✎ manual';
+
+  // Amber border on offense input if overdue and no SoT fallback and no manual override
+  const offInputBorder = (!ms.off && armyStatus?.offSrc === 'stale')
+    ? '#e09040' : '#617070';
   // Escape province name for safe embedding in both HTML attrs and JS string literals
   const pn = prov.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '&lt;');
 
   const inputStyle = 'background:#1a2828;border:1px solid #617070;color:#ffffff;font-family:monospace;' +
     'font-size:17px;padding:4px 8px;border-radius:3px;width:100%;box-sizing:border-box;margin-top:3px';
+  const offInputStyle = inputStyle.replace('#617070', offInputBorder);
   const hintStyle = 'font-size:13px;color:#7a9090;margin-top:2px';
 
   return `
@@ -628,10 +725,10 @@ function _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, targetCount
         <div>
           <div style="font-size:13px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Max Offense</div>
           <input type="number" value="${ms.off || apiOff || ''}" placeholder="${apiOff ? fK(apiOff)+' (API)' : 'e.g. 85000'}"
-            style="${inputStyle}"
+            style="${offInputStyle}"
             onchange="__wpA.setManualStat('${pn}','off',this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
-          ${ms.off ? '<div style="'+hintStyle+'">✎ manual</div>' : (apiOff ? '<div style="'+hintStyle+'">from SoM</div>' : '')}
+          <div style="${hintStyle}">${offHintRaw}</div>
         </div>
         <div>
           <div style="font-size:13px;color:#7a9090;font-weight:700;text-transform:uppercase;letter-spacing:1px">Net Worth</div>
@@ -647,7 +744,7 @@ function _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, targetCount
             style="${inputStyle}"
             onchange="__wpA.setManualStat('${pn}','gens',this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
-          ${ms.gens != null ? '<div style="'+hintStyle+'">✎ manual</div>' : (apiGens ? '<div style="'+hintStyle+'">from SoM</div>' : '')}
+          <div style="${hintStyle}">${gensHintRaw}</div>
         </div>
       </div>
     </div>
