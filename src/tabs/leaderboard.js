@@ -470,6 +470,10 @@ function _buildFilterBar(f, warPeriod, totalCount, filteredCount) {
         <button class="wb${allActive?' g':''}" style="font-size:17px;padding:3px 9px"
           onclick="__wpA.lbSetFilter('all',{})">All Time</button>
         ${warBtn}
+        <button class="wb" style="font-size:17px;padding:3px 9px;border-color:#617070;color:#e09040"
+          onclick="__wpA.lbFindWar()"
+          title="Scan stored NW snapshots for when own and enemy KD were mutually at war (works further back than Last War)">
+          ⚔ Find War</button>
         <button class="wb${custActive?' g':''}" style="font-size:17px;padding:3px 9px"
           onclick="__wpA.lbSetFilter('custom',{fromYear:${f.fromYear||1},fromMonth:${f.fromMonth||1},toYear:${f.toYear||1},toMonth:${f.toMonth||12}})">
           Custom…</button>

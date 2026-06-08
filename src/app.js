@@ -431,6 +431,67 @@ window.__wpA = {
     }
   },
 
+  /**
+   * Same Firebase scan as nwFindWar() but targets the leaderboard filter.
+   * Uses S.own.location and S.eLoc (already in state — no inputs needed).
+   * On success sets the leaderboard to a custom date range matching the war.
+   */
+  async lbFindWar() {
+    const ownLoc = S.own?.location;
+    const eneLoc = S.eLoc;
+    if (!ownLoc || !eneLoc) {
+      alert('Own and enemy kingdom locations must be loaded first.');
+      return;
+    }
+
+    // Show loading inside the leaderboard panel while we scan
+    const el = $id('__wpc_leaderboard');
+    if (el) el.innerHTML = loadingHTML('SCANNING FOR WAR PERIOD...');
+
+    const toTs   = Date.now();
+    const fromTs = toTs - 90 * 24 * 3_600_000;
+
+    try {
+      const [docsA, docsB] = await Promise.all([
+        fbQueryNWHistory(ownLoc, fromTs, toTs),
+        fbQueryNWHistory(eneLoc, fromTs, toTs),
+      ]);
+
+      const hourOf   = ts => Math.floor(ts / 3_600_000);
+      const warHoursA = new Set(docsA.filter(d => d.stanceLoc === eneLoc).map(d => hourOf(d.storedAt)));
+      const warHoursB = new Set(docsB.filter(d => d.stanceLoc === ownLoc).map(d => hourOf(d.storedAt)));
+      const mutual    = [...warHoursA].filter(h => warHoursB.has(h)).sort((a, b) => a - b);
+
+      if (!mutual.length) {
+        const hasStance = docsA.some(d => 'stanceLoc' in d);
+        const msg = hasStance
+          ? `No mutual war found between ${ownLoc} and ${eneLoc} in the last 90 days of snapshots.`
+          : 'No stance data in stored snapshots yet — it will appear after the next hourly GitHub Actions run.';
+        renderLeaderboard();
+        setTimeout(() => alert(msg), 100);
+        return;
+      }
+
+      const fromDate = _tsToUtoDate(mutual[0]                    * 3_600_000);
+      const toDate   = _tsToUtoDate(mutual[mutual.length - 1]    * 3_600_000);
+
+      if (!fromDate || !toDate) {
+        renderLeaderboard();
+        setTimeout(() => alert('War period found but could not convert to in-game dates — refresh and try again.'), 100);
+        return;
+      }
+
+      lbSetFilter('custom', {
+        fromYear:  fromDate.year,  fromMonth: fromDate.month,
+        toYear:    toDate.year,    toMonth:   toDate.month,
+      });
+
+    } catch(e) {
+      renderLeaderboard();
+      setTimeout(() => alert('Error scanning snapshots: ' + e.message), 100);
+    }
+  },
+
   /** Toggle custom date range mode */
   nwToggleCustom() {
     // Snapshot location inputs before rebuilding
