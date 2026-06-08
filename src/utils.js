@@ -90,6 +90,15 @@ function _atWar() {
   // 5. Cached kingdomNews scan result
   if (S._warFromNews === true) return true;
 
+  // 6. IntelState direct read — IS may store richer state than the processed API response
+  try {
+    const _is = JSON.parse(localStorage.getItem('IntelState') || '{}');
+    if (_is.own?.war === true) return true;
+    const _isStance = _is.own?.stance;
+    if (Array.isArray(_isStance) && _isStance[0]?.toLowerCase() === 'war') return true;
+    if (typeof _isStance === 'string' && _isStance.toLowerCase() === 'war') return true;
+  } catch(e) {}
+
   return false;
 }
 
@@ -112,8 +121,9 @@ function _refreshWarStatus() {
     news.split('\n').forEach(line => {
       const parts = line.split('\t');
       if (parts.length < 2) return;
-      // _parseUtoDate is defined in leaderboard.js / ritual.js (hoisted, available at runtime)
-      const d = _parseUtoDate(parts[0].trim());
+      // News dates use "July 2 of YR5" format — must use _parseNewsDate, not _parseUtoDate
+      // (_parseNewsDate is defined in ritual.js, hoisted and available at runtime)
+      const d = _parseNewsDate(parts[0].trim());
       if (!d) return;
       const abs  = _utoToAbs(d.month, d.day, d.year);
       const text = parts[1].toLowerCase();

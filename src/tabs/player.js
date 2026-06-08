@@ -441,10 +441,23 @@ function calcAttacks(prov) {
     // Use effective offense (with racial/pers bonus) and effective defense for gen calc.
     // offLeft depletion uses raw tDef — troops physically sent are unchanged by the multiplier.
     const mg = minGensToBreak(enriched.tDefEff, offLeft * ownOffMult, gensLeft);
-    // mg === 0 means can't break — still record as marginal if it's an assigned target
+
+    // sentOff = minimum raw troops needed to break this target.
+    // = ceil( effectiveDef / (ownOffMult × genBonus) ) + 1
+    // Accounts for own race/pers multiplier and any extra gen bonus used.
+    // This is what the player actually needs to send — not the whole pool.
+    const _genBonus = 1 + 0.05 * (mg - 1);
     const sentOff = mg > 0
-      ? Math.round(offLeft * (1 + 0.05 * (mg - 1)))  // effective off with gen bonus
+      ? Math.ceil(enriched.tDefEff / (ownOffMult * _genBonus)) + 1
       : 0;
+
+    // pct = full remaining offense (before depletion) vs effective defense.
+    // Shows the comfort margin — how much more than minimum the player has.
+    // Captured here so it correctly decreases across multi-attack sequences.
+    const pct = sentOff > 0
+      ? Math.round(offLeft * ownOffMult / (enriched.tDefEff || 1) * 100)
+      : 0;
+
     const rs = enriched.item.province.rawSlot;
     hitCount[rs] = (hitCount[rs] || 0) + 1;
     gensLeft     = Math.max(0, gensLeft - mg);
@@ -456,7 +469,7 @@ function calcAttacks(prov) {
       gens:       mg,
       sentOff,
       result:     mg > 0 ? 'yes' : 'marginal',
-      pct:        sentOff > 0 ? Math.round(sentOff / (enriched.tDef || 1) * 100) : 0,
+      pct,
       attackType: isTM ? 'TM' : (enriched.item.province.needsRaze ? 'RAZE' : 'MASS'),
       isAssigned: !isPool,
       gains:      isTM ? enriched.gains : null,
