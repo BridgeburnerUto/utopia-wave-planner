@@ -13,7 +13,7 @@ const S = {
   enemy: null,      // EnemyKingdom response
 
   // War plan
-  wpId: null,       // warPlanId from IS API
+  // wpId removed — war plan now stored directly in Firestore (warplan/{kdId})
   cols: [],         // LEGACY kanban columns (kept for migration only)
   provinces: {},    // war plan per province: {[slot]: {wave, needsRaze, needsMassacre, requiredOps, notes}}
                     // wave: null | 'current' | 'preplan'

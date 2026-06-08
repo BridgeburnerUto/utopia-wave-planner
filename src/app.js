@@ -50,42 +50,77 @@ window.__wpA = {
         t.style.display = '';
       }
 
-      // Create/load war plan
-      const wp = await postWarPlan(S.own.location, {});
-      if (wp) {
-        S.wpId = wp.warPlanId;
-        const plan = await getWarPlan(S.own.location, S.wpId);
-        if (plan?.json) {
-          try {
-            const parsed = JSON.parse(plan.json);
-            // Load new provinces format
-            if (parsed.provinces) {
-              S.provinces = parsed.provinces;
-            } else {
-              // Migrate old kanban cols format
-              S.cols = parsed.columns || [];
+      // ── Load war plan from Firebase ────────────────────────────────────────
+      // Primary storage: Firestore warplan/{kdId}
+      // One-time migration path: if Firebase has no plan yet, try the old IS
+      // WarPlan API and copy whatever it returns into Firebase so subsequent
+      // reloads never touch the IS API for plan data again.
+
+      const _kdId = S.own.location.replace(':', '_');
+      let _planJson = null;
+
+      // 1. Try Firebase (the new primary store)
+      try {
+        const fbDoc = await fbGet(`warplan/${_kdId}`);
+        _planJson = fbDoc?.fields?.json?.stringValue || null;
+        if (_planJson) console.log('[WavePlanner] War plan loaded from Firebase');
+      } catch(e) {
+        console.warn('[WavePlanner] Firebase plan load failed:', e.message);
+      }
+
+      // 2. One-time migration: no Firebase plan yet → try old IS WarPlan API
+      if (!_planJson) {
+        try {
+          const _wp = await postWarPlan(S.own.location, {});
+          if (_wp?.warPlanId) {
+            const _isplan = await getWarPlan(S.own.location, _wp.warPlanId);
+            if (_isplan?.json) {
+              _planJson = _isplan.json;
+              // Write to Firebase immediately so this migration never runs again
+              await fbWrite(`warplan/${_kdId}`, {
+                json:          _planJson,
+                savedAt:       Date.now(),
+                savedBy:       S.own.kingdomName || S.own.location,
+                migratedFrom:  'IS_WarPlan_API',
+              });
+              console.log('[WavePlanner] War plan migrated from IS API → Firebase');
             }
-            // IS.enemyKd wins on load; plan's saved enemy is fallback only
-            if (!S.eLoc && parsed.enemyLocation) S.eLoc = parsed.enemyLocation;
-            // Merge saved thresholds — also migrate old format {food,gc,runes} to new keys
-            if (parsed.thresholds) {
-              const t = parsed.thresholds;
-              S.thresholds = {
-                ...S.thresholds,
-                enemyFoodRich:  t.enemyFoodRich  ?? t.food  ?? 0,
-                enemyFoodLow:   t.enemyFoodLow   ?? 0,
-                enemyGcRich:    t.enemyGcRich    ?? t.gc    ?? 0,
-                enemyRunesRich: t.enemyRunesRich ?? t.runes ?? 0,
-                ownFoodLow:     t.ownFoodLow     ?? 0,
-                ownPeasLow:     t.ownPeasLow     ?? 0,
-              };
-            }
-            S.discordWebhook  = parsed.discordWebhook || '';
-            S.ageStartDate    = parsed.ageStartDate   || 0;
-            S.apiEndpoint     = parsed.apiEndpoint    || '';
-            S.apiKey          = parsed.apiKey         || '';
-          } catch (e) { /* malformed saved plan — start fresh */ }
+          }
+        } catch(e) {
+          console.warn('[WavePlanner] IS API migration attempt failed:', e.message);
         }
+      }
+
+      // 3. Parse whichever plan we ended up with
+      if (_planJson) {
+        try {
+          const parsed = JSON.parse(_planJson);
+          if (parsed.provinces) {
+            S.provinces = parsed.provinces;
+          } else {
+            // Migrate old kanban cols format
+            S.cols = parsed.columns || [];
+          }
+          // IS.enemyKd wins on load; plan's saved enemy is fallback only
+          if (!S.eLoc && parsed.enemyLocation) S.eLoc = parsed.enemyLocation;
+          // Merge saved thresholds — also migrate old format {food,gc,runes} to new keys
+          if (parsed.thresholds) {
+            const t = parsed.thresholds;
+            S.thresholds = {
+              ...S.thresholds,
+              enemyFoodRich:  t.enemyFoodRich  ?? t.food  ?? 0,
+              enemyFoodLow:   t.enemyFoodLow   ?? 0,
+              enemyGcRich:    t.enemyGcRich    ?? t.gc    ?? 0,
+              enemyRunesRich: t.enemyRunesRich ?? t.runes ?? 0,
+              ownFoodLow:     t.ownFoodLow     ?? 0,
+              ownPeasLow:     t.ownPeasLow     ?? 0,
+            };
+          }
+          S.discordWebhook  = parsed.discordWebhook || '';
+          S.ageStartDate    = parsed.ageStartDate   || 0;
+          S.apiEndpoint     = parsed.apiEndpoint    || '';
+          S.apiKey          = parsed.apiKey         || '';
+        } catch (e) { console.warn('[WavePlanner] Malformed plan JSON — starting fresh'); }
       }
 
       // IS enemy overrides only when IS explicitly has one set
@@ -199,12 +234,11 @@ window.__wpA = {
   // ── War plan persistence ────────────────────────────────────────────────
 
   async save() {
-    if (!S.wpId) { setSav('No plan ID', 'err'); return; }
+    if (!S.own?.location) { setSav('No KD loaded', 'err'); return; }
     setSav('Saving...', 'ing');
     try {
+      const kdId = S.own.location.replace(':', '_');
       const json = JSON.stringify({
-        title:         'Wave Plan',
-        content:       '',
         enemyLocation:   S.eLoc,
         provinces:       S.provinces,
         columns:         S.cols,
@@ -214,7 +248,11 @@ window.__wpA = {
         apiEndpoint:     S.apiEndpoint    || '',
         apiKey:          S.apiKey         || '',
       });
-      const r = await postWarPlan(S.own.location, { json, warPlanId: S.wpId });
+      const r = await fbWrite(`warplan/${kdId}`, {
+        json,
+        savedAt: Date.now(),
+        savedBy: S.own.kingdomName || S.own.location,
+      });
       setSav(r ? 'Saved ✓' : 'Failed', r ? 'ok' : 'err');
       if (r) {
         setTimeout(() => setSav('', ''), 3000);
@@ -222,7 +260,7 @@ window.__wpA = {
         this.syncBackend();
       }
     } catch (e) {
-      setSav('Error', 'err');
+      setSav('Error: ' + e.message, 'err');
     }
   },
 
