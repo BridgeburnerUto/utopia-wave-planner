@@ -337,6 +337,7 @@ window.__wpA = {
   lbSetFilter,
   lbOpFilter,
   resyncOps,
+  toggleMaxGain,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,

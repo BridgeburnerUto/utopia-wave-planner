@@ -1,4 +1,42 @@
 // ── TAB: PLAYER ────────────────────────────────────────────────────────────
+
+// ── Standalone TM gain estimator ────────────────────────────────────────────
+// Extracted so calcMaxGainAttacks() can also call it with simulated state.
+// S.enemy?.kdEffects is read from global state (stable within a session).
+function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
+  if (!tLand || !ownLand || !tNW || !aNW) return null;
+
+  const rpnw = tNW / aNW;
+  let rpnwF = 0;
+  if      (rpnw >= 0.567 && rpnw < 0.9)  rpnwF = 3 * rpnw - 1.7;
+  else if (rpnw >= 0.9   && rpnw <= 1.1) rpnwF = 1;
+  else if (rpnw >  1.1   && rpnw <= 1.6) rpnwF = -2 * rpnw + 3.2;
+  if (rpnwF <= 0) return 0;
+
+  const rknw  = ownKdAvgNW > 0 ? eneKdAvgNW / ownKdAvgNW : 1;
+  const rknwF = rknw < 0.5 ? 0.8 : rknw < 0.9 ? rknw / 2 + 0.55 : 1;
+
+  const mapText  = tp?.sot?.map || '';
+  const mapF     = (!mapText || mapText === 'Not much') ? 1.0
+                 : mapText === 'A little'               ? 0.90
+                 : 0.80;
+
+  const castlePct = tp?.survey?.buildings?.find(b => b.name === 'Castles')?.pctTot;
+  const castleF   = castlePct != null ? Math.max(0, 1 - (castlePct / 100 * 2.25)) : 1.0;
+
+  const relF = 1.10;
+
+  let enemyRitualF = 1.0;
+  const eRitual = (S.enemy?.kdEffects?.ritual || '').toLowerCase();
+  if (eRitual.includes('protection') || eRitual.includes('shield') || eRitual.includes('barrier')) {
+    const eff = S.enemy?.kdEffects?.ritualEff || 15;
+    enemyRitualF = Math.max(0.5, 1 - eff / 100);
+  }
+
+  const raw = tLand * 0.12 * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
+  const cap = Math.min(ownLand, tLand) * 0.20;
+  return Math.round(Math.min(raw, cap));
+}
 // "My Orders" tab — province picker + attack plan calculator.
 // calcAttacks() is pure business logic, separated from the render function.
 
@@ -239,47 +277,9 @@ function calcAttacks(prov) {
   const ownKdAvgNW  = ownProvs.length ? ownProvs.reduce((s,p) => s+(p.networth||0),0) / ownProvs.length : 0;
   const eneKdAvgNW  = eneProvs.length ? eneProvs.reduce((s,p) => s+(p.networth||0),0) / eneProvs.length : 0;
 
-  // ── Estimated TM land gains ────────────────────────────────────────────────
+  // ── Estimated TM land gains — delegates to top-level _estimateTMGain ────────
   function estimateTMGains(tNW, tLand, tp) {
-    if (!tLand || !ownLand || !tNW || !aNW) return null;
-
-    // RPNW
-    const rpnw = tNW / aNW;
-    let rpnwF = 0;
-    if      (rpnw >= 0.567 && rpnw < 0.9)  rpnwF = 3 * rpnw - 1.7;
-    else if (rpnw >= 0.9   && rpnw <= 1.1) rpnwF = 1;
-    else if (rpnw >  1.1   && rpnw <= 1.6) rpnwF = -2 * rpnw + 3.2;
-    if (rpnwF <= 0) return 0;
-
-    // RKNW
-    const rknw  = ownKdAvgNW > 0 ? eneKdAvgNW / ownKdAvgNW : 1;
-    const rknwF = rknw < 0.5 ? 0.8 : rknw < 0.9 ? rknw / 2 + 0.55 : 1;
-
-    // MAP modifier (in-war formula)
-    const mapText = tp?.sot?.map || '';
-    const mapF = (!mapText || mapText === 'Not much') ? 1.0
-               : mapText === 'A little'               ? 0.90
-               : 0.80; // Moderately / Heavily / Extremely → 80% in war
-
-    // Castles modifier — only if survey data exists
-    const castlePct = tp?.survey?.buildings?.find(b => b.name === 'Castles')?.pctTot;
-    const castleF   = castlePct != null ? Math.max(0, 1 - (castlePct / 100 * 2.25)) : 1.0;
-
-    // Relations modifier — always war
-    const relF = 1.10;
-
-    // Enemy protection ritual — reduces their land loss on each TM hit
-    // Add known ritual names here as you encounter them in-game.
-    let enemyRitualF = 1.0;
-    const eRitual = (S.enemy?.kdEffects?.ritual || '').toLowerCase();
-    if (eRitual.includes('protection') || eRitual.includes('shield') || eRitual.includes('barrier')) {
-      const eff = S.enemy?.kdEffects?.ritualEff || 15;
-      enemyRitualF = Math.max(0.5, 1 - eff / 100);
-    }
-
-    const raw = tLand * 0.12 * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
-    const cap = Math.min(ownLand, tLand) * 0.20;
-    return Math.round(Math.min(raw, cap));
+    return _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW);
   }
 
   // ── Collect and classify wave targets ─────────────────────────────────────
@@ -321,15 +321,15 @@ function calcAttacks(prov) {
     const away  = tp?.som?.armiesAway?.length > 0;
     const dAge  = tp?.calcs?.defPointsSummary?.ageSeconds;
 
-    // Apply race/personality defense multiplier to get effective enemy defense.
-    // tDef (raw) is kept for off-depletion math; tDefEff is used for all
-    // breakability checks so Dwarves/Halflings are harder to break than raw points suggest.
+    // tDefEff = tDef: the API's defPointsHome is ALREADY the effective defense value.
+    // The IS computes it from troops × their unit-stats, with racial bonuses baked in.
+    // Applying RACE_DEF_MULT on top would double-count and incorrectly lower the target,
+    // telling the attacker to send less offense than the province actually requires.
+    // Only own-side offense multipliers (ownOffMult) are needed — see comment above.
     const eRace = (tp?.race || item.province.race || '').toLowerCase();
     const ePers = (tp?.sot?.personality || '').toLowerCase();
-    const tDefEff = Math.round(tDef * (RACE_DEF_MULT[eRace] || 1.0) * (PERSONALITY_DEF_MULT[ePers] || 1.0));
-    const raceMod = eRace ? (RACE_DEF_MULT[eRace] || 1.0) : 1.0;
-    const persMod = ePers ? (PERSONALITY_DEF_MULT[ePers] || 1.0) : 1.0;
-    const hasDefMod = (raceMod !== 1.0 || persMod !== 1.0);
+    const tDefEff  = tDef;  // raw API value IS the effective value
+    const hasDefMod = false;
 
     // Enemy pop%: same formula as own province — ppa is peasants-only, need total pop.
     // Use component sum if available; fall back to ppa/25*100 if fields absent.
@@ -442,13 +442,16 @@ function calcAttacks(prov) {
     // offLeft depletion uses raw tDef — troops physically sent are unchanged by the multiplier.
     const mg = minGensToBreak(enriched.tDefEff, offLeft * ownOffMult, gensLeft);
 
-    // sentOff = minimum raw troops needed to break this target.
-    // = ceil( effectiveDef / (ownOffMult × genBonus) ) + 1
-    // Accounts for own race/pers multiplier and any extra gen bonus used.
-    // This is what the player actually needs to send — not the whole pool.
+    // sentOff = minimum raw offense to send to break this target.
+    // Game check: sentRaw × ownOffMult × genBonus > tDef
+    // → sentRaw = ceil(tDef / (ownOffMult × genBonus)) + 1
+    //
+    // For a neutral attacker (ownOffMult=1): sentOff = tDef + 1  ← simplest case
+    // For Avian (+20% off):  sentOff = ceil(tDef / 1.20) + 1     ← sends fewer raw troops
+    // For Elf  (−5% off):   sentOff = ceil(tDef / 0.95) + 1     ← must send slightly more
     const _genBonus = 1 + 0.05 * (mg - 1);
     const sentOff = mg > 0
-      ? Math.ceil(enriched.tDefEff / (ownOffMult * _genBonus)) + 1
+      ? Math.ceil(enriched.tDef / (ownOffMult * _genBonus)) + 1
       : 0;
 
     // pct = full remaining offense (before depletion) vs effective defense.
@@ -523,11 +526,183 @@ function calcAttacks(prov) {
 
   return {
     attacks, prov, gensHome, attackableGens,
-    gensLeft, offLeft,
+    gensLeft, offLeft, aOff,
     ownPop, totalGains,
     best: myEnriched[0] || poolEnriched[0] || null,
     armyStatus,
   };
+}
+
+/**
+ * Max Gain attack planner.
+ *
+ * Finds the sequence of TM attacks against any non-bloat enemy province that
+ * maximises total land gained.  Uses a greedy efficiency-first loop:
+ *
+ *   1. For each candidate compute: gain / offCost  (acres per offense point)
+ *   2. Pick the most efficient province the player can still break
+ *   3. Record the attack, update simulated land/NW for that province
+ *      (subsequent hits on the same province get correctly smaller estimates)
+ *   4. Repeat until gens or offense runs out
+ *
+ * Returns an object with the same shape as calcAttacks() so the same renderer
+ * handles both modes.
+ */
+function calcMaxGainAttacks(prov) {
+  // ── Own stats (mirrors calcAttacks derivation) ────────────────────────────
+  const _armiesAway   = prov.som?.armiesAway || [];
+  const _overdueCount = _armiesAway.filter(a => a.secondsRemaining != null && a.secondsRemaining <= 0).length;
+  const _allOverdue   = _armiesAway.length > 0 && _overdueCount === _armiesAway.length;
+  const _sotOff  = prov.sot?.offPoints || 0;
+  const _apiOff  = _allOverdue && _sotOff ? _sotOff : (prov.som?.offPointsHome || 0);
+  const _sotGens = prov.sot?.generals;
+  const _apiGens = _allOverdue && _sotGens != null
+    ? _sotGens : (prov.som?.standingArmy?.generals ?? _sotGens ?? 5);
+
+  const aOff     = _eff(prov.name, 'off',  _apiOff);
+  const aNW      = _eff(prov.name, 'nw',   prov.networth || 0);
+  const gensHome = _eff(prov.name, 'gens', _apiGens);
+  const ownLand  = prov.land || prov.sot?.acres || 0;
+  const attackableGens = Math.max(0, gensHome - 1);
+
+  const ownRace    = (prov.race || '').toLowerCase();
+  const ownPers    = (prov.sot?.personality || '').toLowerCase();
+  const ownOffMult = (RACE_OFF_MULT[ownRace] || 1.0) * (PERSONALITY_OFF_MULT[ownPers] || 1.0);
+
+  const ownProvs   = S.own?.provinces   || [];
+  const eneProvs   = S.enemy?.provinces || [];
+  const ownKdAvgNW = ownProvs.length ? ownProvs.reduce((s,p) => s+(p.networth||0),0) / ownProvs.length : 0;
+  const eneKdAvgNW = eneProvs.length ? eneProvs.reduce((s,p) => s+(p.networth||0),0) / eneProvs.length : 0;
+
+  if (!aOff || !attackableGens) {
+    return { attacks: [], gensHome, attackableGens, aOff,
+             gensLeft: attackableGens, offLeft: aOff, totalGains: 0,
+             reason: !aOff ? 'no_off' : 'no_gens' };
+  }
+
+  // ── Build candidate pool: all non-bloat enemy provinces we can break ──────
+  const candidates = (S.enemy?.provinces || [])
+    .filter(ep => !S.provinces[ep.slot]?.bloat)
+    .map(ep => {
+      const tp    = pd('[' + ep.slot + ']');
+      const tDef  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
+      const tNW   = tp?.networth || 0;
+      const tLand = tp?.land     || 0;
+      const away  = (tp?.som?.armiesAway?.length || 0) > 0;
+      const dAge  = tp?.calcs?.defPointsSummary?.ageSeconds;
+      if (!tDef || !tLand || aOff * ownOffMult <= tDef) return null;
+      const offCost = Math.ceil(tDef / ownOffMult) + 1;
+      return { ep, tp, tDef, tNW, tLand, offCost, away, dAge };
+    })
+    .filter(Boolean);
+
+  if (!candidates.length) {
+    return { attacks: [], gensHome, attackableGens, aOff,
+             gensLeft: attackableGens, offLeft: aOff, totalGains: 0,
+             reason: 'no_targets' };
+  }
+
+  // ── Per-province simulated state ─────────────────────────────────────────
+  // Gain estimates use simLand/simNW so each hit correctly reflects depleted land.
+  const simLand = {}, simNW = {};
+  candidates.forEach(c => { simLand[c.ep.slot] = c.tLand; simNW[c.ep.slot] = c.tNW; });
+
+  // ── Greedy loop ──────────────────────────────────────────────────────────
+  const attacks   = [];
+  const hitCount  = {};
+  let offLeft     = aOff;
+  let gensLeft    = attackableGens;
+
+  for (let iter = 0; iter < 60 && gensLeft > 0 && offLeft > 0; iter++) {
+    let best = null, bestGain = 0, bestEff = -1;
+
+    for (const c of candidates) {
+      const sl = simLand[c.ep.slot];
+      if (sl <= 0) continue;
+      if (offLeft * ownOffMult <= c.tDef || offLeft < c.offCost) continue;
+
+      const gain = _estimateTMGain(simNW[c.ep.slot], sl, c.tp,
+                                   ownLand, aNW, ownKdAvgNW, eneKdAvgNW);
+      if (!gain || gain <= 0) continue;
+
+      const eff = gain / c.offCost;
+      if (eff > bestEff) { best = c; bestGain = gain; bestEff = eff; }
+    }
+
+    if (!best) break;
+
+    // Capture pre-hit simulated state for display
+    const s          = best.ep.slot;
+    const landBefore = simLand[s];
+    const nwBefore   = simNW[s];
+
+    // Update simulated state: deduct estimated gain from land and NW
+    const nwPerAcre  = landBefore > 0 ? nwBefore / landBefore : 0;
+    simLand[s] = Math.max(0, landBefore - bestGain);
+    simNW[s]   = Math.max(0, nwBefore   - bestGain * nwPerAcre);
+
+    hitCount[s] = (hitCount[s] || 0) + 1;
+
+    // Build attack object compatible with _buildAttackCard
+    const pct = Math.round(offLeft * ownOffMult / best.tDef * 100);
+    attacks.push({
+      n:       attacks.length + 1,
+      target: {
+        item: {
+          province: {
+            slot:          '[' + s + ']',
+            rawSlot:       s,
+            name:          best.ep.name,
+            race:          best.ep.race || '',
+            requiredOps:   [],
+            notes:         '',
+            needsRaze:     false,
+            needsMassacre: false,
+            bloat:         false,
+          },
+          waveName:     'Max Gain',
+          wavePriority: 1,
+        },
+        tp:        best.tp,
+        tDef:      best.tDef,
+        tDefEff:   best.tDef,
+        tNW:       nwBefore,
+        tLand:     landBefore,
+        tPop:      null,
+        nwQ:       1,
+        away:      best.away,
+        dAge:      best.dAge,
+        gains:     bestGain,
+        hasDefMod: false,
+        eRace:     '', ePers: '',
+        breaks:    true,
+      },
+      gens:       1,
+      sentOff:    best.offCost,
+      result:     'yes',
+      pct,
+      attackType: 'TM',
+      isAssigned: false,
+      gains:      bestGain,
+      sodNote:    hitCount[s] > 1
+                    ? `Take a fresh SoD on ${best.ep.name} before sending this attack`
+                    : null,
+      waveName:   'Max Gain',
+      tPop:       null,
+    });
+
+    offLeft  -= best.offCost;
+    gensLeft -= 1;
+  }
+
+  const totalGains = attacks.reduce((s, a) => s + (a.gains || 0), 0);
+  return { attacks, gensHome, attackableGens, aOff,
+           gensLeft, offLeft, totalGains, ownPop: null, armyStatus: null };
+}
+
+function toggleMaxGain() {
+  S.maxGainMode = !S.maxGainMode;
+  renderPlayer();
 }
 
 function renderPlayer() {
@@ -539,7 +714,17 @@ function _buildPlayer() {
   if (!S.playerProv)      return _buildProvPicker();
 
   const prov = S.playerProv;
-  const { attacks, gensHome, attackableGens, gensLeft, homeOffRemaining, ownPop, totalGains, reason, armyStatus } = calcAttacks(prov);
+
+  // Always run the wave planner for header stats (ownPop, armyStatus, gensHome)
+  const wavePlan = calcAttacks(prov);
+  const { gensHome, attackableGens, ownPop, armyStatus } = wavePlan;
+
+  // Choose active plan
+  const maxGainMode = !!S.maxGainMode;
+  const plan        = maxGainMode ? calcMaxGainAttacks(prov) : wavePlan;
+  const { attacks, gensLeft, totalGains, reason } = plan;
+  const aOff = plan.aOff || wavePlan.aOff;
+
   const waveTargets = S.enemy ? S.enemy.provinces
     .filter(p => S.provinces[p.slot]?.wave)
     .map(p => {
@@ -555,7 +740,6 @@ function _buildPlayer() {
         waveName: _waveDisplayName(plan.wave),
       };
     }) : [];
-  const aOff = _eff(prov.name, 'off', prov.som?.offPointsHome || 0);
 
   // ── Army return banner ───────────────────────────────────────────────────
   // Show before building the header so it appears above the stat inputs.
@@ -592,21 +776,49 @@ function _buildPlayer() {
 
   let h = armyBanner + _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, waveTargets.length, armyStatus);
 
-  if (!waveTargets.length) {
-    return h + `<div class="watk-notarget">// No wave targets assigned yet<br>
-      <span style="font-size:17px">The war leader needs to set targets in the WAR BOARD tab first</span></div>`;
+  // Mode toggle bar — always visible once a province is picked
+  h += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <button onclick="__wpA.toggleMaxGain()"
+      style="padding:5px 14px;font-size:17px;font-weight:700;cursor:pointer;border-radius:3px;
+             background:${maxGainMode ? '#203820' : '#2b3333'};
+             border:1px solid ${maxGainMode ? '#60c040' : '#617070'};
+             color:${maxGainMode ? '#60c040' : '#7a9090'}">
+      ⚡ Max Gain${maxGainMode ? ' ON' : ''}
+    </button>
+    ${maxGainMode
+      ? `<span style="font-size:17px;color:#60c040">Ignoring wave plan — showing best land gain from any target</span>`
+      : `<button onclick="__wpA.toggleMaxGain()"
+           style="display:none"></button>`
+    }
+  </div>`;
+
+  // In wave mode: guard against missing data
+  if (!maxGainMode) {
+    if (!waveTargets.length) {
+      return h + `<div class="watk-notarget">// No wave targets assigned yet<br>
+        <span style="font-size:17px">The war leader needs to set targets in the WAR BOARD tab first</span></div>`;
+    }
+    if (reason === 'no_off') {
+      return h + `<div class="watk-notarget">// No offensive data available for this province<br>
+        <span style="font-size:17px">SoM data needed to calculate attacks</span></div>`;
+    }
+    if (reason === 'no_gens') {
+      return h + `<div class="watk-notarget">// Cannot attack — only 1 general home<br>
+        <span style="font-size:17px">At least 2 generals must be home (1 is always kept back)</span></div>`;
+    }
   }
+
   if (reason === 'no_off') {
-    return h + `<div class="watk-notarget">// No offensive data available for this province<br>
-      <span style="font-size:17px">SoM data needed to calculate attacks</span></div>`;
+    return h + `<div class="watk-notarget">// No offensive data available</div>`;
   }
   if (reason === 'no_gens') {
-    return h + `<div class="watk-notarget">// Cannot attack — only 1 general home<br>
-      <span style="font-size:17px">At least 2 generals must be home (1 is always kept back)</span></div>`;
+    return h + `<div class="watk-notarget">// Cannot attack — only 1 general home</div>`;
   }
   if (!attacks.length) {
-    return h + `<div class="watk-notarget">// No attack plan generated<br>
-      <span style="font-size:17px">No breakable targets with your current generals — check intel age or wait for armies to return</span></div>`;
+    return h + `<div class="watk-notarget">${maxGainMode
+      ? '// No breakable targets with positive TM gains found — check intel age'
+      : '// No attack plan generated — check intel age or wait for armies to return'
+    }</div>`;
   }
 
   // Group attacks by wave name
@@ -618,13 +830,13 @@ function _buildPlayer() {
   });
 
   h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div class="wsech" style="margin-bottom:0">// ATTACK PLAN</div>
-    <button onclick="__wpA.toggleNWPanel()"
+    <div class="wsech" style="margin-bottom:0">${maxGainMode ? '// ⚡ MAX GAIN PLAN' : '// ATTACK PLAN'}</div>
+    ${!maxGainMode ? `<button onclick="__wpA.toggleNWPanel()"
       style="padding:4px 12px;background:#1a2828;border:1px solid #617070;color:#a0d0b0;
              font-size:17px;font-weight:700;cursor:pointer;border-radius:3px"
       title="Open wave target province pages to get real-time NW during a wave">
       ⟳ NW
-    </button>
+    </button>` : ''}
   </div>`;
   Object.entries(byWave).forEach(([wave, list]) => {
     h += _buildAttackCard(wave, list);
@@ -635,7 +847,9 @@ function _buildPlayer() {
     h += `<div style="margin:6px 0 10px;padding:8px 14px;background:#1a2828;border:1px solid #304880;
                       border-radius:3px;font-size:17px;color:#80a8f0;display:flex;align-items:center;gap:10px">
       <span style="font-weight:700">📊 Total estimated TM gains: ~${fK(totalGains)} acres</span>
-      <span style="font-size:13px;color:#617070">* rituals, honor not included</span>
+      <span style="font-size:13px;color:#617070">${maxGainMode
+        ? '* gains recalculated per hit · rituals, honor not included'
+        : '* rituals, honor not included'}</span>
     </div>`;
   }
 
@@ -829,10 +1043,7 @@ function _buildAttackCard(wave, atkList) {
             ${away ? '<span style="color:#60C040;font-size:17px">↗ army away</span>' : ''}
           </div>
           <div class="watk-detail">
-            ${t.hasDefMod
-              ? `${fK(t.tDefEff)} eff def <span style="color:#617070;font-size:15px">(${fK(t.tDef)} raw · ${t.eRace}${t.ePers ? ' ' + t.ePers : ''})</span>`
-              : `${fK(t.tDef)} def`
-            } · ${fK(sentOff)} off sent · ${atk.pct}% ratio
+            ${fK(t.tDef)} def · ${fK(sentOff)} off sent · ${atk.pct}% ratio
             ${da != null ? ` · intel <span class="${aC(da)}">${fA(da)}</span> old` : ''}
             ${gainsNote ? ` · ${gainsNote}` : ''}
             ${tPopNote  ? ` · ${tPopNote}`  : ''}

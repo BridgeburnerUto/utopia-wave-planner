@@ -56,6 +56,7 @@ const S = {
   lastBackendSync: null, // Date of last successful IS dump POST (runtime only)
   lastBackendError: '',  // Error message from last failed sync (runtime only)
   _warFromNews: null,    // cached war status from kingdomNews scan (null=uncached)
+  maxGainMode:  false,   // My Orders: true = show max-gain plan instead of wave plan
 
   // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {
