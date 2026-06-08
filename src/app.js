@@ -135,6 +135,9 @@ window.__wpA = {
       await this.loadEnemy(S.eLoc);
       if (!S.cols.length) initCols();
 
+      // Refresh war status cache before rendering (feeds _atWar() in all tabs)
+      _refreshWarStatus();
+
       // Render all tabs
       this.meta();
 
@@ -215,6 +218,7 @@ window.__wpA = {
         t.textContent = `Tick ${od.currentTick.tickNumber} · ${od.currentTick.tickName}`;
       }
       await this.loadEnemy(S.eLoc);
+      _refreshWarStatus();  // refresh war status cache after own + enemy are loaded
       this.meta();
       renderRitualBadges();
       snapshotNW();

@@ -59,16 +59,76 @@ function $id(id) {
 
 /**
  * True if own KD is currently at war.
- * Checks S.own.war (boolean from intel API) and S.own.stance (from world dump format).
- * Dump stance is either the string "Normal" or the array ["war", "X:Y"].
+ *
+ * Checks multiple sources in priority order — the IS API does not consistently
+ * populate S.own.war or S.own.stance, so we fall through to richer sources:
+ *
+ *  1. S.own.war          — boolean from IS OwnKingdom API (unreliable but fast)
+ *  2. S.own.stance       — string "war" or ["war","X:Y"] from world dump format
+ *  3. S.enemy.war        — enemy KD data often carries this field more reliably
+ *  4. S.enemy.stance     — same format as own stance
+ *  5. S._warFromNews     — cached result of kingdomNews scan (set by _refreshWarStatus)
+ *
+ * Call _refreshWarStatus() after loading own/enemy data to keep the cache fresh.
  */
 function _atWar() {
   if (!S.own) return false;
+
+  // 1. Direct IS API boolean
   if (S.own.war === true) return true;
-  const s = S.own.stance;
-  if (Array.isArray(s)) return s[0]?.toLowerCase() === 'war';
-  if (typeof s === 'string') return s.toLowerCase() === 'war';
+
+  // 2 & 3. Stance fields (own and enemy)
+  for (const stance of [S.own.stance, S.enemy?.stance]) {
+    if (!stance) continue;
+    if (Array.isArray(stance) && stance[0]?.toLowerCase() === 'war') return true;
+    if (typeof stance === 'string' && stance.toLowerCase() === 'war') return true;
+  }
+
+  // 4. Enemy boolean
+  if (S.enemy?.war === true) return true;
+
+  // 5. Cached kingdomNews scan result
+  if (S._warFromNews === true) return true;
+
   return false;
+}
+
+/**
+ * Scan kingdomNews.parseString for the most recent war/peace events.
+ * Caches the result in S._warFromNews so _atWar() can read it without
+ * re-scanning. Call once per refresh cycle.
+ */
+function _refreshWarStatus() {
+  try {
+    const IS   = JSON.parse(localStorage.getItem('IntelState') || '{}');
+    const news = IS.kingdomNews?.parseString;
+    if (!news) { S._warFromNews = false; return; }
+
+    // Walk every line: track the absolute date of the most recent war declaration
+    // and the most recent peace event.  If latest war > latest peace → still at war.
+    let lastWarAbs   = -1;
+    let lastPeaceAbs = -1;
+
+    news.split('\n').forEach(line => {
+      const parts = line.split('\t');
+      if (parts.length < 2) return;
+      // _parseUtoDate is defined in leaderboard.js / ritual.js (hoisted, available at runtime)
+      const d = _parseUtoDate(parts[0].trim());
+      if (!d) return;
+      const abs  = _utoToAbs(d.month, d.day, d.year);
+      const text = parts[1].toLowerCase();
+      if (text.includes('declared war') || text.includes('at war with')) {
+        if (abs > lastWarAbs) lastWarAbs = abs;
+      } else if (text.includes('peace') || text.includes('ceasefire') || text.includes('white peace')) {
+        if (abs > lastPeaceAbs) lastPeaceAbs = abs;
+      }
+    });
+
+    S._warFromNews = lastWarAbs > 0 && lastWarAbs > lastPeaceAbs;
+    if (S._warFromNews) console.log('[WavePlanner] War status from kingdomNews: AT WAR');
+  } catch(e) {
+    S._warFromNews = false;
+  }
 }
 
 /** Update the save status indicator in the header */

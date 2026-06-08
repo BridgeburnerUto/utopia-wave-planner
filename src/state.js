@@ -55,6 +55,7 @@ const S = {
   apiKey:         '',    // API key matching WP_API_KEY env var on Cloud Run
   lastBackendSync: null, // Date of last successful IS dump POST (runtime only)
   lastBackendError: '',  // Error message from last failed sync (runtime only)
+  _warFromNews: null,    // cached war status from kingdomNews scan (null=uncached)
 
   // leaderboard sort: 'damage'|'ops'|'gain'
   lbFilter: {

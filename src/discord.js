@@ -172,6 +172,13 @@ async function checkAndSendDiscordAlerts() {
       });
     }
 
+    // ── Intel age helper ─────────────────────────────────────────────────
+    // Returns "(intel Xm old)" string or "" — mirrors the alerts tab display.
+    function _ageTag(p) {
+      const s = p?.calcs?.defPointsSummary?.ageSeconds;
+      return s != null ? ` (intel ${fA(s)} old)` : '';
+    }
+
     // ── Missing SoM (new provinces only) ─────────────────────────────────
     const missingSom = (S.enemy.provinces || [])
       .filter(p => (p.sot?.opa || 0) > 80 && !p.som)
@@ -183,7 +190,7 @@ async function checkAndSendDiscordAlerts() {
       const missingLines = newMissing.map(name => {
         const p = S.enemy?.provinces?.find(p => p.name === name);
         const opa = p?.sot?.opa || 0;
-        return `· ${name}${opa ? ' (' + opa + ' OPA)' : ''}`;
+        return `· ${name}${opa ? ' (' + opa + ' OPA)' : ''}${_ageTag(p)}`;
       }).join('\n');
       toSend.push({
         _key: 'missing_som',
@@ -203,7 +210,7 @@ async function checkAndSendDiscordAlerts() {
     if (foodRichThr > 0) {
       const richFood = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.food != null && p.sot.food > foodRichThr)
-        .map(p => ({ name: p.name, food: p.sot.food }));
+        .map(p => ({ name: p.name, food: p.sot.food, age: _ageTag(p) }));
       next.enemy_food_rich = richFood.map(p => p.name);
       const newRichFood = richFood.filter(p => !(prev.enemy_food_rich || []).includes(p.name));
       if (newRichFood.length) {
@@ -212,7 +219,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🍞 Enemy food target — ${newRichFood.length} province${newRichFood.length > 1 ? 's' : ''}`,
-            description: newRichFood.map(p => `· ${p.name} — ${fK(p.food)} food`).join('\n') + '\nUse steal food / vermin.',
+            description: newRichFood.map(p => `· ${p.name} — ${fK(p.food)} food${p.age}`).join('\n') + '\nUse steal food / vermin.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(foodRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -226,7 +233,7 @@ async function checkAndSendDiscordAlerts() {
     if (foodLowThr > 0) {
       const starveProv = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.food != null && p.sot.food < foodLowThr)
-        .map(p => ({ name: p.name, food: p.sot.food }));
+        .map(p => ({ name: p.name, food: p.sot.food, age: _ageTag(p) }));
       next.enemy_food_low = starveProv.map(p => p.name);
       const newStarve = starveProv.filter(p => !(prev.enemy_food_low || []).includes(p.name));
       if (newStarve.length) {
@@ -235,7 +242,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💀 Enemy starvation risk — ${newStarve.length} province${newStarve.length > 1 ? 's' : ''}`,
-            description: newStarve.map(p => `· ${p.name} — only ${fK(p.food)} food`).join('\n') + '\nUse vermin + drought + gluttony.',
+            description: newStarve.map(p => `· ${p.name} — only ${fK(p.food)} food${p.age}`).join('\n') + '\nUse vermin + drought + gluttony.',
             color: DISCORD.COLORS.red,
             footer: { text: `Threshold: ${fK(foodLowThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -249,7 +256,7 @@ async function checkAndSendDiscordAlerts() {
     if (gcRichThr > 0) {
       const richGc = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.money != null && p.sot.money > gcRichThr)
-        .map(p => ({ name: p.name, gc: p.sot.money }));
+        .map(p => ({ name: p.name, gc: p.sot.money, age: _ageTag(p) }));
       next.enemy_gc_rich = richGc.map(p => p.name);
       const newRichGc = richGc.filter(p => !(prev.enemy_gc_rich || []).includes(p.name));
       if (newRichGc.length) {
@@ -258,7 +265,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💰 Enemy GC target — ${newRichGc.length} province${newRichGc.length > 1 ? 's' : ''}`,
-            description: newRichGc.map(p => `· ${p.name} — ${fK(p.gc)} GC`).join('\n') + '\nUse fools gold / steal gold.',
+            description: newRichGc.map(p => `· ${p.name} — ${fK(p.gc)} GC${p.age}`).join('\n') + '\nUse fools gold / steal gold.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(gcRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -272,7 +279,7 @@ async function checkAndSendDiscordAlerts() {
     if (runesRichThr > 0) {
       const richRunes = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.runes != null && p.sot.runes > runesRichThr)
-        .map(p => ({ name: p.name, runes: p.sot.runes }));
+        .map(p => ({ name: p.name, runes: p.sot.runes, age: _ageTag(p) }));
       next.enemy_runes_rich = richRunes.map(p => p.name);
       const newRichRunes = richRunes.filter(p => !(prev.enemy_runes_rich || []).includes(p.name));
       if (newRichRunes.length) {
@@ -281,7 +288,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🔮 Enemy runes target — ${newRichRunes.length} province${newRichRunes.length > 1 ? 's' : ''}`,
-            description: newRichRunes.map(p => `· ${p.name} — ${fK(p.runes)} runes`).join('\n') + '\nUse lightning strike / steal runes.',
+            description: newRichRunes.map(p => `· ${p.name} — ${fK(p.runes)} runes${p.age}`).join('\n') + '\nUse lightning strike / steal runes.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(runesRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
