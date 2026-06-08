@@ -478,6 +478,10 @@ function _buildFilterBar(f, warPeriod, totalCount, filteredCount) {
           onclick="__wpA.lbSetFilter('custom',{fromYear:${f.fromYear||1},fromMonth:${f.fromMonth||1},toYear:${f.toYear||1},toMonth:${f.toMonth||12}})">
           Custom…</button>
         ${filterInfo}
+        <button class="wb" style="font-size:17px;padding:3px 9px;margin-left:auto;border-color:#617070;color:#7a9090"
+          onclick="__wpA.resyncOps()"
+          title="Reset the op sync watermark and re-pull all ops from the IS API. Use if ops are missing (e.g. after adding a new op type to the tracked set).">
+          ↺ Re-sync ops</button>
       </div>
       ${customPanel}
     </div>`;
@@ -548,7 +552,13 @@ async function syncOps() {
       const isBuff      = OP_SETS.SELF_BUFF.has(op.opType) || isSelf;
       const isTracked   = TRACKED_OPS.has(op.opType);
 
-      if (op.id > maxId) maxId = op.id;
+      // Advance watermark for all ops (tracked or not) so we never re-process
+      // espionage / self-buff ops. For untracked ops we skip writing to Firebase
+      // but still record the ID — this is intentional for spy/buff ops.
+      // Exception: if the op type is completely unrecognised (not in any set),
+      // do NOT advance the watermark so a future TRACKED_OPS addition can pick it up.
+      const isKnown = isTracked || isEspionage || isBuff;
+      if (isKnown && op.id > maxId) maxId = op.id;
       if (!isTracked) continue;
 
       const category = OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive';
@@ -585,5 +595,29 @@ async function syncOps() {
     }
   } catch (e) {
     console.log('[WavePlanner] Op sync failed:', e.message);
+  }
+}
+
+/**
+ * Reset the op sync watermark to 0 and re-run syncOps.
+ * Use when ops are missing from the leaderboard — e.g. after adding a new
+ * op type to TRACKED_OPS (skipped ops advance the watermark so they are
+ * otherwise never re-processed).
+ * All fbWrite calls are upserts, so re-syncing existing ops is harmless.
+ */
+async function resyncOps() {
+  if (!S.own) return;
+  const kdId      = S.own.location.replace(':', '_');
+  const metaPath  = `meta/${kdId}_watermark`;
+  const el        = $id('__wpc_leaderboard');
+  if (el) el.innerHTML = loadingHTML('RESETTING WATERMARK AND RE-SYNCING...');
+  try {
+    await fbWrite(metaPath, { kingdomId: kdId, lastSyncedId: 0, updatedAt: Date.now() });
+    console.log('[WavePlanner] Op watermark reset to 0 — running full re-sync');
+    await syncOps();
+    renderLeaderboard();
+  } catch(e) {
+    console.error('[WavePlanner] resyncOps failed:', e.message);
+    if (el) el.innerHTML = `<div style="color:#E05050;padding:20px">Re-sync failed: ${esc(e.message)}</div>`;
   }
 }

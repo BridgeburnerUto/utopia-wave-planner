@@ -336,6 +336,7 @@ window.__wpA = {
   lbView,
   lbSetFilter,
   lbOpFilter,
+  resyncOps,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
