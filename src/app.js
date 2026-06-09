@@ -338,6 +338,7 @@ window.__wpA = {
   lbOpFilter,
   resyncOps,
   toggleMaxGain,
+  debugIntelNews: _debugIntelNews,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,

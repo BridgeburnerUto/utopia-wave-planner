@@ -152,6 +152,52 @@ function parseNewsActivity(tickInterval) {
   }
 }
 
+// ── Debug helper ─────────────────────────────────────────────────────────────
+
+/**
+ * Call __wpA.debugIntelNews() from the browser console to diagnose
+ * why acres/attacks/razes/massacres are showing as "—".
+ * Dumps: S.eLoc, nameToSlot index, first 20 news lines raw,
+ * and any lines that match (or nearly match) the expected patterns.
+ */
+function _debugIntelNews() {
+  const IS = JSON.parse(localStorage.getItem('IntelState') || '{}');
+  const news = IS.kingdomNews?.parseString;
+  console.log('[IntelDebug] S.eLoc =', S.eLoc);
+  console.log('[IntelDebug] currentTick =', IS.currentTick?.tickName);
+  if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
+
+  const nameToSlot = {};
+  (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
+  console.log('[IntelDebug] nameToSlot:', nameToSlot);
+
+  const lines = news.split('\n').filter(l => l.trim());
+  console.log('[IntelDebug] Total news lines:', lines.length);
+  console.log('[IntelDebug] First 20 lines (raw):');
+  lines.slice(0, 20).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
+
+  // Show lines mentioning enemy location
+  const eLoc = S.eLoc;
+  const eLines = lines.filter(l => l.includes(eLoc));
+  console.log(`[IntelDebug] Lines containing "${eLoc}":`, eLines.length);
+  eLines.slice(0, 20).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
+
+  // Show lines containing "invaded"
+  const invLines = lines.filter(l => l.toLowerCase().includes('invaded'));
+  console.log('[IntelDebug] Lines containing "invaded":', invLines.length);
+  invLines.slice(0, 10).forEach((l, i) => {
+    const parts = l.split('\t');
+    const text = parts[1]?.trim() || '';
+    const m = text.match(/^(.+?)\s*\(([^)]+)\)\s+invaded\s+(.+?)\s*\(([^)]+)\)\s+and\s+captured\s+([\d,]+)\s+acres/i);
+    console.log(`  [${i}]`, JSON.stringify(text), '→ captured match:', m ? [m[1],m[2],m[3],m[4],m[5]] : null);
+  });
+
+  // Show lines containing "razed" or "killed"
+  const combatLines = lines.filter(l => l.toLowerCase().includes('razed') || l.toLowerCase().includes('killed'));
+  console.log('[IntelDebug] Lines containing "razed" or "killed":', combatLines.length);
+  combatLines.slice(0, 10).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
+}
+
 // ── Sort state ────────────────────────────────────────────────────────────────
 
 // S.intelSort = { col: 'slot', dir: 1 }  (dir: 1=asc, -1=desc)
