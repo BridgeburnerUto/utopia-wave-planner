@@ -165,8 +165,20 @@ function _debugIntelNews() {
   const news = IS.kingdomNews?.parseString;
   console.log('[IntelDebug] S.eLoc =', S.eLoc);
   console.log('[IntelDebug] currentTick =', IS.currentTick?.tickName);
+  console.log('[IntelDebug] All IntelState top-level keys:', Object.keys(IS));
+  // Search all keys for anything that looks like news text
+  for (const [k, v] of Object.entries(IS)) {
+    if (typeof v === 'string' && (v.includes('invaded') || v.includes('declared war') || v.includes('captured'))) {
+      console.log(`[IntelDebug] Found news-like string at IS.${k} (length ${v.length}):`, v.slice(0, 500));
+    } else if (v && typeof v === 'object') {
+      for (const [k2, v2] of Object.entries(v)) {
+        if (typeof v2 === 'string' && (v2.includes('invaded') || v2.includes('declared war') || v2.includes('captured'))) {
+          console.log(`[IntelDebug] Found news-like string at IS.${k}.${k2} (length ${v2.length}):`, v2.slice(0, 500));
+        }
+      }
+    }
+  }
   console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
-  console.log('[IntelDebug] kingdomNews (raw):', JSON.stringify(IS.kingdomNews)?.slice(0, 2000));
   if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
 
   const nameToSlot = {};
