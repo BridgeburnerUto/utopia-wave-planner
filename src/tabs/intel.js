@@ -165,6 +165,8 @@ function _debugIntelNews() {
   const news = IS.kingdomNews?.parseString;
   console.log('[IntelDebug] S.eLoc =', S.eLoc);
   console.log('[IntelDebug] currentTick =', IS.currentTick?.tickName);
+  console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
+  console.log('[IntelDebug] kingdomNews (raw):', JSON.stringify(IS.kingdomNews)?.slice(0, 2000));
   if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
 
   const nameToSlot = {};
