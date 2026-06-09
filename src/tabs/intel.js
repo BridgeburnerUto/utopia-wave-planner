@@ -166,22 +166,15 @@ function _debugIntelNews() {
   console.log('[IntelDebug] S.eLoc =', S.eLoc);
   console.log('[IntelDebug] currentTick =', IS.currentTick?.tickName);
   console.log('[IntelDebug] All IntelState top-level keys:', Object.keys(IS));
-  // Dump keys of ownData and enemyData to find news
-  if (IS.ownData)   console.log('[IntelDebug] IS.ownData keys:',   Object.keys(IS.ownData));
-  if (IS.enemyData) console.log('[IntelDebug] IS.enemyData keys:', Object.keys(IS.enemyData));
-  // Deep search up to 3 levels for news-like text
-  function deepSearch(obj, path, depth) {
-    if (depth > 3 || !obj || typeof obj !== 'object') return;
-    for (const [k, v] of Object.entries(obj)) {
-      const p = `${path}.${k}`;
-      if (typeof v === 'string' && v.length > 50 && (v.includes('invaded') || v.includes('declared war') || v.includes('captured') || v.includes('razed'))) {
-        console.log(`[IntelDebug] News-like text at ${p} (len=${v.length}):`, v.slice(0, 600));
-      } else if (v && typeof v === 'object' && !Array.isArray(v)) {
-        deepSearch(v, p, depth + 1);
-      }
+  // Scan ALL localStorage keys for news-like content
+  console.log('[IntelDebug] All localStorage keys:', Object.keys(localStorage));
+  for (let i = 0; i < localStorage.length; i++) {
+    const lsKey = localStorage.key(i);
+    const raw   = localStorage.getItem(lsKey) || '';
+    if (raw.includes('invaded') || raw.includes('declared war') || raw.includes('captured') || raw.includes('razed')) {
+      console.log(`[IntelDebug] News-like text in localStorage["${lsKey}"] (len=${raw.length}):`, raw.slice(0, 800));
     }
   }
-  deepSearch(IS, 'IS', 0);
   console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
   if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
 
