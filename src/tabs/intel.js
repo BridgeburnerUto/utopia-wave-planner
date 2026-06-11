@@ -160,7 +160,7 @@ function parseNewsActivity(tickInterval) {
  * Dumps: S.eLoc, nameToSlot index, first 20 news lines raw,
  * and any lines that match (or nearly match) the expected patterns.
  */
-function _debugIntelNews() {
+async function _debugIntelNews() {
   const IS = JSON.parse(localStorage.getItem('IntelState') || '{}');
   const news = IS.kingdomNews?.parseString;
   console.log('[IntelDebug] S.eLoc =', S.eLoc);
