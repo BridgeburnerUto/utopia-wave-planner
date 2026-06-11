@@ -200,6 +200,17 @@ async function _debugIntelNews() {
       console.log('[IntelDebug] fetchKingdomOps returned:', ops);
     }
   } catch(e) { console.log('[IntelDebug] fetchKingdomOps error:', e.message); }
+  // Probe direct fetch of the game's kingdom news page (CORS check)
+  console.log('[IntelDebug] document.location =', document.location.href);
+  try {
+    const newsUrl = `https://utopia-game.com/wol/game/kingdom_news/5/4`;
+    const r = await fetch(newsUrl, { credentials: 'include' });
+    const body = await r.text();
+    console.log(`[IntelDebug] ${newsUrl} → status=${r.status}, length=${body.length}`);
+    console.log('[IntelDebug] body sample:', body.slice(0, 1000));
+  } catch(e) {
+    console.log('[IntelDebug] kingdom_news fetch ERROR (likely CORS):', e.message);
+  }
   console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
   if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
 
