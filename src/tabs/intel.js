@@ -184,6 +184,22 @@ async function _debugIntelNews() {
       console.log(`[IntelDebug] ${path} → ERROR:`, e.message);
     }
   }
+  // Probe KingdomOps for invade/raze/massacre op types
+  try {
+    const ops = await fetchKingdomOps();
+    if (Array.isArray(ops)) {
+      console.log('[IntelDebug] KingdomOps count:', ops.length);
+      const opTypes = {};
+      ops.forEach(o => { opTypes[o.opType] = (opTypes[o.opType]||0) + 1; });
+      console.log('[IntelDebug] opType counts:', opTypes);
+      // Show sample of any op whose type looks combat-related
+      const combatLike = ops.filter(o => /invade|raze|massacre|attack|conquer/i.test(o.opType||''));
+      console.log('[IntelDebug] Combat-like ops sample:', combatLike.slice(0,5));
+      console.log('[IntelDebug] First 3 ops (raw):', ops.slice(0,3));
+    } else {
+      console.log('[IntelDebug] fetchKingdomOps returned:', ops);
+    }
+  } catch(e) { console.log('[IntelDebug] fetchKingdomOps error:', e.message); }
   console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
   if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
 
