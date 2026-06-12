@@ -43,14 +43,22 @@ function _buildNewsStats() {
   const nameToSlot = {};
   (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
 
-  // Filter events to those within S.intelInterval ticks of the current tick
+  // Filter events to those within S.intelInterval ticks of the most recent
+  // event in the news (the scraped edition may lag behind the live current
+  // tick, so anchor the window to the news data itself rather than "now").
   let minAbs = -Infinity;
-  if (S.currentTickName && S.intelInterval) {
-    const cur = _parseUtoDate(S.currentTickName);
-    if (cur) {
-      const curAbs = _utoToAbs(cur.month, cur.day, cur.year);
-      minAbs = curAbs - S.intelInterval;
-    }
+  if (S.intelInterval) {
+    let maxAbs = -Infinity;
+    ['attacks','razes','massacres'].forEach(k => {
+      (rec.parsed[k] || []).forEach(ev => {
+        const d = ev.date && _parseNewsDate(ev.date);
+        if (d) {
+          const abs = _utoToAbs(d.month, d.day, d.year);
+          if (abs > maxAbs) maxAbs = abs;
+        }
+      });
+    });
+    if (maxAbs > -Infinity) minAbs = maxAbs - S.intelInterval;
   }
   function inWindow(ev) {
     if (minAbs === -Infinity || !ev.date) return true;
