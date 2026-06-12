@@ -20,8 +20,10 @@ function _ensureKdNewsLoaded() {
   fetchBackendNews().then(records => {
     S._kdNewsLoading = false;
     if (!records.length) { S._kdNewsCache = false; renderIntel(); return; }
-    // Most recent record (records are sorted newest-first by the backend)
-    S._kdNewsCache = records[0];
+    // Keep all cached editions (records are sorted newest-first by the
+    // backend) — a single edition may not cover the full 72-tick lookback,
+    // so stats are aggregated across every edition we have.
+    S._kdNewsCache = records;
     renderIntel();
   }).catch(() => {
     S._kdNewsLoading = false;
@@ -47,8 +49,24 @@ function refreshKdNews() {
  */
 function _buildNewsStats() {
   const stats = {};
-  const rec = S._kdNewsCache;
-  if (!rec || !rec.parsed) return stats;
+  const recs = S._kdNewsCache;
+  if (!recs || !recs.length) return stats;
+
+  // Merge events from every cached edition, deduping identical entries
+  // (the same event can appear in multiple editions' news feeds).
+  const merged = { attacks: [], razes: [], massacres: [] };
+  const seen = new Set();
+  recs.forEach(rec => {
+    if (!rec.parsed) return;
+    ['attacks', 'razes', 'massacres'].forEach(key => {
+      (rec.parsed[key] || []).forEach(ev => {
+        const sig = key + '|' + JSON.stringify(ev);
+        if (seen.has(sig)) return;
+        seen.add(sig);
+        merged[key].push(ev);
+      });
+    });
+  });
 
   const eLoc = S.eLoc;
   const nameToSlot = {};
@@ -76,7 +94,7 @@ function _buildNewsStats() {
     return stats[slot];
   }
 
-  (rec.parsed.attacks || []).forEach(a => {
+  (merged.attacks || []).forEach(a => {
     if (!inWindow(a)) return;
     if (a.attacker_kd === eLoc) {
       const slot = a.attacker_slot != null ? a.attacker_slot : nameToSlot[a.attacker];
@@ -90,7 +108,7 @@ function _buildNewsStats() {
     }
   });
 
-  (rec.parsed.razes || []).forEach(r => {
+  (merged.razes || []).forEach(r => {
     if (!inWindow(r)) return;
     if (r.defender_kd === eLoc) {
       const slot = r.defender_slot != null ? r.defender_slot : nameToSlot[r.defender];
@@ -101,7 +119,7 @@ function _buildNewsStats() {
     }
   });
 
-  (rec.parsed.massacres || []).forEach(m => {
+  (merged.massacres || []).forEach(m => {
     if (!inWindow(m)) return;
     if (m.defender_kd === eLoc) {
       const slot = m.defender_slot != null ? m.defender_slot : nameToSlot[m.defender];
@@ -195,10 +213,11 @@ function _buildIntel() {
   } else if (S._kdNewsCache === false) {
     newsStatus = 'No kingdom news data yet — visit a Kingdom News page in-game with the news scraper userscript installed';
   } else {
-    const rec = S._kdNewsCache;
+    const rec = S._kdNewsCache[0]; // most recent edition
     const edition = rec.parsed?.news_edition || '?';
     const ago = rec.received_at ? Math.round((Date.now() - new Date(rec.received_at).getTime()) / 60000) : null;
-    newsStatus = `News: ${esc(edition)}${ago != null ? ` · scraped ${ago}m ago` : ''}`;
+    const n = S._kdNewsCache.length;
+    newsStatus = `News: ${esc(edition)}${ago != null ? ` · scraped ${ago}m ago` : ''} · ${n} edition${n===1?'':'s'} cached`;
   }
   const newsStatusEl = `<div style="font-size:17px;color:#7a9090;font-style:italic;display:flex;align-items:center;gap:8px;">
       ${newsStatus}
