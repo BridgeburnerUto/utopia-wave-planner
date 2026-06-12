@@ -179,3 +179,19 @@ function loadingHTML(msg) {
 function sectionHead(label) {
   return `<div class="wsech">${esc(label)}</div>`;
 }
+
+/**
+ * Estimate a province's population % using whatever fields are available.
+ * Prefers summing peasants+troops+thieves+wizards over land*25 (more accurate
+ * than ppa, which is peasants-only); falls back to ppa/25*100 if components
+ * aren't present. Capped at 150% for display.
+ */
+function _enemyPopPct(p) {
+  const sot  = p?.sot || {};
+  const land = p?.land || 0;
+  const totalPop = (sot.peasants || 0) + (sot.totalTroops || 0)
+                 + (sot.thieves  || 0) + (sot.wizards    || 0);
+  if (land > 0 && totalPop > 0) return Math.min(Math.round(totalPop / (land * 25) * 100), 150);
+  if (sot.ppa != null) return Math.min(Math.round(sot.ppa / 25 * 100), 150);
+  return null;
+}

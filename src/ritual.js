@@ -118,13 +118,15 @@ function getEnemyRitualCasting() {
     const launchAbs  = startAbs + 48;
     const launchDate = _absToUto(launchAbs);
 
-    // How many ticks until auto-launch? Use current tick date
+    // How many ticks until auto-launch, and how long since casting began?
     let ticksUntilLaunch = null;
+    let ticksSinceStart  = null;
     if (S.currentTickName) {
       const cur = _parseUtoDate(S.currentTickName);
       if (cur) {
         const curAbs = _utoToAbs(cur.month, cur.day, cur.year);
         ticksUntilLaunch = launchAbs - curAbs;
+        ticksSinceStart  = curAbs - startAbs;
       }
     }
 
@@ -133,6 +135,7 @@ function getEnemyRitualCasting() {
       startLabel:        dev.dateLabel,
       launchLabel:       launchDate.label,
       ticksUntilLaunch,  // null if we can't calculate, negative if overdue
+      ticksSinceStart,   // null if we can't calculate
     };
   } catch(e) {
     return null;
@@ -175,7 +178,7 @@ function renderRitualBadges() {
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid #617070">
         <div style="font-family:monospace;font-size:17px;color:#ffaa00;letter-spacing:1px;margin-bottom:6px">⚠ NEXT RITUAL CASTING</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ritual</span><span style="font-family:monospace">${esc(casting.name)}</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}${casting.ticksSinceStart != null ? ` (${casting.ticksSinceStart}t ago)` : ''}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
         ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${casting.ticksUntilLaunch <= 0 ? '#ff4455' : casting.ticksUntilLaunch <= 12 ? '#ffaa00' : '#ffffff'}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
       </div>` : '';
@@ -212,7 +215,7 @@ function renderRitualBadges() {
       <div class="writ-drop" id="__wprit_ene_drop" style="display:none">
         <div class="writ-drop-title" style="color:#ffaa00">⚠ Ritual Being Cast</div>
         <div class="writ-drop-row"><span class="writ-drop-l">Ritual</span><span style="font-family:monospace">${esc(casting.name)}</span></div>
-        <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}</span></div>
+        <div class="writ-drop-row"><span class="writ-drop-l">Started</span><span style="font-family:monospace">${esc(casting.startLabel)}${casting.ticksSinceStart != null ? ` (${casting.ticksSinceStart}t ago)` : ''}</span></div>
         <div class="writ-drop-row"><span class="writ-drop-l">Auto-launch</span><span style="font-family:monospace;color:#ffaa00">${esc(casting.launchLabel)}</span></div>
         ${casting.ticksUntilLaunch != null ? `<div class="writ-drop-row"><span class="writ-drop-l">Time left</span><span style="font-family:monospace;color:${timeCol}">${casting.ticksUntilLaunch <= 0 ? 'OVERDUE — check if launched' : casting.ticksUntilLaunch + 't (' + casting.ticksUntilLaunch + 'h)'}</span></div>` : ''}
         <div style="margin-top:8px;font-size:17px;color:#7a9090">Source: Snatch News. Take another SN to confirm if it has launched.</div>

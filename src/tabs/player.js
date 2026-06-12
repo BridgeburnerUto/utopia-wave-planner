@@ -331,15 +331,9 @@ function calcAttacks(prov) {
     const tDefEff  = tDef;  // raw API value IS the effective value
     const hasDefMod = false;
 
-    // Enemy pop%: same formula as own province — ppa is peasants-only, need total pop.
-    // Use component sum if available; fall back to ppa/25*100 if fields absent.
-    const _es = tp?.sot || {};
-    const _eLand = tp?.land || 0;
-    const _eTotalPop = (_es.peasants || 0) + (_es.totalTroops || 0)
-                     + (_es.thieves  || 0) + (_es.wizards    || 0);
-    const tPop  = _eLand > 0 && _eTotalPop > 0
-      ? Math.min(Math.round(_eTotalPop / (_eLand * 25) * 100), 150)
-      : _es.ppa != null ? Math.min(Math.round(_es.ppa / 25 * 100), 150) : null;
+    // Enemy pop% — shared helper (see utils.js _enemyPopPct), same formula
+    // used on the War Board's Pop% column.
+    const tPop  = _enemyPopPct(tp);
     const nwQ   = nwQuality(tNW);
     // Breakability uses effective values: our racial/pers off bonus vs their racial/pers def bonus
     const canBr = canBreak(tDefEff, aOff * ownOffMult, attackableGens);

@@ -494,47 +494,70 @@ window.__wpA = {
     const el = $id('__wpc_leaderboard');
     if (el) el.innerHTML = loadingHTML('SCANNING FOR WAR PERIOD...');
 
-    const toTs   = Date.now();
-    const fromTs = toTs - 90 * 24 * 3_600_000;
-
     try {
-      const [docsA, docsB] = await Promise.all([
-        fbQueryNWHistory(ownLoc, fromTs, toTs),
-        fbQueryNWHistory(eneLoc, fromTs, toTs),
-      ]);
-
-      const hourOf   = ts => Math.floor(ts / 3_600_000);
-      const warHoursA = new Set(docsA.filter(d => d.stanceLoc === eneLoc).map(d => hourOf(d.storedAt)));
-      const warHoursB = new Set(docsB.filter(d => d.stanceLoc === ownLoc).map(d => hourOf(d.storedAt)));
-      const mutual    = [...warHoursA].filter(h => warHoursB.has(h)).sort((a, b) => a - b);
-
-      if (!mutual.length) {
-        const hasStance = docsA.some(d => 'stanceLoc' in d);
-        const msg = hasStance
-          ? `No mutual war found between ${ownLoc} and ${eneLoc} in the last 90 days of snapshots.`
-          : 'No stance data in stored snapshots yet — it will appear after the next hourly GitHub Actions run.';
+      const records = await fetchBackendNews();
+      if (!records.length) {
         renderLeaderboard();
-        setTimeout(() => alert(msg), 100);
+        setTimeout(() => alert('No kingdom news data on the backend yet — install/run the news scraper userscript.'), 100);
         return;
       }
 
-      const fromDate = _tsToUtoDate(mutual[0]                    * 3_600_000);
-      const toDate   = _tsToUtoDate(mutual[mutual.length - 1]    * 3_600_000);
+      const eneName = (S.enemy?.kingdomName || '').toLowerCase();
+      const ownName = (S.own?.kingdomName  || '').toLowerCase();
 
-      if (!fromDate || !toDate) {
+      // Gather all war declarations & withdrawals (with dates) involving the
+      // enemy kingdom, from every cached news edition.
+      const decls  = [];
+      const withds = [];
+      records.forEach(rec => {
+        const p = rec.parsed || {};
+        (p.war_declarations || []).forEach(w => {
+          const txt = ((w.attacker||'') + ' ' + (w.defender||'')).toLowerCase();
+          if (eneName && txt.includes(eneName)) decls.push(w);
+        });
+        (p.war_withdrawals || []).forEach(w => {
+          const txt = (w.party||'').toLowerCase();
+          if ((eneName && txt.includes(eneName)) || (ownName && txt.includes(ownName)) || /^we\b|^our\b/.test(txt))
+            withds.push(w);
+        });
+      });
+
+      const withDate = arr => arr.map(e => ({...e, _d: _parseNewsDate(e.date)})).filter(e => e._d);
+      const declsD  = withDate(decls);
+      const withdsD = withDate(withds);
+
+      if (!declsD.length) {
         renderLeaderboard();
-        setTimeout(() => alert('War period found but could not convert to in-game dates — refresh and try again.'), 100);
+        setTimeout(() => alert(`No war declaration involving ${S.enemy?.kingdomName || eneLoc} found in cached kingdom news.`), 100);
+        return;
+      }
+
+      // Most recent declaration
+      declsD.sort((a,b) => _utoToAbs(b._d.month,b._d.day,b._d.year) - _utoToAbs(a._d.month,a._d.day,a._d.year));
+      const start = declsD[0]._d;
+      const startAbs = _utoToAbs(start.month, start.day, start.year);
+
+      // Earliest withdrawal after the declaration
+      withdsD.sort((a,b) => _utoToAbs(a._d.month,a._d.day,a._d.year) - _utoToAbs(b._d.month,b._d.day,b._d.year));
+      const endEntry = withdsD.find(e => _utoToAbs(e._d.month,e._d.day,e._d.year) >= startAbs);
+
+      const cur = _parseUtoDate(S.currentTickName || '');
+      const end = endEntry ? endEntry._d : cur;
+
+      if (!end) {
+        renderLeaderboard();
+        setTimeout(() => alert('War start found but could not determine end date — refresh and try again.'), 100);
         return;
       }
 
       lbSetFilter('custom', {
-        fromYear:  fromDate.year,  fromMonth: fromDate.month,
-        toYear:    toDate.year,    toMonth:   toDate.month,
+        fromYear: start.year, fromMonth: start.month,
+        toYear:   end.year,   toMonth:   end.month,
       });
 
     } catch(e) {
       renderLeaderboard();
-      setTimeout(() => alert('Error scanning snapshots: ' + e.message), 100);
+      setTimeout(() => alert('Error scanning kingdom news: ' + e.message), 100);
     }
   },
 

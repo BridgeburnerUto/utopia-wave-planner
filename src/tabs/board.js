@@ -102,8 +102,7 @@ function _buildBoard() {
     const surv = p.survey;
     const plan = _pp(p.slot);
     const da   = p.calcs?.defPointsSummary?.ageSeconds;
-    const ppa  = sot.ppa || 0;
-    const popPct = Math.min(Math.round(ppa / 25 * 100), 150); // cap display at 150%
+    const popPct = _enemyPopPct(p) ?? 0;
     const nwpa   = p.land > 0 ? Math.round((p.networth || 0) / p.land) : 0;
     const rtpa   = p.land > 0 && sot.rTpa != null ? sot.rTpa
                  : p.land > 0 && sot.thieves != null ? +(sot.thieves / p.land).toFixed(2)
