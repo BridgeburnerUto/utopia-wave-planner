@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia Kingdom News Scraper
 // @namespace    utopia-wave-planner
-// @version      2.2
+// @version      2.3
 // @description  Periodically sends the Kingdom News page to the Wave Planner
 //               backend so the Intel tab can show acres gained/lost, razes,
 //               and massacres. Runs in the background on any game page —
@@ -56,10 +56,13 @@
   // in-game links does NOT trigger a full page reload, so @match only fires
   // once. Watch for SPA navigation (URL/content changes) and re-scrape
   // whenever we land on (or are already on) a kingdom_news page.
+  console.log('[KingdomNewsScraper] v2.3 loaded on', location.pathname);
+
   let lastScrapedPath = null;
   function scrapeIfKdNews() {
     if (!/\/wol\/game\/kingdom_news\//.test(location.pathname)) return;
     if (location.pathname === lastScrapedPath) return;
+    console.log('[KingdomNewsScraper] detected kd_news path:', location.pathname, '(prev:', lastScrapedPath, ')');
     lastScrapedPath = location.pathname;
     extractAndSend(document, location.href);
     localStorage.setItem(LS_KEY, String(Date.now()));
@@ -67,20 +70,13 @@
 
   scrapeIfKdNews();
 
-  // Re-check on URL change (pushState/popstate) and on DOM mutations
-  // (the SPA swaps #dynamic_content without changing the URL in some cases).
-  let lastHref = location.href;
-  new MutationObserver(() => {
-    if (location.href !== lastHref) {
-      lastHref = location.href;
-      lastScrapedPath = null; // allow re-scrape of a (possibly different) kd_news page
-    }
+  // Poll for SPA navigation — the URL changes when the user clicks to a new
+  // kingdom_news edition, but no full page reload happens, so we can't rely
+  // on @match firing again. Check every second whether the path changed and
+  // (re-)scrape if it's a kingdom_news page we haven't sent yet.
+  setInterval(() => {
     scrapeIfKdNews();
-  }).observe(document.body, { childList: true, subtree: true });
-
-  if (/\/wol\/game\/kingdom_news\//.test(location.pathname)) {
-    return; // already handled above; skip background polling on this page
-  }
+  }, 1000);
 
   // ── Background poll ─────────────────────────────────────────────────────
   // On any other game page, periodically fetch the current kingdom news
