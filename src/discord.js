@@ -152,6 +152,32 @@ async function checkAndSendDiscordAlerts() {
     await _postWarSummary(webhookUrl);
   }
 
+  // ── Enemy failed invasions — critical counter-attack opportunity ───────
+  // Does not require S.enemy, only the kd_news cache + own location.
+  _ensureKdNewsLoaded();
+  const failedNow = _getEnemyFailedInvasions();
+  const failedSigs = failedNow.map(f => `${f.date}|${f.attacker}|${f.attacker_slot}`);
+  next.enemy_failed_invasions = failedSigs;
+  const prevFailedSigs = prev.enemy_failed_invasions || [];
+  const newFailed = failedNow.filter((f, i) => !prevFailedSigs.includes(failedSigs[i]));
+  if (newFailed.length) {
+    const lines = newFailed.map(f => {
+      const slotTag = f.attacker_slot != null ? `#${f.attacker_slot} ` : '';
+      return `· **${slotTag}${f.attacker}** (${f.date}) — their army is gone, hit them now!`;
+    }).join('\n');
+    toSend.push({
+      _key: 'enemy_failed_invasions',
+      content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+      embeds: [{
+        title: `⚔️ Enemy failed invasion — ${newFailed.length} opportunit${newFailed.length>1?'ies':'y'}!`,
+        description: lines,
+        color: DISCORD.COLORS.red,
+        footer: { text: 'Their attacking army is now empty — counter ASAP · Wave Planner' },
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  }
+
   // ── Enemy-dependent checks — skip and preserve prev state if not loaded ─
   if (S.enemy) {
     // ── Dragon slayed on enemy ───────────────────────────────────────────

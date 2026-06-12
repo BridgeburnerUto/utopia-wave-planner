@@ -44,21 +44,19 @@ function refreshKdNews() {
 }
 
 /**
- * Build per-enemy-slot stats from the cached kd_news record.
- * Returns { [enemySlot]: { acresGained, acresLost, attacksMade, razes, razeAcres, massacres } }
+ * Merge events of the given parsed-news keys from every cached edition,
+ * deduping identical entries (the same event can appear in multiple
+ * editions' news feeds). Returns { [key]: [...events] }.
  */
-function _buildNewsStats() {
-  const stats = {};
+function _mergeKdNews(keys) {
+  const merged = {};
+  keys.forEach(k => merged[k] = []);
   const recs = S._kdNewsCache;
-  if (!recs || !recs.length) return stats;
-
-  // Merge events from every cached edition, deduping identical entries
-  // (the same event can appear in multiple editions' news feeds).
-  const merged = { attacks: [], razes: [], massacres: [] };
+  if (!recs || !recs.length) return merged;
   const seen = new Set();
   recs.forEach(rec => {
     if (!rec.parsed) return;
-    ['attacks', 'razes', 'massacres'].forEach(key => {
+    keys.forEach(key => {
       (rec.parsed[key] || []).forEach(ev => {
         const sig = key + '|' + JSON.stringify(ev);
         if (seen.has(sig)) return;
@@ -67,6 +65,19 @@ function _buildNewsStats() {
       });
     });
   });
+  return merged;
+}
+
+/**
+ * Build per-enemy-slot stats from the cached kd_news record.
+ * Returns { [enemySlot]: { acresGained, acresLost, attacksMade, razes, razeAcres, massacres } }
+ */
+function _buildNewsStats() {
+  const stats = {};
+  const recs = S._kdNewsCache;
+  if (!recs || !recs.length) return stats;
+
+  const merged = _mergeKdNews(['attacks', 'razes', 'massacres']);
 
   const eLoc = S.eLoc;
   const nameToSlot = {};
@@ -128,6 +139,22 @@ function _buildNewsStats() {
   });
 
   return stats;
+}
+
+/**
+ * Returns failed-invasion events where an enemy province attacked our
+ * kingdom and failed ("attempted to invade" / "...but was repelled").
+ * Each event: { date, attacker, attacker_kd, attacker_slot, defender, defender_kd, defender_slot }
+ */
+function _getEnemyFailedInvasions() {
+  const recs = S._kdNewsCache;
+  if (!recs || !recs.length) return [];
+  const ownLoc = S.own?.location;
+  const eneLoc = S.eLoc;
+  if (!ownLoc || !eneLoc) return [];
+  const merged = _mergeKdNews(['failed_attacks']);
+  return (merged.failed_attacks || []).filter(f =>
+    f.attacker_kd === eneLoc && f.defender_kd === ownLoc);
 }
 
 // ── Sort state ────────────────────────────────────────────────────────────────

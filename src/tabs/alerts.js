@@ -255,6 +255,15 @@ function _gatherAlerts(thr) {
       t: `Enemy casting ritual: <b>⚗️ ${esc(casting.name)}</b> — started ${esc(casting.startLabel)} — <span style="color:${timeColor}">${timeStr}</span>` });
   }
 
+  // ── Enemy failed invasions — opportunity to counter ────────────────────
+  _ensureKdNewsLoaded();
+  _getEnemyFailedInvasions().forEach(f => {
+    const slotTag = f.attacker_slot != null ? `#${f.attacker_slot} ` : '';
+    al.push({ group: 'military', badge: 'OPPORTUNITY', cls: 'wau',
+      bg: 'background:rgba(255,68,85,.08);border:1px solid rgba(255,68,85,.3);',
+      t: `<b>⚔️ ${slotTag}${esc(f.attacker)}</b> failed an invasion on us (${esc(f.date || '')}) — their army is gone, hit them now!` });
+  });
+
   // ── Enemy province alerts ──────────────────────────────────────────────
   if (S.enemy) {
     S.enemy.provinces.forEach(p => {
