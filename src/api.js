@@ -49,6 +49,29 @@ async function postWarPlan(location, body) {
   return r.json();
 }
 
+/**
+ * Fetch parsed kingdom-news records from the Cloud Run backend.
+ * Requires S.apiEndpoint (and optional S.apiKey) to be configured —
+ * populated by the kingdom-news-scraper.user.js userscript.
+ * Returns an array of { received_at, parsed: { attacks, razes, massacres, ... } }
+ * or [] if no endpoint configured / request fails.
+ */
+async function fetchBackendNews() {
+  if (!S.apiEndpoint) return [];
+  try {
+    const url  = S.apiEndpoint.replace(/\/$/, '') + '/api.php?news';
+    const hdrs = {};
+    if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
+    const r = await fetch(url, { headers: hdrs });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  } catch(e) {
+    console.warn('[WavePlanner] fetchBackendNews failed:', e.message);
+    return [];
+  }
+}
+
 /** Load a saved war plan by ID */
 async function getWarPlan(location, warPlanId) {
   const r = await fetch(_url(`/WarPlan/v1/Get?server=${S.server}&location=${location}&warPlanId=${warPlanId}`), {

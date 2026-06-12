@@ -338,7 +338,6 @@ window.__wpA = {
   lbOpFilter,
   resyncOps,
   toggleMaxGain,
-  debugIntelNews: _debugIntelNews,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
@@ -359,7 +358,6 @@ window.__wpA = {
   closeOps,
   togOp,
   setNote(slot, v) { if (slot != null) _pp(slot).notes = v; },
-  setIntelInterval(v) { S.intelInterval = v; renderIntel(); },
   nwView(v) { S.nwView = v; renderNwGraph(); },
 
   /** Read current location inputs + reload graph */

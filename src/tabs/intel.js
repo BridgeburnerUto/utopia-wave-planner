@@ -1,248 +1,84 @@
 // ── TAB: INTEL ─────────────────────────────────────────────────────────────
 // Enemy province intel table with sortable columns.
-// Acre gain/loss and attack counts parsed from kingdomNews.parseString.
+// Acre gain/loss, attacks, razes and massacres come from the Cloud Run
+// backend's `?news` endpoint, which is populated by the
+// kingdom-news-scraper.user.js Tampermonkey script running on
+// utopia-game.com/wol/game/kingdom_news/* pages (the IS provides no
+// news data via its own API or localStorage).
 
-// ── News parsing ─────────────────────────────────────────────────────────────
+// ── News data ────────────────────────────────────────────────────────────────
 
 /**
- * Parse raze and massacre events against enemy provinces.
- * Actual IS news format: "AttackerName (anyLoc) invaded DefName (eLoc) and razed N acres"
- * No slot-number prefix — match defender by name, look up slot from nameToSlot index.
- * Returns { [enemySlot]: { razes, razeAcres, massacres } }
+ * Kick off (or return cached) fetch of the latest kd_news record from the
+ * backend. Caches in S._kdNewsCache. Triggers a re-render of the Intel tab
+ * once the fetch completes.
  */
-function parseCombatEvents(tickInterval) {
-  try {
-    const IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
-    const news    = IS.kingdomNews?.parseString;
-    const curDate = _parseUtoDate(IS.currentTick?.tickName || '');
-    if (!news || !curDate) return {};
-
-    const eLoc    = S.eLoc;
-    const eLocPat = eLoc.replace(':', '\\:');
-    const curAbs  = _utoToAbs(curDate.month, curDate.day, curDate.year);
-    const minAbs  = curAbs - tickInterval;
-
-    // Name → slot lookup for fast attribution
-    const nameToSlot = {};
-    (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
-
-    const events = {};
-    function getOrCreate(slot) {
-      if (!events[slot]) events[slot] = { razes: 0, razeAcres: 0, massacres: 0 };
-      return events[slot];
-    }
-
-    for (const line of news.split('\n')) {
-      const parts = line.split('\t');
-      if (parts.length < 2) continue;
-      const d = _parseNewsDate(parts[0].trim());
-      if (!d) continue;
-      const abs = _utoToAbs(d.month, d.day, d.year);
-      if (abs < minAbs || abs > curAbs) continue;
-      const text = parts[1].trim();
-
-      // Raze: "Attacker (anyLoc) invaded DefName (eLoc) and razed N acres"
-      const raze = text.match(new RegExp(`invaded\\s+(.+?)\\s*\\(${eLocPat}\\)\\s+and\\s+razed\\s+([\\d,]+)\\s+acres`, 'i'));
-      if (raze) {
-        const slot = nameToSlot[raze[1].trim()];
-        if (slot != null) {
-          getOrCreate(slot).razes++;
-          getOrCreate(slot).razeAcres += parseInt(raze[2].replace(/,/g, ''));
-        }
-        continue;
-      }
-
-      // Massacre format 1: "Attacker killed N people within DefName (eLoc)"
-      const mass1 = text.match(new RegExp(`killed\\s+[\\d,]+\\s+people\\s+within\\s+(.+?)\\s*\\(${eLocPat}\\)`, 'i'));
-      if (mass1) {
-        const slot = nameToSlot[mass1[1].trim()];
-        if (slot != null) getOrCreate(slot).massacres++;
-        continue;
-      }
-
-      // Massacre format 2: "Attacker invaded DefName (eLoc) and killed N people"
-      const mass2 = text.match(new RegExp(`invaded\\s+(.+?)\\s*\\(${eLocPat}\\)\\s+and\\s+killed`, 'i'));
-      if (mass2) {
-        const slot = nameToSlot[mass2[1].trim()];
-        if (slot != null) getOrCreate(slot).massacres++;
-      }
-    }
-
-    return events;
-  } catch(e) {
-    console.log('[WavePlanner] Combat event parse error:', e.message);
-    return {};
-  }
+function _ensureKdNewsLoaded() {
+  if (S._kdNewsCache !== null || S._kdNewsLoading) return;
+  if (!S.apiEndpoint) { S._kdNewsCache = false; return; } // no backend configured
+  S._kdNewsLoading = true;
+  fetchBackendNews().then(records => {
+    S._kdNewsLoading = false;
+    if (!records.length) { S._kdNewsCache = false; renderIntel(); return; }
+    // Most recent record (records are sorted newest-first by the backend)
+    S._kdNewsCache = records[0];
+    renderIntel();
+  }).catch(() => {
+    S._kdNewsLoading = false;
+    S._kdNewsCache = false;
+    renderIntel();
+  });
 }
 
 /**
- * Parse attack entries from kingdomNews.parseString for the current enemy KD.
- * Returns per-slot stats: { acresGained, acresLost, attacksMade }
- *
- * Actual IS news format (no slot-number prefix):
- *   "AttackerName (eLoc) invaded DefName (anyLoc) and captured N acres"  ← enemy gains
- *   "AttackerName (anyLoc) invaded DefName (eLoc) and captured N acres"  ← enemy loses
- *   "AttackerName (eLoc) ambushed armies from ... and took N acres"       ← enemy gains
- *
- * Province matching is by name via nameToSlot index (slot numbers not in news text).
+ * Build per-enemy-slot stats from the cached kd_news record.
+ * Returns { [enemySlot]: { acresGained, acresLost, attacksMade, razes, razeAcres, massacres } }
  */
-function parseNewsActivity(tickInterval) {
-  try {
-    const IS      = JSON.parse(localStorage.getItem('IntelState') || '{}');
-    const news    = IS.kingdomNews?.parseString;
-    const curDate = _parseUtoDate(IS.currentTick?.tickName || '');
-    if (!news || !curDate) return {};
+function _buildNewsStats() {
+  const stats = {};
+  const rec = S._kdNewsCache;
+  if (!rec || !rec.parsed) return stats;
 
-    const eLoc = S.eLoc;
-
-    // Build name → slot index for enemy provinces
-    const nameToSlot = {};
-    (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
-
-    const curAbs = _utoToAbs(curDate.month, curDate.day, curDate.year);
-    const minAbs = curAbs - tickInterval;
-
-    const stats = {};
-    function getOrCreate(slot) {
-      if (!stats[slot]) stats[slot] = { acresGained: 0, acresLost: 0, attacksMade: 0 };
-      return stats[slot];
-    }
-
-    for (const line of news.split('\n')) {
-      const parts = line.split('\t');
-      if (parts.length < 2) continue;
-      const d = _parseNewsDate(parts[0].trim());
-      if (!d) continue;
-      const abs = _utoToAbs(d.month, d.day, d.year);
-      if (abs < minAbs || abs > curAbs) continue;
-      const text = parts[1].trim();
-
-      // "AttackerName (atkLoc) invaded DefName (defLoc) and captured N acres [of land]"
-      const captured = text.match(/^(.+?)\s*\(([^)]+)\)\s+invaded\s+(.+?)\s*\(([^)]+)\)\s+and\s+captured\s+([\d,]+)\s+acres/i);
-      if (captured) {
-        const atkName = captured[1].trim();
-        const atkLoc  = captured[2].trim();
-        const defName = captured[3].trim();
-        const defLoc  = captured[4].trim();
-        const acres   = parseInt(captured[5].replace(/,/g, ''));
-        if (atkLoc === eLoc) {
-          // Enemy province is attacker → gains acres
-          const slot = nameToSlot[atkName];
-          if (slot != null) { getOrCreate(slot).acresGained += acres; getOrCreate(slot).attacksMade++; }
-        } else if (defLoc === eLoc) {
-          // Enemy province is defender → loses acres
-          const slot = nameToSlot[defName];
-          if (slot != null) { getOrCreate(slot).acresLost += acres; }
-        }
-        continue;
-      }
-
-      // "AttackerName (eLoc) ambushed armies from ... and took N acres"
-      const ambush = text.match(/^(.+?)\s*\(([^)]+)\)\s+ambushed\s+armies\s+from\s+.+?\s+and\s+took\s+([\d,]+)\s+acres/i);
-      if (ambush && ambush[2].trim() === eLoc) {
-        const slot = nameToSlot[ambush[1].trim()];
-        if (slot != null) { getOrCreate(slot).acresGained += parseInt(ambush[3].replace(/,/g,'')); getOrCreate(slot).attacksMade++; }
-      }
-    }
-
-    return stats;
-  } catch(e) {
-    console.log('[WavePlanner] Intel news parse error:', e.message);
-    return {};
-  }
-}
-
-// ── Debug helper ─────────────────────────────────────────────────────────────
-
-/**
- * Call __wpA.debugIntelNews() from the browser console to diagnose
- * why acres/attacks/razes/massacres are showing as "—".
- * Dumps: S.eLoc, nameToSlot index, first 20 news lines raw,
- * and any lines that match (or nearly match) the expected patterns.
- */
-async function _debugIntelNews() {
-  const IS = JSON.parse(localStorage.getItem('IntelState') || '{}');
-  const news = IS.kingdomNews?.parseString;
-  console.log('[IntelDebug] S.eLoc =', S.eLoc);
-  console.log('[IntelDebug] currentTick =', IS.currentTick?.tickName);
-  console.log('[IntelDebug] All IntelState top-level keys:', Object.keys(IS));
-  // Probe candidate IS API endpoints for news data
-  const _probeBase = CFG.API_BASE;
-  const _probeHdrs = { 'Utopia-Token': S.token, 'Content-Type': 'application/json' };
-  const _probeUrls = [
-    `/Kingdom/v1/KingdomNews?server=${S.server}`,
-    `/Kingdom/v1/News?server=${S.server}`,
-    `/Kingdom/v1/OwnKingdom?server=${S.server}`,
-  ];
-  console.log('[IntelDebug] Probing API endpoints for news data...');
-  for (const path of _probeUrls) {
-    try {
-      const r = await fetch(_probeBase + path, { headers: _probeHdrs });
-      const body = await r.text();
-      console.log(`[IntelDebug] ${path} → status=${r.status}, body (first 600):`, body.slice(0,600));
-    } catch(e) {
-      console.log(`[IntelDebug] ${path} → ERROR:`, e.message);
-    }
-  }
-  // Probe KingdomOps for invade/raze/massacre op types
-  try {
-    const ops = await fetchKingdomOps();
-    if (Array.isArray(ops)) {
-      console.log('[IntelDebug] KingdomOps count:', ops.length);
-      const opTypes = {};
-      ops.forEach(o => { opTypes[o.opType] = (opTypes[o.opType]||0) + 1; });
-      console.log('[IntelDebug] opType counts:', opTypes);
-      // Show sample of any op whose type looks combat-related
-      const combatLike = ops.filter(o => /invade|raze|massacre|attack|conquer/i.test(o.opType||''));
-      console.log('[IntelDebug] Combat-like ops sample:', combatLike.slice(0,5));
-      console.log('[IntelDebug] First 3 ops (raw):', ops.slice(0,3));
-    } else {
-      console.log('[IntelDebug] fetchKingdomOps returned:', ops);
-    }
-  } catch(e) { console.log('[IntelDebug] fetchKingdomOps error:', e.message); }
-  // Probe direct fetch of the game's kingdom news page (CORS check)
-  console.log('[IntelDebug] document.location =', document.location.href);
-  try {
-    const newsUrl = `https://utopia-game.com/wol/game/kingdom_news/5/4`;
-    const r = await fetch(newsUrl, { credentials: 'include' });
-    const body = await r.text();
-    console.log(`[IntelDebug] ${newsUrl} → status=${r.status}, length=${body.length}`);
-    console.log('[IntelDebug] body sample:', body.slice(0, 1000));
-  } catch(e) {
-    console.log('[IntelDebug] kingdom_news fetch ERROR (likely CORS):', e.message);
-  }
-  console.log('[IntelDebug] kingdomNews keys:', IS.kingdomNews ? Object.keys(IS.kingdomNews) : 'kingdomNews missing entirely');
-  if (!news) { console.warn('[IntelDebug] No kingdomNews.parseString found'); return; }
-
+  const eLoc = S.eLoc;
   const nameToSlot = {};
   (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
-  console.log('[IntelDebug] nameToSlot:', nameToSlot);
 
-  const lines = news.split('\n').filter(l => l.trim());
-  console.log('[IntelDebug] Total news lines:', lines.length);
-  console.log('[IntelDebug] First 20 lines (raw):');
-  lines.slice(0, 20).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
+  function getOrCreate(slot) {
+    if (!stats[slot]) stats[slot] = { acresGained: 0, acresLost: 0, attacksMade: 0, razes: 0, razeAcres: 0, massacres: 0 };
+    return stats[slot];
+  }
 
-  // Show lines mentioning enemy location
-  const eLoc = S.eLoc;
-  const eLines = lines.filter(l => l.includes(eLoc));
-  console.log(`[IntelDebug] Lines containing "${eLoc}":`, eLines.length);
-  eLines.slice(0, 20).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
-
-  // Show lines containing "invaded"
-  const invLines = lines.filter(l => l.toLowerCase().includes('invaded'));
-  console.log('[IntelDebug] Lines containing "invaded":', invLines.length);
-  invLines.slice(0, 10).forEach((l, i) => {
-    const parts = l.split('\t');
-    const text = parts[1]?.trim() || '';
-    const m = text.match(/^(.+?)\s*\(([^)]+)\)\s+invaded\s+(.+?)\s*\(([^)]+)\)\s+and\s+captured\s+([\d,]+)\s+acres/i);
-    console.log(`  [${i}]`, JSON.stringify(text), '→ captured match:', m ? [m[1],m[2],m[3],m[4],m[5]] : null);
+  (rec.parsed.attacks || []).forEach(a => {
+    if (a.attacker_kd === eLoc) {
+      const slot = nameToSlot[a.attacker];
+      if (slot != null) {
+        getOrCreate(slot).acresGained += a.acres_captured || 0;
+        getOrCreate(slot).attacksMade++;
+      }
+    } else if (a.defender_kd === eLoc) {
+      const slot = nameToSlot[a.defender];
+      if (slot != null) getOrCreate(slot).acresLost += a.acres_captured || 0;
+    }
   });
 
-  // Show lines containing "razed" or "killed"
-  const combatLines = lines.filter(l => l.toLowerCase().includes('razed') || l.toLowerCase().includes('killed'));
-  console.log('[IntelDebug] Lines containing "razed" or "killed":', combatLines.length);
-  combatLines.slice(0, 10).forEach((l, i) => console.log(`  [${i}]`, JSON.stringify(l)));
+  (rec.parsed.razes || []).forEach(r => {
+    if (r.defender_kd === eLoc) {
+      const slot = nameToSlot[r.defender];
+      if (slot != null) {
+        getOrCreate(slot).razes++;
+        getOrCreate(slot).razeAcres += r.acres_razed || 0;
+      }
+    }
+  });
+
+  (rec.parsed.massacres || []).forEach(m => {
+    if (m.defender_kd === eLoc) {
+      const slot = nameToSlot[m.defender];
+      if (slot != null) getOrCreate(slot).massacres++;
+    }
+  });
+
+  return stats;
 }
 
 // ── Sort state ────────────────────────────────────────────────────────────────
@@ -268,17 +104,15 @@ function renderIntel() {
 
 function _buildIntel() {
   if (!S.enemy) return loadingHTML('NO ENEMY LOADED');
-  if (!S.intelSort)    S.intelSort    = { col: 'slot', dir: 1 };
-  if (!S.intelInterval) S.intelInterval = 24;
+  if (!S.intelSort) S.intelSort = { col: 'slot', dir: 1 };
 
-  const activity      = parseNewsActivity(S.intelInterval);
-  const combatEvents  = parseCombatEvents(S.intelInterval);
+  _ensureKdNewsLoaded();
+  const newsStats = _buildNewsStats();
 
   // Build row data
   const rows = S.enemy.provinces.map(p => {
     const sot  = p.sot || {};
-    const act  = activity[p.slot] || { acresGained: 0, acresLost: 0, attacksMade: 0 };
-    const ce   = combatEvents[p.slot] || { razes: 0, razeAcres: 0, massacres: 0 };
+    const ns   = newsStats[p.slot] || { acresGained: 0, acresLost: 0, attacksMade: 0, razes: 0, razeAcres: 0, massacres: 0 };
     const nwpa = p.land > 0 ? Math.round((p.networth || 0) / p.land) : 0;
     const da   = p.calcs?.defPointsSummary?.ageSeconds;
     const armiesAway = (p.som?.armiesAway || []).map(a => ({
@@ -300,12 +134,12 @@ function _buildIntel() {
       def:          sot.defPoints || p.calcs?.defPointsSummary?.defPointsHome || 0,
       nwpa,
       peons:        sot.peasants || 0,
-      acresGained:  act.acresGained,
-      acresLost:    act.acresLost,
-      attacksMade:  act.attacksMade,
-      razes:        ce.razes,
-      razeAcres:    ce.razeAcres,
-      massacres:    ce.massacres,
+      acresGained:  ns.acresGained,
+      acresLost:    ns.acresLost,
+      attacksMade:  ns.attacksMade,
+      razes:        ns.razes,
+      razeAcres:    ns.razeAcres,
+      massacres:    ns.massacres,
       armiesAway,
       awayEarliest,
       intelAge:     da,
@@ -321,17 +155,21 @@ function _buildIntel() {
     return dir * (av - bv);
   });
 
-  // Interval dropdown
-  const intervals = [4, 6, 8, 12, 24, 36, 48, 60, 72];
-  const intervalSelect = `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span style="font-size:17px;font-weight:700;color:#7a9090;text-transform:uppercase;letter-spacing:1px;">Interval</span>
-      <select onchange="__wpA.setIntelInterval(parseInt(this.value))"
-        style="background:#3c4545;border:1px solid #617070;color:#ffffff;font-size:19px;padding:4px 8px;border-radius:3px;outline:none;cursor:pointer;">
-        ${intervals.map(t => `<option value="${t}" ${S.intelInterval===t?'selected':''}>${t} ticks</option>`).join('')}
-      </select>
-      <span style="font-size:17px;color:#7a9090;font-style:italic;">Gain/loss/attacks parsed from kingdom news</span>
-    </div>`;
+  // News status line
+  let newsStatus;
+  if (!S.apiEndpoint) {
+    newsStatus = 'No backend endpoint configured (Alerts tab) — gain/loss/raze/massacre columns unavailable';
+  } else if (S._kdNewsLoading || S._kdNewsCache === null) {
+    newsStatus = 'Loading kingdom news from backend…';
+  } else if (S._kdNewsCache === false) {
+    newsStatus = 'No kingdom news data yet — visit a Kingdom News page in-game with the news scraper userscript installed';
+  } else {
+    const rec = S._kdNewsCache;
+    const edition = rec.parsed?.news_edition || '?';
+    const ago = rec.received_at ? Math.round((Date.now() - new Date(rec.received_at).getTime()) / 60000) : null;
+    newsStatus = `News: ${esc(edition)}${ago != null ? ` · scraped ${ago}m ago` : ''}`;
+  }
+  const newsStatusEl = `<div style="font-size:17px;color:#7a9090;font-style:italic;">${newsStatus}</div>`;
 
   // Sort indicator helper
   const si = (c) => {
@@ -436,12 +274,12 @@ function _buildIntel() {
           ${th('def','Def','Defence points')}
           ${th('nwpa','NW/Ac','Networth per acre')}
           ${th('peons','Peons','Peasant population')}
-          ${th('acresGained',`+Ac ${S.intelInterval}t`,'Acres gained in interval')}
-          ${th('acresLost',`-Ac ${S.intelInterval}t`,'Acres lost in interval')}
-          ${th('attacksMade',`Atks ${S.intelInterval}t`,'Attacks made in interval')}
-          ${th('razes',`Rz ${S.intelInterval}t`,'Razes in interval')}
-          ${th('razeAcres',`RzAc ${S.intelInterval}t`,'Raze acres in interval')}
-          ${th('massacres',`Ms ${S.intelInterval}t`,'Massacres in interval')}
+          ${th('acresGained','+Ac','Acres gained (current news edition)')}
+          ${th('acresLost','-Ac','Acres lost (current news edition)')}
+          ${th('attacksMade','Atks','Attacks made (current news edition)')}
+          ${th('razes','Rz','Razes (current news edition)')}
+          ${th('razeAcres','RzAc','Raze acres (current news edition)')}
+          ${th('massacres','Ms','Massacres (current news edition)')}
           ${th('awayEarliest','Away','Enemy armies away — oSpecs · time to return')}
           ${th('intelAge','Age','Intel age')}
         </tr></thead>
@@ -452,7 +290,7 @@ function _buildIntel() {
 
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      ${intervalSelect}
+      ${newsStatusEl}
       <div style="font-size:17px;color:#7a9090;">${rows.length} provinces · ${esc(S.enemy.kingdomName || S.eLoc)}</div>
     </div>
     ${table}`;

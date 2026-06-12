@@ -49,13 +49,14 @@ const S = {
   kddbAge:       '',             // current age string e.g. "a114" — persisted in localStorage
   intelSort:     { col: 'slot', dir: 1 },
   boardSort:     { col: 'slot', dir: 1 },
-  intelInterval: 24,       // NW graph view: 'total'|'war'
   discordWebhook: '',    // Discord webhook URL — saved with war plan
   apiEndpoint:    '',    // Cloud Run backend URL for mobile companion sync
   apiKey:         '',    // API key matching WP_API_KEY env var on Cloud Run
   lastBackendSync: null, // Date of last successful IS dump POST (runtime only)
   lastBackendError: '',  // Error message from last failed sync (runtime only)
   _warFromNews: null,    // cached war status from kingdomNews scan (null=uncached)
+  _kdNewsCache: null,    // cached latest kd_news record from backend (null=not yet loaded)
+  _kdNewsLoading: false, // true while fetchBackendNews() is in flight
   maxGainMode:  false,   // My Orders: true = show max-gain plan instead of wave plan
 
   // leaderboard sort: 'damage'|'ops'|'gain'
