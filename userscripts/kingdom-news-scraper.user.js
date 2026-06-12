@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia Kingdom News Scraper
 // @namespace    utopia-wave-planner
-// @version      2.1
+// @version      2.2
 // @description  Periodically sends the Kingdom News page to the Wave Planner
 //               backend so the Intel tab can show acres gained/lost, razes,
 //               and massacres. Runs in the background on any game page —
@@ -52,11 +52,34 @@
     send(el.innerHTML, el.innerText, url);
   }
 
-  // If we're already on a kingdom_news page, scrape it directly — no need to fetch.
-  if (/\/wol\/game\/kingdom_news\//.test(location.pathname)) {
+  // This is a single-page app — navigating to a new kingdom_news edition via
+  // in-game links does NOT trigger a full page reload, so @match only fires
+  // once. Watch for SPA navigation (URL/content changes) and re-scrape
+  // whenever we land on (or are already on) a kingdom_news page.
+  let lastScrapedPath = null;
+  function scrapeIfKdNews() {
+    if (!/\/wol\/game\/kingdom_news\//.test(location.pathname)) return;
+    if (location.pathname === lastScrapedPath) return;
+    lastScrapedPath = location.pathname;
     extractAndSend(document, location.href);
     localStorage.setItem(LS_KEY, String(Date.now()));
-    return;
+  }
+
+  scrapeIfKdNews();
+
+  // Re-check on URL change (pushState/popstate) and on DOM mutations
+  // (the SPA swaps #dynamic_content without changing the URL in some cases).
+  let lastHref = location.href;
+  new MutationObserver(() => {
+    if (location.href !== lastHref) {
+      lastHref = location.href;
+      lastScrapedPath = null; // allow re-scrape of a (possibly different) kd_news page
+    }
+    scrapeIfKdNews();
+  }).observe(document.body, { childList: true, subtree: true });
+
+  if (/\/wol\/game\/kingdom_news\//.test(location.pathname)) {
+    return; // already handled above; skip background polling on this page
   }
 
   // ── Background poll ─────────────────────────────────────────────────────

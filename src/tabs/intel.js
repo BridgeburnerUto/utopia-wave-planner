@@ -86,13 +86,13 @@ function _buildNewsStats() {
   (rec.parsed.attacks || []).forEach(a => {
     if (!inWindow(a)) return;
     if (a.attacker_kd === eLoc) {
-      const slot = nameToSlot[a.attacker];
+      const slot = a.attacker_slot != null ? a.attacker_slot : nameToSlot[a.attacker];
       if (slot != null) {
         getOrCreate(slot).acresGained += a.acres_captured || 0;
         getOrCreate(slot).attacksMade++;
       }
     } else if (a.defender_kd === eLoc) {
-      const slot = nameToSlot[a.defender];
+      const slot = a.defender_slot != null ? a.defender_slot : nameToSlot[a.defender];
       if (slot != null) getOrCreate(slot).acresLost += a.acres_captured || 0;
     }
   });
@@ -100,7 +100,7 @@ function _buildNewsStats() {
   (rec.parsed.razes || []).forEach(r => {
     if (!inWindow(r)) return;
     if (r.defender_kd === eLoc) {
-      const slot = nameToSlot[r.defender];
+      const slot = r.defender_slot != null ? r.defender_slot : nameToSlot[r.defender];
       if (slot != null) {
         getOrCreate(slot).razes++;
         getOrCreate(slot).razeAcres += r.acres_razed || 0;
@@ -111,7 +111,7 @@ function _buildNewsStats() {
   (rec.parsed.massacres || []).forEach(m => {
     if (!inWindow(m)) return;
     if (m.defender_kd === eLoc) {
-      const slot = nameToSlot[m.defender];
+      const slot = m.defender_slot != null ? m.defender_slot : nameToSlot[m.defender];
       if (slot != null) getOrCreate(slot).massacres++;
     }
   });
