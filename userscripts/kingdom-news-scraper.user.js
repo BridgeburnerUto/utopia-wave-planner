@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia Kingdom News Scraper
 // @namespace    utopia-wave-planner
-// @version      2.3
+// @version      2.4
 // @description  Periodically sends the Kingdom News page to the Wave Planner
 //               backend so the Intel tab can show acres gained/lost, razes,
 //               and massacres. Runs in the background on any game page —
@@ -20,7 +20,7 @@
   const API_KEY  = ''; // set if WP_API_KEY is configured on Cloud Run
 
   // Minimum time between scrapes, shared across all tabs via localStorage.
-  const MIN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+  const MIN_INTERVAL_MS = 90 * 1000; // 90 seconds
   const LS_KEY = 'wp_kdnews_last_scrape';
 
   function send(html, simple, url) {
@@ -59,23 +59,26 @@
   console.log('[KingdomNewsScraper] v2.3 loaded on', location.pathname);
 
   let lastScrapedPath = null;
-  function scrapeIfKdNews() {
+  let lastScrapedAt   = 0;
+  function scrapeIfKdNews(force) {
     if (!/\/wol\/game\/kingdom_news\//.test(location.pathname)) return;
-    if (location.pathname === lastScrapedPath) return;
-    console.log('[KingdomNewsScraper] detected kd_news path:', location.pathname, '(prev:', lastScrapedPath, ')');
+    const isNewPath = location.pathname !== lastScrapedPath;
+    const dueForRescrape = Date.now() - lastScrapedAt >= MIN_INTERVAL_MS;
+    if (!force && !isNewPath && !dueForRescrape) return;
+    console.log('[KingdomNewsScraper] scraping kd_news path:', location.pathname);
     lastScrapedPath = location.pathname;
+    lastScrapedAt   = Date.now();
     extractAndSend(document, location.href);
     localStorage.setItem(LS_KEY, String(Date.now()));
   }
 
-  scrapeIfKdNews();
+  scrapeIfKdNews(true);
 
-  // Poll for SPA navigation — the URL changes when the user clicks to a new
-  // kingdom_news edition, but no full page reload happens, so we can't rely
-  // on @match firing again. Check every second whether the path changed and
-  // (re-)scrape if it's a kingdom_news page we haven't sent yet.
+  // Poll for SPA navigation (URL changes when clicking to a different
+  // edition, no full reload) and for periodic re-scrapes of the same page
+  // (in case new news has been published since we last looked).
   setInterval(() => {
-    scrapeIfKdNews();
+    scrapeIfKdNews(false);
   }, 1000);
 
   // ── Background poll ─────────────────────────────────────────────────────
@@ -98,7 +101,7 @@
       .catch(e => console.warn('[KingdomNewsScraper] Background fetch failed:', e.message));
   }
 
-  // Run shortly after page load, then every few minutes while the tab is open.
+  // Run shortly after page load, then periodically while the tab is open.
   setTimeout(maybeScrape, 5000);
-  setInterval(maybeScrape, 5 * 60 * 1000);
+  setInterval(maybeScrape, MIN_INTERVAL_MS);
 })();
