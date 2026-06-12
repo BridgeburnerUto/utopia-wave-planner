@@ -716,7 +716,7 @@ function _buildPlayer() {
   // Choose active plan
   const maxGainMode = !!S.maxGainMode;
   const plan        = maxGainMode ? calcMaxGainAttacks(prov) : wavePlan;
-  const { attacks, gensLeft, totalGains, reason } = plan;
+  const { attacks, gensLeft, offLeft, totalGains, reason } = plan;
   const aOff = plan.aOff || wavePlan.aOff;
 
   const waveTargets = S.enemy ? S.enemy.provinces
@@ -847,11 +847,11 @@ function _buildPlayer() {
     </div>`;
   }
 
-  if (gensLeft > 0 && homeOffRemaining > 0) {
+  if (gensLeft > 0 && offLeft > 0) {
     h += `<div style="margin:10px 0;padding:8px 12px;background:#1a2828;border:1px solid #617070;
                       border-radius:3px;font-family:monospace;font-size:17px;color:#7a9090">
       🏠 ${gensLeft} gen${gensLeft > 1 ? 's' : ''} remaining home
-      — ${fK(Math.round(homeOffRemaining))} off available for ambush / defense
+      — ${fK(Math.round(offLeft))} off available for ambush / defense
     </div>`;
   }
 
