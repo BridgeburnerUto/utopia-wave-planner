@@ -57,6 +57,7 @@ const S = {
   _warFromNews: null,    // cached war status from kingdomNews scan (null=uncached)
   _kdNewsCache: null,    // cached latest kd_news record from backend (null=not yet loaded)
   _kdNewsLoading: false, // true while fetchBackendNews() is in flight
+  intelInterval: 24,     // Intel tab: lookback window (ticks) for news stats
   maxGainMode:  false,   // My Orders: true = show max-gain plan instead of wave plan
 
   // leaderboard sort: 'damage'|'ops'|'gain'

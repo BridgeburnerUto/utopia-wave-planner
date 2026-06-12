@@ -43,12 +43,29 @@ function _buildNewsStats() {
   const nameToSlot = {};
   (S.enemy?.provinces || []).forEach(p => { nameToSlot[p.name] = p.slot; });
 
+  // Filter events to those within S.intelInterval ticks of the current tick
+  let minAbs = -Infinity;
+  if (S.currentTickName && S.intelInterval) {
+    const cur = _parseUtoDate(S.currentTickName);
+    if (cur) {
+      const curAbs = _utoToAbs(cur.month, cur.day, cur.year);
+      minAbs = curAbs - S.intelInterval;
+    }
+  }
+  function inWindow(ev) {
+    if (minAbs === -Infinity || !ev.date) return true;
+    const d = _parseNewsDate(ev.date);
+    if (!d) return true;
+    return _utoToAbs(d.month, d.day, d.year) >= minAbs;
+  }
+
   function getOrCreate(slot) {
     if (!stats[slot]) stats[slot] = { acresGained: 0, acresLost: 0, attacksMade: 0, razes: 0, razeAcres: 0, massacres: 0 };
     return stats[slot];
   }
 
   (rec.parsed.attacks || []).forEach(a => {
+    if (!inWindow(a)) return;
     if (a.attacker_kd === eLoc) {
       const slot = nameToSlot[a.attacker];
       if (slot != null) {
@@ -62,6 +79,7 @@ function _buildNewsStats() {
   });
 
   (rec.parsed.razes || []).forEach(r => {
+    if (!inWindow(r)) return;
     if (r.defender_kd === eLoc) {
       const slot = nameToSlot[r.defender];
       if (slot != null) {
@@ -72,6 +90,7 @@ function _buildNewsStats() {
   });
 
   (rec.parsed.massacres || []).forEach(m => {
+    if (!inWindow(m)) return;
     if (m.defender_kd === eLoc) {
       const slot = nameToSlot[m.defender];
       if (slot != null) getOrCreate(slot).massacres++;
@@ -170,6 +189,14 @@ function _buildIntel() {
     newsStatus = `News: ${esc(edition)}${ago != null ? ` · scraped ${ago}m ago` : ''}`;
   }
   const newsStatusEl = `<div style="font-size:17px;color:#7a9090;font-style:italic;">${newsStatus}</div>`;
+
+  const intervalOpts = [4, 6, 8, 12, 24, 36, 48, 60, 72];
+  const intervalEl = `<div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:14px;color:#7a9090;">News window:</label>
+      <select onchange="__wpA.setIntelInterval(this.value)" style="background:#2b3333;color:#e0e8e8;border:1px solid #617070;border-radius:4px;padding:3px 6px;font-size:14px;">
+        ${intervalOpts.map(o => `<option value="${o}" ${S.intelInterval===o?'selected':''}>${o} ticks</option>`).join('')}
+      </select>
+    </div>`;
 
   // Sort indicator helper
   const si = (c) => {
@@ -289,9 +316,12 @@ function _buildIntel() {
     </div>`;
 
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:14px;flex-wrap:wrap;">
       ${newsStatusEl}
-      <div style="font-size:17px;color:#7a9090;">${rows.length} provinces · ${esc(S.enemy.kingdomName || S.eLoc)}</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        ${intervalEl}
+        <div style="font-size:17px;color:#7a9090;">${rows.length} provinces · ${esc(S.enemy.kingdomName || S.eLoc)}</div>
+      </div>
     </div>
     ${table}`;
 }

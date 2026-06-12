@@ -34,6 +34,8 @@ function _refreshBackendStatus() {
 
 window.__wpA = {
 
+  setIntelInterval(v) { S.intelInterval = parseInt(v, 10); renderIntel(); },
+
   // ── Initialisation ──────────────────────────────────────────────────────
 
   async init() {
