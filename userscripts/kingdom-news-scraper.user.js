@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Utopia Kingdom News Scraper
 // @namespace    utopia-wave-planner
-// @version      2.0
+// @version      2.1
 // @description  Periodically sends the Kingdom News page to the Wave Planner
 //               backend so the Intel tab can show acres gained/lost, razes,
 //               and massacres. Runs in the background on any game page —
 //               only one kingdom member needs this installed.
 // @match        https://utopia-game.com/wol/game/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      europe-west1.run.app
 // ==/UserScript==
 
 (function () {
@@ -33,12 +34,16 @@
       data_simple: simple,
       data_html: html,
       key: API_KEY,
-    });
+    }).toString();
 
-    fetch(ENDPOINT, { method: 'POST', body })
-      .then(r => r.json())
-      .then(j => console.log('[KingdomNewsScraper] Sent to backend:', j))
-      .catch(e => console.warn('[KingdomNewsScraper] Failed to send:', e.message));
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: ENDPOINT,
+      data: body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      onload: (r) => console.log('[KingdomNewsScraper] Sent to backend:', r.responseText),
+      onerror: (e) => console.warn('[KingdomNewsScraper] Failed to send:', e),
+    });
   }
 
   function extractAndSend(doc, url) {
