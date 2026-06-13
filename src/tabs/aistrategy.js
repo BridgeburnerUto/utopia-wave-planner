@@ -69,9 +69,11 @@ async function aiStrategyAnalyze() {
     };
 
     const url = S.apiEndpoint.replace(/\/$/, '') + '/ai_strategy.php';
+    const hdrs = { 'Content-Type': 'application/json' };
+    if (S.apiKey) hdrs['X-WP-Key'] = S.apiKey;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdrs,
       body: JSON.stringify(payload),
     });
     const data = await res.json();
