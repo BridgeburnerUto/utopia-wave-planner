@@ -11,7 +11,7 @@ management, and external actions). Update this file when a new age starts
 **Vocabulary**
 - **Pure T/M**: a thief/mage-focused province with minimal or no offense (low `aOff`). These are our (and the enemy's) economic/intel/spell backbone and the priority to protect.
 - **Unbreakable (UB)**: a province whose `tDef` is high enough that the enemy's best offense (with general bonus) cannot reach `minGensToBreak` — i.e. `canBreak` is false for every realistic enemy attacker. Goal: get our pure T/M provinces UB as early as possible.
-- **Bloat target**: an enemy province we deliberately let grow (overpopulate) rather than land-grab, then punish via thievery (esp. Nightstrikes) instead of TM/Raze/Massacre. Good candidates: enemy attackers with low RPTA, weak Watchtowers, or heavy Castle investment (castles reduce TM gains, so thievery is more efficient against them).
+- **Bloat target**: an enemy *attacker* (meaningful `aOff`, NOT a pure T/M) with low RPTA, weak Watchtowers, or heavy Castle investment — we deliberately let it grow (overpopulate) rather than land-grab, then punish via thievery (esp. Nightstrikes) instead of TM/Raze/Massacre, since castles make thievery more cost-effective than military ops against it. **Never classify a pure T/M as a bloat target** — pure T/Ms with offense too low to threaten us are simply left alone / hit with econ ops, not "bloat" (bloat specifically describes letting an *attacker's* population grow unchecked so Nightstrikes hit harder).
 - **Chain target**: an enemy province (usually a strong attacker — high RPTA, strong WTs, offense capable of breaking our high-def provinces) that we hit repeatedly with many of our provinces to push it over 100% pop, forcing its troops to leave home and neutralizing its offense.
 
 **Four levers to win a war** (in order we evaluate them):
@@ -26,7 +26,7 @@ management, and external actions). Update this file when a new age starts
    - If yes: prioritize hitting it repeatedly (single or multi-hit) throughout the war — every hit lowers their def *and* their econ (via land/pop loss).
    - If no: decide whether to commit to the war anyway, lean on thievery/magic to wear them down, or settle for econ containment (RPNW/RKNW control) without trying to break them militarily.
 3. **Classify enemy attackers** by RPTA, Watchtowers, and Castle investment:
-   - Low RPTA / weak WTs / high Castles → **bloat target**, leave it to grow, hit with Nightstrikes.
+   - Among *attackers* (meaningful `aOff`): low RPTA / weak WTs / high Castles → **bloat target**, leave it to grow, hit with Nightstrikes. (Pure T/Ms with low offense are not bloat targets — see vocabulary above.)
    - High RPTA / strong WTs / offense that threatens our high-def provinces → **chain target**.
 4. **Keep an eye on enemy NW** so it doesn't drift out of a favorable RPNW range (0.9–1.1 ideal per the gains formula above) — lower priority during active war, but relevant for sustained econ pressure and post-war positioning.
 
