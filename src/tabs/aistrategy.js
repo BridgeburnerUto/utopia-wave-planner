@@ -17,10 +17,26 @@ function _buildAiStrategy() {
     resultHtml = `<div style="white-space:pre-wrap;line-height:1.6;font-size:17px;color:#b8c8c8;">${esc(r.analysis || '')}</div>
       <div style="margin-top:10px;font-size:13px;color:#7a9090;">
         Generated ${esc(r.generated_at || '')}${r.calls_today ? ` · ${r.calls_today}/${r.daily_limit} calls today` : ''}
-      </div>`;
+      </div>
+      <button class="wb" style="margin-top:10px" onclick="__wpA.aiStrategySendToDiscord()">Send to Discord</button>`;
   }
 
   const disabled = (S.aiStrategyResult && S.aiStrategyResult.loading) ? 'disabled style="opacity:.5;cursor:not-allowed"' : '';
+
+  // History — last few results, newest first
+  const hist = S.aiStrategyHistory || [];
+  let histHtml = '';
+  if (hist.length) {
+    histHtml = `<div class="wthr-title" style="margin-top:16px">History</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${hist.map((h, i) => {
+          const active = (r && !r.loading && !r.error && r.generated_at === h.generated_at);
+          return `<button class="wb" style="text-align:left;${active ? 'border:1px solid #5fcf9f;' : ''}" onclick="__wpA.aiStrategyShowHistory(${i})">
+            vs ${esc(h.eLoc || '?')} — ${esc(h.generated_at || '')}
+          </button>`;
+        }).join('')}
+      </div>`;
+  }
 
   return `<div class="wsech">
     <div class="wthr-title">AI Strategy (beta)</div>
@@ -34,7 +50,37 @@ function _buildAiStrategy() {
     <div style="min-height:60px;">
       ${resultHtml}
     </div>
+    ${histHtml}
   </div>`;
+}
+
+const AI_STRATEGY_HISTORY_MAX = 5;
+
+function aiStrategyShowHistory(i) {
+  const h = (S.aiStrategyHistory || [])[i];
+  if (!h) return;
+  S.aiStrategyResult = h;
+  renderAiStrategy();
+}
+
+async function aiStrategySendToDiscord() {
+  const r = S.aiStrategyResult;
+  if (!r || r.loading || r.error || !r.analysis) return;
+  if (!S.discordWebhook) {
+    alert('No Discord webhook configured — set it in the Alerts tab first.');
+    return;
+  }
+  const ok = await sendDiscordEmbed(S.discordWebhook, {
+    content: '',
+    embeds: [{
+      title: `🧠 AI Strategy — vs ${S.eLoc || '?'}`,
+      description: (r.analysis || '').slice(0, 4000),
+      color: 4886754,
+      timestamp: new Date().toISOString(),
+      footer: { text: `Generated ${r.generated_at || ''}${r.calls_today ? ` · ${r.calls_today}/${r.daily_limit} calls today` : ''}` },
+    }],
+  });
+  if (!ok) alert('Failed to send to Discord — check the webhook URL.');
 }
 
 /**
@@ -80,7 +126,9 @@ async function aiStrategyAnalyze() {
     if (!res.ok || data.error) {
       S.aiStrategyResult = { error: (typeof data.error === 'string' ? data.error : JSON.stringify(data.error)) || `HTTP ${res.status}` };
     } else {
+      data.eLoc = S.eLoc;
       S.aiStrategyResult = data;
+      S.aiStrategyHistory = [data, ...(S.aiStrategyHistory || [])].slice(0, AI_STRATEGY_HISTORY_MAX);
     }
   } catch (e) {
     S.aiStrategyResult = { error: e.message || String(e) };

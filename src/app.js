@@ -123,6 +123,7 @@ window.__wpA = {
           S.ageStartDate    = parsed.ageStartDate   || 0;
           S.apiEndpoint     = parsed.apiEndpoint    || '';
           S.apiKey          = parsed.apiKey         || '';
+          S.aiStrategyHistory = parsed.aiStrategyHistory || [];
         } catch (e) { console.warn('[WavePlanner] Malformed plan JSON — starting fresh'); }
       }
 
@@ -254,6 +255,7 @@ window.__wpA = {
         ageStartDate:    S.ageStartDate   || 0,
         apiEndpoint:     S.apiEndpoint    || '',
         apiKey:          S.apiKey         || '',
+        aiStrategyHistory: S.aiStrategyHistory || [],
       });
       const r = await fbWrite(`warplan/${kdId}`, {
         json,
@@ -802,6 +804,8 @@ window.__wpA = {
 
   // ── AI Strategy ──────────────────────────────────────────────────────────
   aiStrategyAnalyze: () => aiStrategyAnalyze(),
+  aiStrategyShowHistory: (i) => aiStrategyShowHistory(i),
+  aiStrategySendToDiscord: () => aiStrategySendToDiscord(),
 
   // Manual stat overrides + raze/massacre claims (defined in player.js)
   setManualStat,
