@@ -69,4 +69,6 @@ const S = {
     toMonth: null,
   },
   lbOpFilter: 'all',   // 'all' | opType string e.g. 'ns', 'fb' — filters province table to one op type
+
+  aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
 };

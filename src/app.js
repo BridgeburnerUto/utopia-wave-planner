@@ -285,7 +285,7 @@ window.__wpA = {
 
   tab(t) {
     S.tab = t;
-    ['board', 'player', 'intel', 'summary', 'nwgraph', 'alerts', 'leaderboard', 'kddb'].forEach(x => {
+    ['board', 'player', 'intel', 'summary', 'nwgraph', 'alerts', 'leaderboard', 'kddb', 'aistrategy'].forEach(x => {
       $id('__wpc_' + x).style.display = x === t ? '' : 'none';
       const el = $id('__wpt_' + x);
       el.className = 'wt' + (x === t ? (x === 'player' ? ' on ong' : ' on') : '');
@@ -298,6 +298,7 @@ window.__wpA = {
     if (t === 'alerts')      renderAlerts();
     if (t === 'leaderboard') renderLeaderboard();
     if (t === 'kddb')        renderKddb();
+    if (t === 'aistrategy')  renderAiStrategy();
   },
 
   // ── Role switching ──────────────────────────────────────────────────────
@@ -798,6 +799,9 @@ window.__wpA = {
   kddbTagAll:     () => _kddbOpenTagView(),
   kddbTagBack:    () => { _kddbView = 'main'; renderKddb(); },
   kddbTagConfirm: (snapId, identityId) => _kddbConfirm(snapId, identityId),
+
+  // ── AI Strategy ──────────────────────────────────────────────────────────
+  aiStrategyAnalyze: () => aiStrategyAnalyze(),
 
   // Manual stat overrides + raze/massacre claims (defined in player.js)
   setManualStat,
