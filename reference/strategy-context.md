@@ -138,6 +138,7 @@ Chaining (repeated attacks on one target to push it over 100% pop) is the most c
 - **Never Massacre a chain victim being chained for this reason** — Massacre kills population, which *helps* them get back under the overpop threshold faster.
 - Raze can help: early to level Forts (lowering DME), or late to slow their recovery after the chain ends.
 - **Ambush** their attacks during the chain (their army is away — free acres + extra casualties).
+- **Spell support on a chain victim is limited to: Blizzard, Explosions, Pitfalls — nothing else.** Don't recommend Bribe Generals, Droughts, Gluttony, Rob the Granaries, Riots, etc. against a chain victim; those belong to the pre-chain softening combo (see Playbook) or to bloat/rogue targets, not to a province already being chained.
 - Realistic outcome: a strong attacker is rarely fully removed from the war, but the chain lowers their offense and NW enough to make them a viable side-hit target (low def) for others.
 - Target selection: usually the enemy's **highest-offense attacker**; look for attackers who are already getting reduced incoming (failed attacks/massacres/razes against them) as good opportunities — they're already weakened.
 
