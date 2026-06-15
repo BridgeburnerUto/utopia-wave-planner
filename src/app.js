@@ -123,8 +123,21 @@ window.__wpA = {
           S.ageStartDate    = parsed.ageStartDate   || 0;
           S.apiEndpoint     = parsed.apiEndpoint    || '';
           S.apiKey          = parsed.apiKey         || '';
-          S.aiStrategyHistory = parsed.aiStrategyHistory || [];
         } catch (e) { console.warn('[WavePlanner] Malformed plan JSON — starting fresh'); }
+      }
+
+      // 3b. AI Strategy history — stored in its own doc (kept separate so its
+      // size doesn't risk the main warplan doc hitting Firestore's limit)
+      if (S.own?.location) {
+        try {
+          const histKdId = S.own.location.replace(':', '_');
+          const histDoc = await fbGet(`meta/${histKdId}_ai_history`);
+          if (histDoc?.fields?.json?.stringValue) {
+            S.aiStrategyHistory = JSON.parse(histDoc.fields.json.stringValue) || [];
+          } else {
+            S.aiStrategyHistory = [];
+          }
+        } catch (e) { S.aiStrategyHistory = []; }
       }
 
       // IS enemy overrides only when IS explicitly has one set
@@ -255,7 +268,6 @@ window.__wpA = {
         ageStartDate:    S.ageStartDate   || 0,
         apiEndpoint:     S.apiEndpoint    || '',
         apiKey:          S.apiKey         || '',
-        aiStrategyHistory: S.aiStrategyHistory || [],
       });
       const r = await fbWrite(`warplan/${kdId}`, {
         json,

@@ -28,7 +28,7 @@ management, and external actions). Update this file when a new age starts
 3. **Classify enemy attackers** by RPTA, Watchtowers, and Castle investment:
    - Among *attackers* (meaningful `aOff`): low RPTA / weak WTs / high Castles → **bloat target**, leave it to grow, hit with Nightstrikes. (Pure T/Ms with low offense are not bloat targets — see vocabulary above.)
    - High RPTA / strong WTs / offense that threatens our high-def provinces → **chain target**.
-4. **Keep an eye on enemy NW** so it doesn't drift out of a favorable RPNW range (0.9–1.1 ideal per the gains formula above) — lower priority during active war, but relevant for sustained econ pressure and post-war positioning.
+4. **Keep an eye on enemy NW** so it doesn't drift out of a favorable RPNW range (0.9–1.2 ideal per the gains formula above) — lower priority during active war, but relevant for sustained econ pressure and post-war positioning.
 
 ## Strategy — Spell/Thievery Combos (Playbook)
 

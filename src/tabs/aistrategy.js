@@ -56,6 +56,17 @@ function _buildAiStrategy() {
 
 const AI_STRATEGY_HISTORY_MAX = 5;
 
+async function _saveAiStrategyHistory() {
+  if (!S.own?.location) return;
+  const kdId = S.own.location.replace(':', '_');
+  try {
+    await fbWrite(`meta/${kdId}_ai_history`, {
+      json: JSON.stringify(S.aiStrategyHistory || []),
+      savedAt: Date.now(),
+    });
+  } catch (e) { console.warn('[WavePlanner] Failed to save AI strategy history:', e.message); }
+}
+
 function aiStrategyShowHistory(i) {
   const h = (S.aiStrategyHistory || [])[i];
   if (!h) return;
@@ -129,6 +140,7 @@ async function aiStrategyAnalyze() {
       data.eLoc = S.eLoc;
       S.aiStrategyResult = data;
       S.aiStrategyHistory = [data, ...(S.aiStrategyHistory || [])].slice(0, AI_STRATEGY_HISTORY_MAX);
+      _saveAiStrategyHistory();
     }
   } catch (e) {
     S.aiStrategyResult = { error: e.message || String(e) };
