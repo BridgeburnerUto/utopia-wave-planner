@@ -820,6 +820,7 @@ window.__wpA = {
   aiStrategyShowHistory: (i) => aiStrategyShowHistory(i),
   aiStrategySendToDiscord: () => aiStrategySendToDiscord(),
   tmMatchupToggle: () => { S.tmMatchupShowAll = !S.tmMatchupShowAll; renderTmMatchup(); },
+  tmMatchupSetOp: (id) => { S.tmMatchupOp = id; renderTmMatchup(); },
 
   // Manual stat overrides + raze/massacre claims (defined in player.js)
   setManualStat,

@@ -72,4 +72,5 @@ const S = {
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
+  tmMatchupOp: 'ns',      // T/M Matchup: active op id (see TM_OPS in tmmatchup.js)
 };

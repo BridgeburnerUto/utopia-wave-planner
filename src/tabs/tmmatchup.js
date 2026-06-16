@@ -1,7 +1,33 @@
 // ── TAB: T/M MATCHUP ─────────────────────────────────────────────────────────
 // Grid of own T/M provinces (rows) vs enemy provinces (columns).
-// Shows thievery and magic matchup ratios, colour-coded by success threshold,
-// with an NW range indicator so you can see which ops are in the gains sweet spot.
+// Op selector buttons change colour thresholds; NW indicator shows gains range.
+
+// ── Op config ────────────────────────────────────────────────────────────────
+// high: ratio for green (great); acceptable: ratio for yellow; below = red.
+// null high means no "great" tier — acceptable is the top colour (yellow).
+const TM_OPS = [
+  // ── Standard thievery ops ──────────────────────────────────────────────────
+  { id: 'ns',         label: 'Nightstrike',      high: 3.0, acceptable: 2.0, type: 'tpa' },
+  { id: 'kidnap',     label: 'Kidnap',           high: 3.0, acceptable: 2.0, type: 'tpa' },
+  { id: 'riots',      label: 'Incite Riots',     high: null, acceptable: 3.0, type: 'tpa' },
+  { id: 'rob_gran',   label: 'Rob Granaries',    high: 2.0, acceptable: 1.0, type: 'tpa' },
+  { id: 'rob_tow',    label: 'Rob Towers',       high: 2.0, acceptable: 1.0, type: 'tpa' },
+  { id: 'rob_vault',  label: 'Rob Vault',        high: 2.0, acceptable: 1.0, type: 'tpa' },
+  { id: 'sab_wiz',    label: 'Sabotage Wizards', high: null, acceptable: 2.0, type: 'tpa' },
+  { id: 'arson',      label: 'Arson',            high: null, acceptable: 3.0, type: 'tpa' },
+  { id: 'bribe_gen',  label: 'Bribe Generals',   high: null, acceptable: 1.0, type: 'tpa' },
+  { id: 'bribe_thi',  label: 'Bribe Thieves',    high: null, acceptable: 1.0, type: 'tpa' },
+  { id: 'free_pris',  label: 'Free Prisoners',   high: null, acceptable: 2.0, type: 'tpa', note: 'low use' },
+  // ── Rogue-only ops ────────────────────────────────────────────────────────
+  { id: 'propaganda', label: 'Propaganda',       high: 3.0, acceptable: 2.0, type: 'tpa', rogue: true },
+  { id: 'g_arson',    label: 'Greater Arson',    high: 2.0, acceptable: null, type: 'tpa', rogue: true },
+  { id: 'ass_wiz',    label: 'Assassinate Wiz',  high: null, acceptable: 3.0, type: 'tpa', rogue: true },
+  { id: 'steal_hors', label: 'Steal Horses',     high: 2.0, acceptable: null, type: 'tpa', rogue: true },
+  // ── Magic (WPA) ───────────────────────────────────────────────────────────
+  { id: 'spells',     label: 'Spells (general)', high: 2.0, acceptable: 1.0, type: 'wpa' },
+];
+
+const TM_OP_MAP = Object.fromEntries(TM_OPS.map(o => [o.id, o]));
 
 function renderTmMatchup() {
   renderTab('__wpc_tmmatchup', _buildTmMatchup);
@@ -20,141 +46,130 @@ function _buildTmMatchup() {
     return `<div class="wsech"><div style="color:#7a9090">No province data available.</div></div>`;
   }
 
+  const activeId = S.tmMatchupOp || 'ns';
+  const activeOp = TM_OP_MAP[activeId] || TM_OPS[0];
+  const showAll  = S.tmMatchupShowAll || false;
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  // modOffTpa / modDefTpa / modOffWpa / modDefWpa come from calcs (pre-computed by IS)
-  function _oTpa(p)  { return p?.calcs?.modOffTpa ?? null; }
-  function _dTpa(p)  { return p?.calcs?.modDefTpa ?? null; }
-  function _oWpa(p)  { return p?.calcs?.modOffWpa ?? null; }
-  function _dWpa(p)  { return p?.calcs?.modDefWpa ?? null; }
+  function _oTpa(p) { return p?.calcs?.modOffTpa ?? null; }
+  function _dTpa(p) { return p?.calcs?.modDefTpa ?? null; }
+  function _oWpa(p) { return p?.calcs?.modOffWpa ?? null; }
+  function _dWpa(p) { return p?.calcs?.modDefWpa ?? null; }
 
-  // RPNW: TargetNW / SelfNW — same breakpoints as combat gains
-  // Returns { label, color } for display
+  function _ratio(op, ownP, enemyP) {
+    if (op.type === 'wpa') {
+      const o = _oWpa(ownP), d = _dWpa(enemyP);
+      return (o != null && d != null && d > 0) ? o / d : null;
+    }
+    const o = _oTpa(ownP), d = _dTpa(enemyP);
+    return (o != null && d != null && d > 0) ? o / d : null;
+  }
+
+  function _ratioCol(ratio, op) {
+    if (ratio == null) return '#555';
+    if (op.high      != null && ratio >= op.high)       return '#5fcf9f'; // great
+    if (op.acceptable != null && ratio >= op.acceptable) return '#c8c03a'; // acceptable
+    if (op.high      != null && op.acceptable == null && ratio >= op.high) return '#5fcf9f';
+    return '#b94040'; // risky
+  }
+
+  function _ratioLabel(op) {
+    const parts = [];
+    if (op.high)       parts.push(`≥${op.high}:1 <span style="color:#5fcf9f">great</span>`);
+    if (op.acceptable) parts.push(`≥${op.acceptable}:1 <span style="color:#c8c03a">acceptable</span>`);
+    parts.push(`<span style="color:#b94040">below = risky</span>`);
+    return parts.join(' &nbsp;·&nbsp; ');
+  }
+
+  // RPNW band
   function _nwBand(ownNw, enemyNw) {
     if (!ownNw || !enemyNw) return { label: '?', col: '#555' };
     const r = enemyNw / ownNw;
-    if (r < 0.567)        return { label: '✗', col: '#b94040' };   // dead zone — no gains
-    if (r < 0.9)          return { label: '↓', col: '#c8843a' };   // below sweet spot
-    if (r <= 1.1)         return { label: '✓', col: '#5fcf9f' };   // sweet spot
-    if (r <= 1.6)         return { label: '↑', col: '#c8c03a' };   // above — declining
-    return                       { label: '✗', col: '#b94040' };   // dead zone — too high
-  }
-
-  // Ratio → colour
-  // NS thresholds: 3:1 great, 2:1 good, 1:1 ok, <1 bad
-  // Rob/Kidnap: 2:1 great, 1:1 ok, <1 bad
-  // We use NS as the primary scale (most demanding).
-  function _ratioCol(ratio) {
-    if (ratio == null) return '#555';
-    if (ratio >= 3.0)  return '#5fcf9f';   // great (green)
-    if (ratio >= 2.0)  return '#8bcf6f';   // good
-    if (ratio >= 1.0)  return '#c8c03a';   // marginal (yellow)
-    return '#b94040';                       // bad (red)
+    if (r < 0.567)  return { label: '✗', col: '#b94040' };
+    if (r < 0.9)    return { label: '↓', col: '#c8843a' };
+    if (r <= 1.1)   return { label: '✓', col: '#5fcf9f' };
+    if (r <= 1.6)   return { label: '↑', col: '#c8c03a' };
+    return                  { label: '✗', col: '#b94040' };
   }
 
   function _fmt(v) { return v != null ? v.toFixed(2) : '—'; }
 
-  // ── Classify own provinces ────────────────────────────────────────────────────
-  // "T/M" = province with meaningful modOffTpa or modOffWpa, typically lower aOff.
-  // We show ALL own provinces but highlight T/M ones.
-  // User can toggle to show only T/M.
-  const showAll = S.tmMatchupShowAll ?? false;
-
+  // Own province filter — T/M = meaningful TPA or WPA
   function _isTm(p) {
-    const aOff = p.som?.offPointsHome ?? p.sot?.offPoints ?? 0;
-    const oT   = _oTpa(p);
-    const oW   = _oWpa(p);
-    // T/M if: meaningful TPA or WPA AND low offense
-    return (oT != null && oT > 0.5) || (oW != null && oW > 0.5);
+    return (_oTpa(p) != null && _oTpa(p) > 0.5) || (_oWpa(p) != null && _oWpa(p) > 0.5);
   }
-
   const rows = showAll ? ownProvs : ownProvs.filter(_isTm);
 
-  if (!rows.length) {
-    return `<div class="wsech"><div style="color:#7a9090">No T/M provinces detected — try toggling "Show all".</div></div>`;
+  // ── Op selector ───────────────────────────────────────────────────────────────
+  function _opBtn(op) {
+    const active = op.id === activeId;
+    const isWpa  = op.type === 'wpa';
+    const style  = active
+      ? 'border-color:#5fcf9f;color:#5fcf9f;background:#0a2020;'
+      : isWpa ? 'border-color:#7a5f9f;color:#a080c0;' : '';
+    const noteStr = op.note ? ` <span style="font-size:10px;opacity:.6">(${op.note})</span>` : '';
+    const rogueStr = op.rogue ? ' <span style="font-size:10px;color:#c8843a">R</span>' : '';
+    return `<button class="wb" style="font-size:12px;padding:3px 8px;${style}"
+      onclick="__wpA.tmMatchupSetOp('${op.id}')">${esc(op.label)}${rogueStr}${noteStr}</button>`;
   }
 
-  // ── Build table ───────────────────────────────────────────────────────────────
+  const stdOps   = TM_OPS.filter(o => o.type === 'tpa' && !o.rogue);
+  const rogueOps = TM_OPS.filter(o => o.rogue);
+  const wpaOps   = TM_OPS.filter(o => o.type === 'wpa');
 
-  // Column headers: enemy province names
-  const colHeaders = enemyProvs.map(ep => {
-    const nw = ep.networth || 0;
-    return `<th style="padding:6px 8px;font-size:13px;color:#9ab;white-space:nowrap;border-bottom:1px solid #2a3a3a;">
+  const opSelector = `
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:#7a9090;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Standard ops</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">${stdOps.map(_opBtn).join('')}</div>
+      <div style="font-size:11px;color:#c8843a;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Rogue-only <span style="color:#7a9090;font-size:10px">(R)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">${rogueOps.map(_opBtn).join('')}</div>
+      <div style="font-size:11px;color:#a080c0;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Magic</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">${wpaOps.map(_opBtn).join('')}</div>
+    </div>`;
+
+  // ── Grid ─────────────────────────────────────────────────────────────────────
+
+  const colKey  = activeOp.type === 'wpa' ? 'WPA' : 'TPA';
+
+  const colHeaders = enemyProvs.map(ep => `
+    <th style="padding:6px 8px;font-size:13px;color:#9ab;white-space:nowrap;border-bottom:1px solid #2a3a3a;min-width:90px;">
       <div style="font-weight:700;color:#cde">${esc(ep.name || '?')}</div>
-      <div style="color:#7a9090;font-size:11px">${ep.race ? esc(ep.race) : ''} · ${fK(nw)} NW</div>
-    </th>`;
-  }).join('');
+      <div style="color:#7a9090;font-size:11px">${ep.race ? esc(ep.race) : ''} · ${fK(ep.networth||0)} NW</div>
+      <div style="font-size:11px;color:#9ab;margin-top:2px;">
+        def ${colKey}: <b style="color:#cde">${activeOp.type === 'wpa' ? _fmt(_dWpa(ep)) : _fmt(_dTpa(ep))}</b>
+      </div>
+    </th>`).join('');
 
-  // Rows: own T/M provinces
   const tableRows = rows.map(op => {
-    const oTpa  = _oTpa(op);
-    const oWpa  = _oWpa(op);
-    const ownNw = op.networth || 0;
+    const ownNw  = op.networth || 0;
+    const ownVal = activeOp.type === 'wpa' ? _oWpa(op) : _oTpa(op);
 
     const cells = enemyProvs.map(ep => {
-      const dTpa  = _dTpa(ep);
-      const dWpa  = _dWpa(ep);
-      const tRatio = (oTpa != null && dTpa != null && dTpa > 0) ? oTpa / dTpa : null;
-      const wRatio = (oWpa != null && dWpa != null && dWpa > 0) ? oWpa / dWpa : null;
+      const ratio = _ratio(activeOp, op, ep);
+      const col   = _ratioCol(ratio, activeOp);
       const nw    = _nwBand(ownNw, ep.networth || 0);
-
-      const tCol  = _ratioCol(tRatio);
-      const wCol  = _ratioCol(wRatio);
+      const rpnw  = ownNw && ep.networth ? (ep.networth / ownNw).toFixed(2) : '?';
 
       return `<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #1a2a2a;border-right:1px solid #1a2a2a;">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <div style="font-size:13px;font-weight:700;color:${tCol}" title="TPA ratio: ${_fmt(oTpa)} / ${_fmt(dTpa)}">
-            T ${tRatio != null ? tRatio.toFixed(1) : '—'}
-          </div>
-          <div style="font-size:13px;color:${wCol}" title="WPA ratio: ${_fmt(oWpa)} / ${_fmt(dWpa)}">
-            W ${wRatio != null ? wRatio.toFixed(1) : '—'}
-          </div>
-          <div style="font-size:11px;font-weight:700;color:${nw.col}" title="RPNW = ${ownNw && ep.networth ? (ep.networth/ownNw).toFixed(2) : '?'}">
-            ${nw.label} NW
-          </div>
+        <div style="font-size:15px;font-weight:700;color:${col}">${ratio != null ? ratio.toFixed(1) : '—'}</div>
+        <div style="font-size:11px;font-weight:700;color:${nw.col};margin-top:2px" title="RPNW ${rpnw}">
+          ${nw.label} NW
         </div>
       </td>`;
     }).join('');
 
-    const aOff = op.som?.offPointsHome ?? op.sot?.offPoints ?? 0;
     return `<tr>
       <td style="padding:6px 10px;white-space:nowrap;border-bottom:1px solid #1a2a2a;border-right:2px solid #2a4a4a;position:sticky;left:0;background:#0e1a1a;z-index:1;">
         <div style="font-weight:700;color:#cde;font-size:14px">${esc(op.name || '?')}</div>
         <div style="font-size:11px;color:#7a9090">${op.race ? esc(op.race) : ''} · ${fK(ownNw)} NW</div>
-        <div style="font-size:11px;margin-top:2px;display:flex;gap:6px;">
-          ${oTpa != null ? `<span style="color:#9ab">TPA <b style="color:#cde">${oTpa.toFixed(2)}</b></span>` : ''}
-          ${oWpa != null ? `<span style="color:#9ab">WPA <b style="color:#cde">${oWpa.toFixed(2)}</b></span>` : ''}
+        <div style="font-size:12px;color:#9ab;margin-top:2px;">
+          off ${colKey}: <b style="color:#cde">${_fmt(ownVal)}</b>
         </div>
       </td>
       ${cells}
     </tr>`;
   }).join('');
-
-  // ── Legend ────────────────────────────────────────────────────────────────────
-  const legend = `
-    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:12px;font-size:13px;">
-      <b style="color:#7a9090;text-transform:uppercase;letter-spacing:1px">Ratio key:</b>
-      <span><b style="color:#5fcf9f">≥3.0</b> Great (NS / Rob safe)</span>
-      <span><b style="color:#8bcf6f">≥2.0</b> Good</span>
-      <span><b style="color:#c8c03a">≥1.0</b> Marginal</span>
-      <span><b style="color:#b94040">&lt;1.0</b> Risky</span>
-      <span style="margin-left:8px;border-left:1px solid #2a3a3a;padding-left:8px">
-        <b style="color:#5fcf9f">✓ NW</b> sweet spot &nbsp;
-        <b style="color:#c8c03a">↑↓</b> partial gains &nbsp;
-        <b style="color:#b94040">✗</b> dead zone
-      </span>
-    </div>`;
-
-  // ── Enemy def stats row at bottom ─────────────────────────────────────────────
-  const defRow = `<tr style="background:#0a1414;">
-    <td style="padding:6px 10px;font-size:12px;color:#7a9090;border-right:2px solid #2a4a4a;position:sticky;left:0;background:#0a1414;">
-      Enemy def TPA / WPA
-    </td>
-    ${enemyProvs.map(ep => `<td style="padding:6px 8px;text-align:center;font-size:12px;color:#7a9090;">
-      <div>T <b style="color:#9ab">${_fmt(_dTpa(ep))}</b></div>
-      <div>W <b style="color:#9ab">${_fmt(_dWpa(ep))}</b></div>
-    </td>`).join('')}
-  </tr>`;
 
   const toggleLabel = showAll ? 'Show T/M only' : 'Show all own';
 
@@ -163,11 +178,19 @@ function _buildTmMatchup() {
       <div class="wthr-title" style="margin:0">T/M Matchup</div>
       <button class="wb" onclick="__wpA.tmMatchupToggle()" style="font-size:13px;padding:3px 10px;">${toggleLabel}</button>
     </div>
-    <div style="font-size:14px;color:#7a9090;margin-bottom:12px;">
-      Thievery (T) and magic (W) ratios — own offensive TPA/WPA vs each enemy's defensive TPA/WPA.
-      NW indicator shows whether the target is in your gains range.
+
+    ${opSelector}
+
+    <div style="font-size:13px;color:#7a9090;margin-bottom:8px;">
+      <b style="color:#cde">${esc(activeOp.label)}</b>
+      ${activeOp.rogue ? '<span style="color:#c8843a"> · Rogue only</span>' : ''}
+      &nbsp;·&nbsp; ${_ratioLabel(activeOp)}
+      &nbsp;·&nbsp;
+      <b style="color:#5fcf9f">✓</b> NW sweet spot &nbsp;
+      <b style="color:#c8c03a">↑↓</b> partial &nbsp;
+      <b style="color:#b94040">✗</b> dead zone
     </div>
-    ${legend}
+
     <div style="overflow-x:auto;">
       <table style="border-collapse:collapse;min-width:100%;">
         <thead>
@@ -178,10 +201,7 @@ function _buildTmMatchup() {
             ${colHeaders}
           </tr>
         </thead>
-        <tbody>
-          ${tableRows}
-          ${defRow}
-        </tbody>
+        <tbody>${tableRows}</tbody>
       </table>
     </div>
   </div>`;
