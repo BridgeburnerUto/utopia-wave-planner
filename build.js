@@ -36,6 +36,7 @@ const ORDER = [
   'tabs/leaderboard.js',
   'tabs/kddb.js',
   'tabs/aistrategy.js',
+  'tabs/tmmatchup.js',
   'app.js',
 ];
 

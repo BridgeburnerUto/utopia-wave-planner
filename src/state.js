@@ -71,4 +71,5 @@ const S = {
   lbOpFilter: 'all',   // 'all' | opType string e.g. 'ns', 'fb' — filters province table to one op type
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
+  tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
 };

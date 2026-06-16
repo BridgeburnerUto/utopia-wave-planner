@@ -57,7 +57,8 @@ function buildOverlay() {
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
   <div class="wt"     id="__wpt_leaderboard" onclick="__wpA.tab('leaderboard')">LEADERBOARD</div>
   <div class="wt"     id="__wpt_kddb"        onclick="__wpA.tab('kddb')">KD DATABASE</div>
-  <div class="wt"     id="__wpt_aistrategy" onclick="__wpA.tab('aistrategy')">AI STRATEGY</div>
+  <div class="wt"     id="__wpt_aistrategy"  onclick="__wpA.tab('aistrategy')">AI STRATEGY</div>
+  <div class="wt"     id="__wpt_tmmatchup"  onclick="__wpA.tab('tmmatchup')">T/M MATCHUP</div>
 </div>
 
 <div id="__wpbd">
@@ -70,6 +71,7 @@ function buildOverlay() {
   <div id="__wpc_leaderboard" style="display:none"></div>
   <div id="__wpc_kddb"        style="display:none"></div>
   <div id="__wpc_aistrategy"  style="display:none"></div>
+  <div id="__wpc_tmmatchup"   style="display:none"></div>
   <div class="wops" id="__wpops"></div>
 </div>`;
 
