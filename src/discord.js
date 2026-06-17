@@ -144,12 +144,23 @@ async function checkAndSendDiscordAlerts() {
   }
 
   // ── War end detection → auto-post war summary ─────────────────────────────
-  // Track whether we were at war last check. When it flips from true → false,
+  // Track whether we were at war last check. When it flips true → false,
   // compile and post a war summary embed before the state is overwritten.
+  // Also store which enemy KD triggered the war-active state so that an
+  // unrelated ceasefire (accepted from a KD we never actually fought) doesn't
+  // fire a summary against the wrong kingdom.
   const curAtWar = _atWar();
   next.war_active = curAtWar;
+  if (curAtWar && S.eLoc) next.war_eLoc = S.eLoc; // remember who the war is against
   if (prev.war_active === true && !curAtWar) {
-    await _postWarSummary(webhookUrl);
+    // Only post if the current enemy matches who we were at war with.
+    // If war_eLoc was never recorded (old state), allow it through for backwards compat.
+    const expectedLoc = prev.war_eLoc;
+    if (!expectedLoc || expectedLoc === S.eLoc) {
+      await _postWarSummary(webhookUrl);
+    } else {
+      console.log(`[WavePlanner] War-end detected but enemy changed (${expectedLoc} → ${S.eLoc}) — skipping summary`);
+    }
   }
 
   // ── Enemy failed invasions — critical counter-attack opportunity ───────
