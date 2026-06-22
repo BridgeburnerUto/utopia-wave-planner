@@ -24,7 +24,19 @@ const TM_OPS = [
   { id: 'ass_wiz',    label: 'Assassinate Wiz',  high: null, acceptable: 3.0, type: 'tpa', rogue: true },
   { id: 'steal_hors', label: 'Steal Horses',     high: 2.0, acceptable: null, type: 'tpa', rogue: true },
   // ── Magic (WPA) ───────────────────────────────────────────────────────────
-  { id: 'spells',     label: 'Spells (general)', high: 2.0, acceptable: 1.0, type: 'wpa' },
+  { id: 'fireball',    label: 'Fireball',         high: 3.0, acceptable: 1.0, type: 'wpa' },
+  { id: 'amnesia',     label: 'Amnesia',          high: 4.0, acceptable: 1.5, type: 'wpa' },
+  { id: 'blizzard',    label: 'Blizzard',         high: 3.0, acceptable: 1.5, type: 'wpa' },
+  { id: 'chastity',    label: 'Chastity',         high: 3.0, acceptable: 1.5, type: 'wpa' },
+  { id: 'explosions',  label: 'Explosions',       high: 2.5, acceptable: 1.0, type: 'wpa' },
+  { id: 'expose_thi',  label: 'Expose Thieves',   high: 4.0, acceptable: 1.5, type: 'wpa' },
+  { id: 'gluttony',    label: 'Gluttony',         high: 2.0, acceptable: 1.0, type: 'wpa' },
+  { id: 'greed',       label: 'Greed',            high: 2.5, acceptable: 1.0, type: 'wpa' },
+  { id: 'meteor_show', label: 'Meteor Showers',   high: 4.0, acceptable: 1.5, type: 'wpa' },
+  { id: 'land_lust',   label: 'Land Lust',        high: 5.0, acceptable: 2.0, type: 'wpa' },
+  { id: 'nightmare',   label: 'Nightmare',        high: 5.0, acceptable: 2.5, type: 'wpa' },
+  { id: 'storms',      label: 'Storms',           high: 2.0, acceptable: 1.0, type: 'wpa' },
+  { id: 'drought',     label: 'Drought',          high: 2.0, acceptable: 1.0, type: 'wpa' },
 ];
 
 const TM_OP_MAP = Object.fromEntries(TM_OPS.map(o => [o.id, o]));

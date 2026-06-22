@@ -11,3 +11,8 @@ package-lock.json
 
 # Build backup — local only, not needed in repo
 dist/app.js.bak
+
+# Discord op log dumps — personal data, never commit
+ops.txt
+results.txt
+results.csv
