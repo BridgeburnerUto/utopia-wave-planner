@@ -49,6 +49,12 @@ function _buildAlerts() {
           value="${thr.enemyRunesRich || ''}" onblur="__wpA.setThr('enemyRunesRich',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('enemyRunesRich',this.value)">
         <div class="wthr-hint">Above X → <span style="color:#c87030">lightning strike / steal</span> target</div>
       </div>
+      <div class="wthr-row">
+        <div class="wthr-label">Solds ↑</div>
+        <input class="wthr-input" type="number" min="0" placeholder="0 = off"
+          value="${thr.solds || ''}" onblur="__wpA.setThr('solds',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('solds',this.value)">
+        <div class="wthr-hint">Above X → <span style="color:#c87030">soldier stack</span> — nightmares / meteor showers target</div>
+      </div>
 
       <div style="font-size:17px;font-weight:700;color:#60C040;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:16px;border-left:2px solid #2a6614;padding-left:8px;">Own Kingdom</div>
 
@@ -63,6 +69,32 @@ function _buildAlerts() {
         <input class="wthr-input" type="number" min="0" placeholder="0 = off"
           value="${thr.ownPeasLow || ''}" onblur="__wpA.setThr('ownPeasLow',this.value)" onkeydown="if(event.key==='Enter')__wpA.setThr('ownPeasLow',this.value)">
         <div class="wthr-hint">Below X → <span style="color:#E05050">beware!</span> low peasant population</div>
+      </div>
+    </div>` : '';
+
+  // ── Kingdom location lock (leader only) ─────────────────────────────────
+  const lockMismatch = !!(S.locLock && S.eLoc && S.eLoc !== S.locLock);
+  const lockHtml = isLeader ? `
+    <div class="wthr" style="border-color:${lockMismatch ? '#E0505066' : '#ffd40033'};margin-top:12px">
+      <div style="font-size:17px;font-weight:700;color:#ffd400;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-left:2px solid #7a6500;padding-left:8px;">Kingdom Location Lock</div>
+      <div style="font-size:17px;color:#7a9090;margin-bottom:8px;line-height:1.5">
+        ${S.locLock
+          ? `Locked to <b style="color:${lockMismatch ? '#E05050' : '#60C040'}">${esc(S.locLock)}</b>${lockMismatch ? ` — but <b style="color:#E05050">${esc(S.eLoc)}</b> is loaded!` : ' ✓'}`
+          : 'Not set — the tool will load whatever enemy the Intel Site points at.'}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <input class="wthr-input" type="text" id="__wplockinput" placeholder="e.g. 4:7"
+          value="${esc(S.locLock || '')}" style="width:90px;font-size:17px"
+          onkeydown="if(event.key==='Enter')__wpA.setLocLock(this.value)">
+        <button class="wb" style="font-size:17px;padding:3px 10px"
+          onclick="__wpA.setLocLock(document.getElementById('__wplockinput').value)">🔒 Lock</button>
+        ${S.locLock ? `<button class="wb r" style="font-size:17px;padding:3px 10px" onclick="__wpA.clearLocLock()">✕ Clear</button>` : ''}
+      </div>
+      <button class="wb" style="font-size:17px;padding:3px 10px;margin-bottom:8px"
+        onclick="__wpA.lockToCurrentEnemy()">Lock to current enemy (${esc(S.eLoc || '—')})</button>
+      <div style="font-size:17px;color:#7a9090;line-height:1.6">
+        Warns everyone if the loaded enemy doesn't match — prevents a previous
+        war's enemy from contaminating the plan. Set it when war is declared.
       </div>
     </div>` : '';
 
@@ -190,7 +222,7 @@ function _buildAlerts() {
 
   // Two-column layout: settings+discord+age+backend left, live alerts right
   return `<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start;">
-    <div>${settingsHtml}${ageHtml}${discordHtml}${backendHtml}</div>
+    <div>${settingsHtml}${lockHtml}${ageHtml}${discordHtml}${backendHtml}</div>
     <div>${aHtml}</div>
   </div>`;
 }
@@ -213,6 +245,18 @@ function _buildSnAlert() {
 
 function _gatherAlerts(thr) {
   const al = [];
+
+  // ── Kingdom location lock ────────────────────────────────────────────────
+  if (S.locLock && S.eLoc && S.eLoc !== S.locLock) {
+    al.push({ group: 'military', badge: 'LOCK', cls: 'wau',
+      bg: 'background:rgba(255,68,85,.08);border:1px solid rgba(255,68,85,.3);',
+      t: `<b>Location lock mismatch</b> — locked to <b>${esc(S.locLock)}</b> but <b>${esc(S.eLoc)}</b> is loaded${
+        S.locLockOverride ? ' (override active this session)' : ' — save &amp; companion sync paused'}.` });
+  } else if (!S.locLock && _atWar()) {
+    al.push({ group: 'military', badge: 'LOCK', cls: 'wai',
+      bg: 'background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);',
+      t: `No <b>kingdom location lock</b> set — lock the enemy location (settings on the left) so a previous war's data can't sneak in.` });
+  }
 
   // ── Dragon alerts ────────────────────────────────────────────────────────
   const ownDragon = S.own?.kdEffects?.dragon || '';
@@ -272,9 +316,10 @@ function _gatherAlerts(thr) {
 
       if (p.sot) {
         // Use != null so we only alert when data actually exists (0 food is valid; missing is not)
-        const food  = p.sot.food  != null ? p.sot.food  : null;
-        const gc    = p.sot.money != null ? p.sot.money : null;
-        const runes = p.sot.runes != null ? p.sot.runes : null;
+        const food  = p.sot.food     != null ? p.sot.food     : null;
+        const gc    = p.sot.money    != null ? p.sot.money    : null;
+        const runes = p.sot.runes    != null ? p.sot.runes    : null;
+        const solds = p.sot.soldiers != null ? p.sot.soldiers : null;
 
         if (food  != null && thr.enemyFoodRich  > 0 && food  > thr.enemyFoodRich)
           al.push({ group: 'enemy_rich', badge: 'FOOD', cls: 'wai',
@@ -290,6 +335,11 @@ function _gatherAlerts(thr) {
           al.push({ group: 'enemy_rich', badge: 'RUNES', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
             t: `<b>${esc(p.name)}</b> has ${fK(runes)} runes — lightning strike / steal${age}` });
+
+        if (solds != null && thr.solds          > 0 && solds > thr.solds)
+          al.push({ group: 'enemy_rich', badge: 'SOLDS', cls: 'wai',
+            bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
+            t: `<b>${esc(p.name)}</b> has ${fK(solds)} soldiers — nightmares / meteor showers${age}` });
 
         if (food  != null && thr.enemyFoodLow   > 0 && food  < thr.enemyFoodLow)
           al.push({ group: 'enemy_low', badge: 'STARVE', cls: 'wau',

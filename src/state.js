@@ -24,6 +24,7 @@ const S = {
     enemyFoodLow:   0,   // below X → starvation risk (vermin+drought+gluttony)
     enemyGcRich:    0,   // above X → fools gold/steal target
     enemyRunesRich: 0,   // above X → lightning strike/steal target
+    solds:          0,   // above X → soldier stack — nightmares/meteor showers target
     // Own kingdom thresholds
     ownFoodLow:     0,   // below X → send aid alert
     ownPeasLow:     0,   // below X → beware alert
@@ -69,6 +70,10 @@ const S = {
     toMonth: null,
   },
   lbOpFilter: 'all',   // 'all' | opType string e.g. 'ns', 'fb' — filters province table to one op type
+
+  locLock: null,           // kingdom location lock — allowed enemy location from meta/{kdId}_loc_lock (null = no lock)
+  locLockOverride: false,  // user confirmed working past a lock mismatch (this session only)
+  _locLockWarned: false,   // mismatch confirm dialog already shown this session
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only

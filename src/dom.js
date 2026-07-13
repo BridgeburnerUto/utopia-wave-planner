@@ -40,6 +40,8 @@ function buildOverlay() {
 
 <div id="__wpnwpanel"></div>
 
+<div id="__wplock" style="display:none"></div>
+
 <div id="__wptl">
   <div class="wkb"><div class="l">Own KD</div><div class="v" id="__wpown">—</div></div>
   <div class="wkb"><div class="l">Enemy</div><div class="v va" id="__wpene">—</div></div>

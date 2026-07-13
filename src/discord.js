@@ -334,6 +334,29 @@ async function checkAndSendDiscordAlerts() {
       }
     } else { next.enemy_runes_rich = []; }
 
+    // ── Enemy soldier stack ───────────────────────────────────────────────
+    const soldsThr = S.thresholds.solds || 0;
+    if (soldsThr > 0) {
+      const soldStack = (S.enemy.provinces || [])
+        .filter(p => p.sot && p.sot.soldiers != null && p.sot.soldiers > soldsThr)
+        .map(p => ({ name: p.name, solds: p.sot.soldiers, age: _ageTag(p) }));
+      next.enemy_soldiers = soldStack.map(p => p.name);
+      const newSoldStack = soldStack.filter(p => !(prev.enemy_soldiers || []).includes(p.name));
+      if (newSoldStack.length) {
+        toSend.push({
+          _key: 'enemy_soldiers',
+          content: `<@&${DISCORD.ATTACKER_ROLE}>`,
+          embeds: [{
+            title: `🪖 Enemy soldier stack — ${newSoldStack.length} province${newSoldStack.length > 1 ? 's' : ''}`,
+            description: newSoldStack.map(p => `· ${p.name} — ${fK(p.solds)} soldiers${p.age}`).join('\n') + '\nUse nightmares / meteor showers.',
+            color: DISCORD.COLORS.yellow,
+            footer: { text: `Threshold: ${fK(soldsThr)} · Wave Planner` },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      }
+    } else { next.enemy_soldiers = []; }
+
   } else {
     // Enemy not loaded — carry forward previous enemy state so we don't
     // lose track of what was already alerted and avoid false re-fires later.
@@ -343,6 +366,7 @@ async function checkAndSendDiscordAlerts() {
     next.enemy_food_low   = prev.enemy_food_low   || [];
     next.enemy_gc_rich    = prev.enemy_gc_rich    || [];
     next.enemy_runes_rich = prev.enemy_runes_rich || [];
+    next.enemy_soldiers   = prev.enemy_soldiers   || [];
   }
 
   // ── Send all queued alerts ─────────────────────────────────────────────

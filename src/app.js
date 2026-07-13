@@ -32,6 +32,51 @@ function _refreshBackendStatus() {
   }
 }
 
+// ── Kingdom location lock ───────────────────────────────────────────────────
+// Lock stored in Firestore meta/{kdId}_loc_lock (set from the Alerts tab).
+// If the loaded enemy location differs from the lock, warn with an override —
+// prevents a stale IS enemy from a previous war silently contaminating the plan.
+
+async function _loadLocLock() {
+  const kdId = S.own?.location?.replace(':', '_');
+  if (!kdId) return;
+  try {
+    const doc = await fbGet(`meta/${kdId}_loc_lock`);
+    S.locLock = doc?.fields?.enemyLoc?.stringValue || null;
+  } catch(e) { S.locLock = null; }
+}
+
+function _locLockMismatch() {
+  return !!(S.locLock && S.eLoc && S.eLoc !== S.locLock);
+}
+
+function _renderLocLockBanner() {
+  const el = $id('__wplock');
+  if (!el) return;
+  if (!_locLockMismatch()) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const over = S.locLockOverride;
+  const col  = over ? '#e09040' : '#E05050';
+  el.style.cssText = `display:flex;align-items:center;gap:12px;padding:8px 14px;font-family:monospace;font-size:18px;font-weight:700;border:1px solid ${col};background:${over ? 'rgba(224,144,64,.12)' : 'rgba(224,80,80,.15)'};color:${col}`;
+  el.innerHTML = over
+    ? `⚠ LOCATION LOCK OVERRIDDEN — locked to <b>${esc(S.locLock)}</b>, working with <b>${esc(S.eLoc)}</b> this session`
+    : `⛔ LOCATION LOCK — locked to enemy <b>${esc(S.locLock)}</b> but <b>${esc(S.eLoc)}</b> is loaded. Save &amp; companion sync paused.
+       <button class="wb" style="margin-left:auto;white-space:nowrap" onclick="__wpA.overrideLocLock()">Override this session</button>`;
+}
+
+function _maybeWarnLocLock() {
+  if (!_locLockMismatch() || S.locLockOverride || S._locLockWarned) { _renderLocLockBanner(); return; }
+  S._locLockWarned = true;
+  const ok = confirm(
+    `⚠ KINGDOM LOCATION LOCK\n\n` +
+    `This tool is locked to enemy ${S.locLock}, but ${S.eLoc} is loaded.\n\n` +
+    `This usually means the Intel Site still points at a previous war's enemy.\n\n` +
+    `OK = proceed with ${S.eLoc} this session anyway\n` +
+    `Cancel = keep the block (save & companion sync paused)`
+  );
+  if (ok) S.locLockOverride = true;
+  _renderLocLockBanner();
+}
+
 window.__wpA = {
 
   setIntelInterval(v) { S.intelInterval = parseInt(v, 10); renderIntel(); },
@@ -115,6 +160,7 @@ window.__wpA = {
               enemyFoodLow:   t.enemyFoodLow   ?? 0,
               enemyGcRich:    t.enemyGcRich    ?? t.gc    ?? 0,
               enemyRunesRich: t.enemyRunesRich ?? t.runes ?? 0,
+              solds:          t.solds          ?? 0,
               ownFoodLow:     t.ownFoodLow     ?? 0,
               ownPeasLow:     t.ownPeasLow     ?? 0,
             };
@@ -151,6 +197,10 @@ window.__wpA = {
       // Load enemy and seed cols if needed
       await this.loadEnemy(S.eLoc);
       if (!S.cols.length) initCols();
+
+      // Kingdom location lock — warn (with override) if loaded enemy ≠ lock
+      await _loadLocLock();
+      _maybeWarnLocLock();
 
       // Refresh war status cache before rendering (feeds _atWar() in all tabs)
       _refreshWarStatus();
@@ -235,6 +285,8 @@ window.__wpA = {
         t.textContent = `Tick ${od.currentTick.tickNumber} · ${od.currentTick.tickName}`;
       }
       await this.loadEnemy(S.eLoc);
+      await _loadLocLock();
+      _maybeWarnLocLock();
       _refreshWarStatus();  // refresh war status cache after own + enemy are loaded
       this.meta();
       renderRitualBadges();
@@ -256,6 +308,12 @@ window.__wpA = {
 
   async save() {
     if (!S.own?.location) { setSav('No KD loaded', 'err'); return; }
+    if (_locLockMismatch() && !S.locLockOverride) {
+      const ok = confirm(`⚠ LOCATION LOCK MISMATCH\n\nLocked to ${S.locLock}, but ${S.eLoc} is loaded.\n\nSaving now would write ${S.eLoc} data into the shared war plan.\n\nSave anyway?`);
+      if (!ok) { setSav('Save blocked by location lock', 'err'); setTimeout(() => setSav('', ''), 4000); return; }
+      S.locLockOverride = true;
+      _renderLocLockBanner();
+    }
     setSav('Saving...', 'ing');
     try {
       const kdId = S.own.location.replace(':', '_');
@@ -602,6 +660,37 @@ window.__wpA = {
     setTimeout(() => setSav('', ''), 4000);
     renderAlerts(); // refresh the hint text under the date input
   },
+  // ── Kingdom location lock (leader action) ────────────────────────────────
+  async setLocLock(loc) {
+    const v = (loc || '').trim();
+    if (v && !/^\d+:\d+$/.test(v)) { alert('Location must look like 4:7'); return; }
+    const kdId = S.own?.location?.replace(':', '_');
+    if (!kdId) { alert('Own kingdom not loaded yet'); return; }
+    S.locLock         = v || null;
+    S.locLockOverride = false;
+    S._locLockWarned  = false;
+    await fbWrite(`meta/${kdId}_loc_lock`, {
+      enemyLoc: v,
+      setBy:    S.own?.kingdomName || S.own?.location || '',
+      setAt:    Date.now(),
+    });
+    setSav(v ? `Location locked to ${v}` : 'Location lock cleared', 'ok');
+    setTimeout(() => setSav('', ''), 3000);
+    _renderLocLockBanner();
+    renderAlerts();
+  },
+  lockToCurrentEnemy() {
+    if (!S.eLoc) { alert('No enemy location loaded'); return; }
+    this.setLocLock(S.eLoc);
+  },
+  clearLocLock() { this.setLocLock(''); },
+  overrideLocLock() {
+    S.locLockOverride = true;
+    _renderLocLockBanner();
+    renderAlerts();
+    this.syncBackend(); // resume paused companion sync immediately
+  },
+
   setDiscordWebhook(url) { S.discordWebhook = url.trim(); setSav('Webhook saved — save plan to persist', 'ok'); setTimeout(() => setSav('',''), 3000); },
   testDiscord() { testDiscordWebhook(S.discordWebhook).then(ok => alert(ok ? '✅ Test ping sent!' : '❌ Failed — check webhook URL')); },
   async resetDiscordState() {
@@ -634,6 +723,12 @@ window.__wpA = {
     }
     if (!S.own) {
       S.lastBackendError = 'Own kingdom data not loaded yet';
+      _refreshBackendStatus();
+      return;
+    }
+    // Runs on a 2-min timer — no dialog here, just pause until overridden
+    if (_locLockMismatch() && !S.locLockOverride) {
+      S.lastBackendError = `Location lock mismatch (locked ${S.locLock}, loaded ${S.eLoc}) — sync paused`;
       _refreshBackendStatus();
       return;
     }
@@ -774,7 +869,7 @@ window.__wpA = {
     // Reset in-memory state
     S.provinces  = {};
     S.cols       = [];
-    S.thresholds = { enemyFoodRich:0, enemyFoodLow:0, enemyGcRich:0, enemyRunesRich:0, ownFoodLow:0, ownPeasLow:0 };
+    S.thresholds = { enemyFoodRich:0, enemyFoodLow:0, enemyGcRich:0, enemyRunesRich:0, solds:0, ownFoodLow:0, ownPeasLow:0 };
     // Keep Discord webhook — user doesn't want to re-enter it each war
     // Save empty plan to IS backend to overwrite the saved one
     await this.save();
