@@ -75,6 +75,9 @@ const S = {
   locLockOverride: false,  // user confirmed working past a lock mismatch (this session only)
   _locLockWarned: false,   // mismatch confirm dialog already shown this session
 
+  atkSettings: {},         // per-province attacker settings {[slot]: {elitePct, eliteCount?, setAt}} — shared via meta/{kdId}_atk_settings
+  atkSettingsLoaded: false, // true once loadAtkSettings() has run (success or not)
+
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
   tmMatchupOp: 'ns',      // T/M Matchup: active op id (see TM_OPS in tmmatchup.js)

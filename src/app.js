@@ -202,6 +202,9 @@ window.__wpA = {
       await _loadLocLock();
       _maybeWarnLocLock();
 
+      // Shared attacker settings (elite %) for the Kingdom tab / wave solver
+      loadAtkSettings();
+
       // Refresh war status cache before rendering (feeds _atWar() in all tabs)
       _refreshWarStatus();
 
@@ -287,6 +290,7 @@ window.__wpA = {
       await this.loadEnemy(S.eLoc);
       await _loadLocLock();
       _maybeWarnLocLock();
+      loadAtkSettings();
       _refreshWarStatus();  // refresh war status cache after own + enemy are loaded
       this.meta();
       renderRitualBadges();
@@ -296,6 +300,7 @@ window.__wpA = {
       renderBoard();
       renderAlerts();
       renderSummary();
+      renderKingdom();
       renderPlayer();
     } catch (e) {
       setSav('Refresh failed: ' + e.message, 'err');
@@ -357,7 +362,7 @@ window.__wpA = {
 
   tab(t) {
     S.tab = t;
-    ['board', 'player', 'intel', 'summary', 'nwgraph', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
+    ['board', 'player', 'intel', 'kingdom', 'summary', 'nwgraph', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
       $id('__wpc_' + x).style.display = x === t ? '' : 'none';
       const el = $id('__wpt_' + x);
       el.className = 'wt' + (x === t ? (x === 'player' ? ' on ong' : ' on') : '');
@@ -365,6 +370,7 @@ window.__wpA = {
     // Trigger renders that are async or need fresh data
     if (t === 'player')      renderPlayer();
     if (t === 'intel')       renderIntel();
+    if (t === 'kingdom')     renderKingdom();
     if (t === 'summary')     renderSummary();
     if (t === 'nwgraph')     renderNwGraph();
     if (t === 'alerts')      renderAlerts();
@@ -415,10 +421,13 @@ window.__wpA = {
   lbOpFilter,
   resyncOps,
   toggleMaxGain,
+  setElitePct,
+  setEliteCount,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
   renderSummary,
+  renderKingdom,
   renderPlayer,
   renderIntel,
   renderNwGraph,

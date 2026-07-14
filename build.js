@@ -29,6 +29,7 @@ const ORDER = [
   'discord.js',
   'tabs/board.js',
   'tabs/player.js',
+  'tabs/kingdom.js',
   'tabs/summary.js',
   'tabs/alerts.js',
   'tabs/nwgraph.js',

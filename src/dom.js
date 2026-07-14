@@ -54,6 +54,7 @@ function buildOverlay() {
   <div class="wt on"  id="__wpt_board"       onclick="__wpA.tab('board')">WAR BOARD</div>
   <div class="wt"     id="__wpt_player"      onclick="__wpA.tab('player')">MY ORDERS</div>
   <div class="wt"     id="__wpt_intel"       onclick="__wpA.tab('intel')">INTEL</div>
+  <div class="wt"     id="__wpt_kingdom"     onclick="__wpA.tab('kingdom')">KINGDOM</div>
   <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">SUMMARY</div>
   <div class="wt"     id="__wpt_nwgraph"     onclick="__wpA.tab('nwgraph')">NW GRAPH</div>
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
@@ -67,6 +68,7 @@ function buildOverlay() {
   <div id="__wpc_board"></div>
   <div id="__wpc_player"      style="display:none"></div>
   <div id="__wpc_intel"       style="display:none"></div>
+  <div id="__wpc_kingdom"     style="display:none"></div>
   <div id="__wpc_summary"     style="display:none"></div>
   <div id="__wpc_nwgraph"     style="display:none"></div>
   <div id="__wpc_alerts"      style="display:none"></div>

@@ -72,64 +72,49 @@ const OP_SETS = {
 // Anything NOT in this set gets skipped during syncOps
 const TRACKED_OPS = new Set([...OP_SETS.THIEF_SAB, ...OP_SETS.OFFENSIVE_SPELL]);
 
-// ── Race & personality combat modifiers ───────────────────────────────────────
-// Applied on top of the API-reported offense/defense points, which contain raw
-// troop counts but NOT the racial/personality multiplier bonuses.
+// ── Race & personality combat modifiers ──────────────────────────────────────
+// VERIFIED 2026-07-14 by regression on a real IS dump (end of Age 115):
+//   sot.offPoints ≈ (units × raw unit values) × som.ome/100
+// i.e. the API's offense/defense points ALREADY include the full military
+// efficiency (race, personality, science, honor, active spells). som.ome and
+// som.dme expose the multiplier as a percentage (e.g. 157 = 157%).
 //
-// VERIFY these values against the current age spec — race stats change each age.
-// Multipliers are applied as:
-//   effective enemy def = tDef × RACE_DEF_MULT[enemyRace] × PERSONALITY_DEF_MULT[enemyPers]
-//   effective own off   = aOff × RACE_OFF_MULT[ownRace]   × PERSONALITY_OFF_MULT[ownPers]
+// Therefore these tables must stay EMPTY (all lookups fall back to 1.0) —
+// applying OME/DME multipliers on top of API points double-counts. They are
+// kept only because player.js references them; the mechanism allows a manual
+// correction if a future age breaks the "already effective" property.
 
-const RACE_DEF_MULT = {
-  'avian':    1.10,  // aerial units contribute to defense
-  'dwarf':    1.25,  // fortress / stone fortification bonus
-  'halfling': 1.20,  // strong racial defense bonus
-  'gnome':    1.10,  // moderate fortification
-  'human':    1.00,
-  'orc':      1.00,
-  'undead':   0.90,  // poor physical defense
-  'dark elf': 1.00,
-  'elf':      0.90,  // offensive/magic race, lighter def
-  'faery':    0.85,  // fragile physical defense
+const RACE_OFF_MULT        = {};
+const RACE_DEF_MULT        = {};
+const PERSONALITY_OFF_MULT = {};
+const PERSONALITY_DEF_MULT = {};
+
+// Fanaticism self-spell: +5% OME / −5% DME. The wave planner assumes every
+// attacker casts it before hitting.
+const FANATICISM_OFF_MULT = 1.05;
+
+// ── Age 116 unit stats: [offense, defense] per unit ──────────────────────────
+// Used to subtract withheld-elite offense from sot.offPoints when a province
+// keeps (part of) its elites home on defense. UPDATE EVERY AGE.
+const RACE_UNITS = {
+  'avian':    { soldier: [3,0], ospec: [12,0], dspec: [0,10], elite: [16,2]  },
+  'dark elf': { soldier: [3,0], ospec: [14,0], dspec: [0,12], elite: [16,2]  },
+  'dryad':    { soldier: [3,0], ospec: [10,0], dspec: [0,11], elite: [16,3]  },
+  'dwarf':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [15,7]  },
+  'elf':      { soldier: [3,0], ospec: [10,0], dspec: [0,13], elite: [14,4]  },
+  'faery':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [4,16]  },
+  'halfling': { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [10,13] },
+  'human':    { soldier: [3,0], ospec: [15,0], dspec: [0,12], elite: [15,5]  },
+  'orc':      { soldier: [3,0], ospec: [13,0], dspec: [0,10], elite: [18,3]  },
+  'undead':   { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [16,4]  },
 };
 
-const RACE_OFF_MULT = {
-  'avian':    1.20,  // bird riders, strong offensive punch
-  'orc':      1.10,  // brute strength
-  'halfling': 1.10,  // surprisingly effective attackers
-  'dark elf': 1.05,
-  'human':    1.00,
-  'undead':   1.00,
-  'elf':      0.95,
-  'faery':    0.95,
-  'gnome':    0.90,  // defense-focused race
-  'dwarf':    0.90,  // defense-focused race
-};
-
-const PERSONALITY_DEF_MULT = {
-  'aggressive':  0.80,  // -20% def stance
-  'warlike':     0.90,  // -10% def stance
-  'restless':    0.95,
-  'diplomatic':  1.00,
-  'scholar':     1.00,
-  'industrious': 1.00,
-  'merchant':    1.00,
-  'peaceful':    1.10,  // +10% def
-  'defensive':   1.20,  // +20% def stance
-};
-
-const PERSONALITY_OFF_MULT = {
-  'aggressive':  1.20,  // +20% off stance
-  'warlike':     1.10,
-  'restless':    1.05,
-  'diplomatic':  1.00,
-  'scholar':     1.00,
-  'industrious': 1.00,
-  'merchant':    1.00,
-  'peaceful':    0.90,
-  'defensive':   0.80,  // -20% off stance
-};
+// Personality unit-strength modifiers (Age 116, affect unit values above):
+//   The General:  +2 offensive elite strength
+//   The Cleric:   +1 elite defensive value, +1 defensive specialist strength
+//   The War Hero: +2 offensive specialist strength
+// Only the elite-offense one matters for the withheld-elite calculation.
+const PERS_ELITE_OFF_BONUS = { 'general': 2 };
 
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#2b3333;color:#ffffff;font-family:Rajdhani,sans-serif;font-size:19px;display:flex;flex-direction:column;overflow:hidden}
