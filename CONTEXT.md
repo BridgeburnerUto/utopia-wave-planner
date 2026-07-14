@@ -154,6 +154,21 @@ Harness-verified: gens home+away, stray flag, elite % edit → withheld off matc
   are offsets measured at generation (shown in UI); late big slots can end up with
   0-gain marginal hits once walls chain out of their range — leader should prune those.
 
+**Generals refinement (same day, after leader Q&A):**
+- Spare generals are SPREAD across a slot's hits after target selection — each extra gen
+  on a hit means fewer raw troops sent (game applies +5%/extra gen to troops), so
+  `sentOff = ceil((def+1) / (1 + 0.05×(gens−1)))` (`_wpTroopsFor`). Extras go where they
+  save the most troops. Send margin stays exact def+1 (leader's choice).
+- **Ambush hold:** if after all sends the province keeps > `WP_AMBUSH_OFF_PCT` (20%) of
+  the slot's offense home, one spare gen is held back for ambush (listed in warnings).
+- **Pop% is a WARNING only** (never overrides leader flags): attacker pop <70% on a TM
+  hit or >100% on raze/mass → 🏠 badge per hit + banner count. `_ownPopPct(prov)` moved
+  from calcAttacks to utils.js (shared).
+- calcAttacks/My Orders stays as the engine when no waveSeq is published + Max Gain mode.
+- Harness-verified: 3-gen hit sends 276k vs 304k def (×1.10 ✓); ambush hold triggered on
+  the low-off Faery; selection pass unchanged (conservative def+1 depletion — spare-gen
+  savings don't unlock extra hits; documented).
+
 ### Stage 3 — TODO: My Orders integration (player's numbered slice of waveSeq, send
 timing per hit; fall back to current calcAttacks when no waveSeq published)
 

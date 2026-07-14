@@ -25,6 +25,56 @@
 
 const WP_SLOT_MERGE_SEC = 3600;   // armies returning within 1h = one slot
 const WP_MAX_HITS_PER_SLOT = 6;
+const WP_AMBUSH_OFF_PCT = 0.20;   // leftover-off share worth holding a spare gen for ambush
+
+/** Raw troops to send: game applies +5% per extra general to the troops sent. */
+function _wpTroopsFor(def, gens) {
+  return Math.ceil((def + 1) / (1 + 0.05 * (Math.max(1, gens) - 1)));
+}
+
+/**
+ * Distribute a slot's SPARE generals across its planned hits.
+ * More gens on a hit → fewer raw troops needed → fewer own losses. Each spare
+ * gen goes to the hit where it saves the most troops (highest def first).
+ * Ambush rule: if after all sends the province would still hold more than
+ * WP_AMBUSH_OFF_PCT of the slot's offense at home, one spare general is held
+ * back for a possible ambush instead of being spent on a hit.
+ * Mutates each hit's gens/sentOff (needs hit.def and hit.minGens set).
+ * Returns { heldGen, leftover }.
+ */
+function _wpFinalizeSlotHits(sl, hits, extras) {
+  if (!hits.length) return { heldGen: false, leftover: sl.off };
+  const apply = (n) => {
+    hits.forEach(h => { h.gens = h.minGens; });
+    let left = n;
+    while (left > 0) {
+      let best = null, bestSave = 0;
+      for (const h of hits) {
+        const save = _wpTroopsFor(h.def, h.gens) - _wpTroopsFor(h.def, h.gens + 1);
+        if (save > bestSave) { bestSave = save; best = h; }
+      }
+      if (!best) break;
+      best.gens++; left--;
+    }
+    hits.forEach(h => { h.sentOff = _wpTroopsFor(h.def, h.gens); });
+    return sl.off - hits.reduce((s, h) => s + h.sentOff, 0);
+  };
+  let heldGen  = false;
+  let leftover = apply(extras);
+  if (extras > 0 && leftover > WP_AMBUSH_OFF_PCT * sl.off) {
+    leftover = apply(extras - 1);
+    heldGen  = true;
+  }
+  return { heldGen, leftover };
+}
+
+/** Pop-strategy warning: solver never overrides leader flags, only warns. */
+function _wpPopWarn(popPct, type) {
+  if (popPct == null) return null;
+  if (popPct < 70  && type === 'TM') return `pop ${popPct}% — raze/mass preferred`;
+  if (popPct > 100 && type !== 'TM') return `pop ${popPct}% — TM preferred`;
+  return null;
+}
 
 // ── Unit offense helper ──────────────────────────────────────────────────────
 // Offense points of a unit bundle for a race, at the given OME and elite %.
@@ -96,6 +146,7 @@ function buildWaveSlots() {
     }
 
     const stray = merged.length > 1;
+    const popPct = _ownPopPct(p);
     merged.forEach((s, i) => slots.push({
       key:      p.slot + (merged.length > 1 ? '_' + i : ''),
       provSlot: p.slot,
@@ -103,6 +154,7 @@ function buildWaveSlots() {
       race:     p.race || '',
       nw:       p.networth || 0,
       land:     p.land || 0,
+      popPct,
       availableAt: s.availableAt,
       gens:     s.gens,
       off:      Math.round(s.off),
@@ -208,6 +260,7 @@ function generateWaveSeq() {
 
   const seq = [];
   const idleSlots = [];
+  const ambushHolds = [];
 
   function estGain(t, sl) {
     return _estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW) || 0;
@@ -222,7 +275,10 @@ function generateWaveSeq() {
       availableAt: sl.availableAt,
       targetSlot: t.slot, target: t.name, isWall: !!t.isWall,
       type, gens,
-      sentOff: Math.round(t.def + 1),
+      def: t.def,
+      minGens: gens,
+      sentOff: _wpTroopsFor(t.def, gens),
+      popWarn: _wpPopWarn(sl.popPct, type),
       projNW,
       range: _wpRange(sl.nw, t.simNW),
       estGain: Math.round(gain),
@@ -242,6 +298,7 @@ function generateWaveSeq() {
     let gensLeft = sl.gens;
     let offLeft  = sl.off;
     let hitsThisSlot = 0;
+    const slotSeqStart = seq.length;
     const slotHadReservation = targets.some(t =>
       soleOptionOf[t.slot] && _wpRange(sl.nw, t.nw) !== 'out');
 
@@ -306,12 +363,19 @@ function generateWaveSeq() {
       type = 'TM';
     }
 
-    if (hitsThisSlot === 0) idleSlots.push(sl.key);
+    if (hitsThisSlot === 0) { idleSlots.push(sl.key); continue; }
+
+    // Spread the slot's spare generals over its hits (fewer troops sent =
+    // fewer losses); hold one back for ambush when plenty of off stays home.
+    const fin = _wpFinalizeSlotHits(sl, seq.slice(slotSeqStart), gensLeft);
+    if (fin.heldGen) ambushHolds.push({
+      attacker: sl.attacker, slotKey: sl.key, leftover: Math.round(fin.leftover),
+    });
   }
 
   const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => t.name);
   const totalGains = seq.reduce((s, h) => s + (h.estGain || 0), 0);
-  return { seq, slots, targets, uncovered, idleSlots, totalGains };
+  return { seq, slots, targets, uncovered, idleSlots, ambushHolds, totalGains };
 }
 
 /**
@@ -348,7 +412,10 @@ function resimulateWaveSeq(seq) {
       n: out.length + 1,
       attacker: sl.attacker, provSlot: sl.provSlot, availableAt: sl.availableAt,
       gens: mg || 1,
-      sentOff: Math.round(t.def + 1),
+      def: t.def,
+      minGens: mg || 1,
+      sentOff: _wpTroopsFor(t.def, mg || 1),
+      popWarn: _wpPopWarn(sl.popPct, h.type),
       projNW: Math.round(t.simNW),
       range: _wpRange(sl.nw, t.simNW),
       estGain: Math.round(gain),
@@ -361,7 +428,20 @@ function resimulateWaveSeq(seq) {
       t.simNW   = Math.max(0, t.simNW - gain * nwPerAcre);
     }
   }
-  return out;
+
+  // Same spare-gen distribution + ambush hold as generateWaveSeq, per slot
+  const ambushHolds = [];
+  const bySlotHits = {};
+  out.forEach(h => { (bySlotHits[h.slotKey] = bySlotHits[h.slotKey] || []).push(h); });
+  for (const [key, hits] of Object.entries(bySlotHits)) {
+    const sl = bySlotKey[key];
+    if (!sl) continue;
+    const fin = _wpFinalizeSlotHits(sl, hits.filter(h => !h.risky), Math.max(0, sl.gensLeft));
+    if (fin.heldGen) ambushHolds.push({
+      attacker: sl.attacker, slotKey: key, leftover: Math.round(fin.leftover),
+    });
+  }
+  return { seq: out, ambushHolds };
 }
 
 // ── Discord hitlist ──────────────────────────────────────────────────────────

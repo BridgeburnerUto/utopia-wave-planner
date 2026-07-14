@@ -32,7 +32,7 @@ function generateWavePlan() {
   const r = generateWaveSeq();
   S.waveDraft = r.seq;
   S.waveGenAt = Date.now();
-  S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots };
+  S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots, ambushHolds: r.ambushHolds };
   renderWavePlan();
 }
 
@@ -45,7 +45,9 @@ function discardWaveDraft() {
 function wpRemoveHit(n) {
   const draft = _wpEditableDraft();
   if (!draft) return;
-  S.waveDraft = resimulateWaveSeq(draft.filter(h => h.n !== n));
+  const r = resimulateWaveSeq(draft.filter(h => h.n !== n));
+  S.waveDraft = r.seq;
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds };
   renderWavePlan();
 }
 
@@ -55,7 +57,9 @@ function wpReassign(n, slotKey) {
   const hit = draft.find(h => h.n === n);
   if (!hit) return;
   hit.slotKey = slotKey;
-  S.waveDraft = resimulateWaveSeq(draft);
+  const r = resimulateWaveSeq(draft);
+  S.waveDraft = r.seq;
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds };
   renderWavePlan();
 }
 
@@ -150,6 +154,12 @@ function _buildWavePlan() {
   const marginalCount = seq ? seq.filter(x => x.marginal || x.risky).length : 0;
   if (marginalCount)
     warn.push(`⚠ <b>${marginalCount} marginal/risky hit${marginalCount > 1 ? 's' : ''}</b> — out of range or may not break; review below.`);
+  if (S._waveGen?.ambushHolds?.length)
+    warn.push(`🛡 <b>Ambush gens held:</b> ${S._waveGen.ambushHolds.map(a =>
+      `${esc(a.attacker)} (${fK(a.leftover)} off stays home)`).join(', ')} — 1 spare general kept back since substantial offense remains home.`);
+  const popWarnCount = seq ? seq.filter(x => x.popWarn).length : 0;
+  if (popWarnCount)
+    warn.push(`🏠 <b>${popWarnCount} hit${popWarnCount > 1 ? 's' : ''} against pop% strategy</b> — attacker pop suggests a different attack type (marked in the table).`);
   if (warn.length) {
     h += `<div style="margin-bottom:12px;padding:8px 14px;background:#201808;border:1px solid #805020;
       border-radius:3px;font-size:17px;color:#e09040;display:grid;gap:4px">${warn.map(w => `<div>${w}</div>`).join('')}</div>`;
@@ -183,7 +193,8 @@ function _buildWavePlan() {
                     : '<span class="watk-type watk-type-tm">TM</span>';
     const flags = (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
-                + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '');
+                + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
+                + (hit.popWarn  ? ` <span style="color:#e09040;font-size:15px" title="${esc(hit.popWarn)}">🏠 ${esc(hit.popWarn)}</span>` : '');
     h += `<tr style="border-bottom:1px solid #617070${hit.marginal || hit.risky ? ';background:rgba(224,144,64,.06)' : ''}">
       <td style="padding:6px 8px;color:#7a9090;font-family:monospace">${hit.n}</td>
       <td style="padding:6px 8px;font-family:monospace">${_wpFmtTime(hit.availableAt)}</td>
@@ -208,8 +219,9 @@ function _buildWavePlan() {
   h += `</tbody></table>
     <div style="margin-top:10px;font-size:15px;color:#617070">
       Send times are army-return offsets measured at generation. Proj. NW = simulated target NW at that
-      point in the sequence (earlier hits shrink targets). Reassigning or removing hits re-simulates
-      the whole sequence in order.
+      point in the sequence (earlier hits shrink targets). Off Sent = raw troops after the +5%/extra-gen
+      bonus — spare generals are spread across the province's hits to cut losses (one may be held for
+      ambush when substantial offense stays home). Reassigning or removing hits re-simulates everything.
     </div>`;
   return h;
 }

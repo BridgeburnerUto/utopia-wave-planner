@@ -58,6 +58,49 @@ function $id(id) {
 }
 
 /**
+ * Own-province pop% — Utopia formula (moved out of calcAttacks; also used by
+ * the wave solver's pop-strategy warnings):
+ *   Current Population = peasants + totalTroops + thieves + wizards
+ *   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35 (survey when available)
+ *   Mod Living Space   = Raw × Race Bonus × (1 + Housing Science %)
+ *   Pop%               = Current Population / Mod Living Space × 100 (capped 150)
+ * Race: Halfling ×1.10, Faery ×0.95, others ×1.00. Honor bonus not available → ×1.0.
+ * sot.ppa is peasants-per-acre only, NOT total people — don't use it directly.
+ * Returns int % or null when land/space unknown.
+ */
+function _ownPopPct(prov) {
+  const _sot  = prov.sot || {};
+  const _land = prov.land || _sot.land || 0;
+  if (!(_land > 0)) return null;
+  const _totalPop = (_sot.peasants || 0) + (_sot.totalTroops || 0)
+                  + (_sot.thieves  || 0) + (_sot.wizards    || 0);
+
+  const r = (prov.race || '').toLowerCase();
+  const _racePopMult = r === 'halfling' ? 1.10 : r === 'faery' ? 0.95 : 1;
+
+  const _bArr = prov.survey?.buildings;
+  let _rawLS;
+  if (_bArr && _bArr.length > 0) {
+    const _barrenEntry = _bArr.find(b => /barren/i.test(b.name));
+    const _homesEntry  = _bArr.find(b => /^homes$/i.test(b.name));
+    const _sumBuilt    = _bArr
+      .filter(b => !(/barren/i.test(b.name)))
+      .reduce((s, b) => s + (b.pctTot || 0), 0);
+    const _barrenPct   = _barrenEntry ? (_barrenEntry.pctTot || 0) : Math.max(0, 100 - _sumBuilt);
+    const _homesPct    = _homesEntry  ? (_homesEntry.pctTot  || 0) : 0;
+    const _barrenAcres = _land * _barrenPct / 100;
+    const _homesAcres  = _land * _homesPct  / 100;
+    const _builtAcres  = _land - _barrenAcres - _homesAcres;
+    _rawLS = _builtAcres * 25 + _barrenAcres * 15 + _homesAcres * 35; // Homes = 25 built + 10 bonus
+  } else {
+    _rawLS = _land * 25; // no survey — simplified fallback
+  }
+  const _housingEffect = prov.sos?.books?.find(b => b.type === 'Housing')?.effect || 0;
+  const _modLS = _rawLS * _racePopMult * (1 + _housingEffect / 100);
+  return _modLS > 0 ? Math.min(Math.round(_totalPop / _modLS * 100), 150) : null;
+}
+
+/**
  * True if own KD is currently at war.
  *
  * Checks multiple sources in priority order — the IS API does not consistently
