@@ -190,8 +190,22 @@ Halfling 10/13) default to 0% elites sent; offensive elites default 100%. Shared
 still overrides per province (`_elitePctFor`). Plus `WP_MIN_SLOT_OFF = 1000` — slots under
 that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of the wave.
 
-### Stage 3 — TODO: My Orders integration (player's numbered slice of waveSeq, send
-timing per hit; fall back to current calcAttacks when no waveSeq published)
+### Stage 3 — DONE (harness-verified 2026-07-14, committed & pushed)
+- My Orders: when a published `S.waveSeq` exists (and Max Gain is off), `_buildWaveSlice()`
+  (tabs/player.js) replaces the classic plan: numbered hits ("#12 of 77"), live countdowns
+  computed from `waveGenAt + availableAt` so they age correctly, def / send-off / proj NW /
+  est gain per hit, marginal/risky/wall/dump flags, raze-mass claim checkboxes, fresh-SoD
+  reminder on repeat hits, required ops + leader notes, and a compact full-wave context
+  table with the player's rows highlighted.
+- No hits assigned → "defense / ambush duty" message. calcAttacks stays the engine for
+  no-plan/peacetime; ⚡ Max Gain toggle still overrides.
+- syncBackend payload now includes `waveSeq`/`waveGenAt` (companion PWA can render the
+  hitlist later — companion UI itself not yet built).
+
+### Possible next steps (all optional)
+- Companion (war-companion.html): render waveSeq slice on mobile (data already synced).
+- Live re-check at send time: compare planned def vs latest intel before "SEND NOW".
+- Flag more targets in harness plan to demo a realistic war-start wave.
 
 ## Next up (roadmap remainder)
 1. Wave Planner stages 2–3 (above).

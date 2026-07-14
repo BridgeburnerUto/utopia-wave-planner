@@ -759,6 +759,8 @@ window.__wpA = {
         thresholds:      S.thresholds,
         currentTickName: S.currentTickName,
         kingdomNews:     _syncIS.kingdomNews || null,  // enemy Snatched News data
+        waveSeq:         S.waveSeq   || null,          // published wave (for the companion)
+        waveGenAt:       S.waveGenAt || 0,
       });
       const url = S.apiEndpoint.replace(/\/$/, '') + '/api.php?is_dump';
       const hdrs = { 'Content-Type': 'application/json' };

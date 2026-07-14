@@ -652,11 +652,135 @@ function renderPlayer() {
   renderTab('__wpc_player', _buildPlayer);
 }
 
+// ── Wave-plan slice: the player's hits from the published kingdom wave ──────
+// Shown instead of the classic per-player plan whenever a waveSeq is published
+// (Max Gain toggle still switches away). Countdowns are computed from the
+// publish timestamp so they age correctly after generation.
+function _buildWaveSlice(prov) {
+  const wavePlan = calcAttacks(prov);   // header stats only
+  const { gensHome, attackableGens, ownPop, armyStatus } = wavePlan;
+  const aOff = wavePlan.aOff;
+
+  const seq   = S.waveSeq;
+  const slice = seq.filter(x => x.provSlot === prov.slot);
+  const claims = loadClaims();
+  const flaggedCount = S.enemy.provinces.filter(p => S.provinces[p.slot]?.wave).length;
+
+  let h = _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, flaggedCount, armyStatus);
+
+  h += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="padding:5px 14px;font-size:17px;font-weight:700;border-radius:3px;
+                 background:#2a1a1a;border:1px solid #E05050;color:#E05050">⚔ WAVE PLAN ACTIVE</span>
+    <span style="font-size:17px;color:#7a9090">published ${S.waveGenAt ? new Date(S.waveGenAt).toLocaleString() : '—'}
+      · your hits: <b style="color:#ffd400">${slice.length}</b> of ${seq.length} total</span>
+    <button onclick="__wpA.toggleMaxGain()"
+      style="padding:5px 14px;font-size:17px;font-weight:700;cursor:pointer;border-radius:3px;
+             background:#2b3333;border:1px solid #617070;color:#7a9090">⚡ Max Gain</button>
+  </div>`;
+
+  if (!slice.length) {
+    return h + `<div class="watk-notarget">// No hits assigned to you in this wave<br>
+      <span style="font-size:17px">Your offense stays home — defense / ambush duty. Check with the war leader.</span></div>`;
+  }
+
+  const hitCount = {};
+  h += `<div class="wsech">// YOUR ORDERS — send in this order</div>
+    <div class="watk-card"><div class="watk-body">`;
+
+  slice.forEach(hit => {
+    const dueSec = S.waveGenAt
+      ? Math.round((S.waveGenAt + hit.availableAt * 1000 - Date.now()) / 1000)
+      : hit.availableAt;
+    const sendLabel = dueSec <= 0
+      ? '<span style="color:#60C040;font-weight:700">SEND NOW</span>'
+      : `<span style="color:#ffd400;font-weight:700">send in ${fA(dueSec)}</span>`;
+
+    hitCount[hit.targetSlot] = (hitCount[hit.targetSlot] || 0) + 1;
+    const sodNote = hitCount[hit.targetSlot] > 1
+      ? `Take a fresh SoD on ${hit.target} before sending this attack` : null;
+
+    const plan  = S.provinces[hit.targetSlot] || {};
+    const ops   = plan.requiredOps || [];
+    const typeBadge = hit.type === 'RAZE' ? '<span class="watk-type watk-type-rz">Raze</span>'
+                    : hit.type === 'MASS' ? '<span class="watk-type watk-type-ms">Mass</span>'
+                    : '<span class="watk-type watk-type-tm">TM</span>';
+    const flags = (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
+                + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
+                + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
+                + (hit.dump     ? ' <span style="color:#617070;font-size:15px">♻ dump</span>'       : '');
+    const gainsNote = hit.estGain > 0 ? `<span style="color:#80a8f0">~${fK(hit.estGain)} acres (est.)</span>` : '';
+    const rs = hit.targetSlot;
+    const razeClaim = claims['raze_' + rs];
+    const massClaim = claims['massacre_' + rs];
+
+    h += `
+      <div class="watk-row">
+        <div class="watk-num" style="color:#7a9090" title="Hit number in the full kingdom wave">#${hit.n}</div>
+        <div class="watk-main">
+          <div class="watk-target" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+            <span>${esc(hit.target)}</span>${typeBadge}${flags}
+          </div>
+          <div class="watk-detail">
+            ${sendLabel} · ${fK(hit.def)} def · send ${fK(hit.sentOff)} off · proj NW ${fK(hit.projNW)}
+            ${gainsNote ? ` · ${gainsNote}` : ''}
+            ${sodNote ? `<br><span style="color:#ffd400;font-weight:700">⚠ ${esc(sodNote)}</span>` : ''}
+          </div>
+          ${ops.length ? `<div class="watk-ops">${ops.map(o => `<span class="wtag" style="cursor:default">${o}</span>`).join('')}</div>` : ''}
+          ${plan.notes ? `<div style="margin-top:4px;font-size:17px;color:#ffffff;background:#2b3333;padding:4px 6px;border-radius:2px;border-left:2px solid #ffd400">${esc(plan.notes)}</div>` : ''}
+          ${hit.type === 'RAZE' ? `
+          <div class="watk-task${razeClaim ? ' claimed' : ''}">
+            <span>🔥</span>
+            <span style="font-weight:700;color:${razeClaim ? '#ffd400' : '#E05050'}">${razeClaim ? 'RAZE — claimed' : 'RAZE'}</span>
+            <label class="watk-claim">
+              <input type="checkbox" ${razeClaim ? 'checked' : ''} onchange="__wpA.claimAction(${rs},'raze')"
+                style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400">
+              <span style="font-size:17px;color:${razeClaim ? '#ffd400' : '#7a9090'}">${razeClaim ? 'unclaim' : 'claim'}</span>
+            </label>
+          </div>` : ''}
+          ${hit.type === 'MASS' ? `
+          <div class="watk-task${massClaim ? ' claimed' : ''}">
+            <span>💀</span>
+            <span style="font-weight:700;color:${massClaim ? '#ffd400' : '#E05050'}">${massClaim ? 'MASSACRE — claimed' : 'MASSACRE'}</span>
+            <label class="watk-claim">
+              <input type="checkbox" ${massClaim ? 'checked' : ''} onchange="__wpA.claimAction(${rs},'massacre')"
+                style="cursor:pointer;width:14px;height:14px;accent-color:#ffd400">
+              <span style="font-size:17px;color:${massClaim ? '#ffd400' : '#7a9090'}">${massClaim ? 'unclaim' : 'claim'}</span>
+            </label>
+          </div>` : ''}
+        </div>
+        <div class="watk-gen">
+          <div class="watk-gen-num" style="color:${hit.gens <= 2 ? '#60C040' : '#e09040'}">${hit.gens}</div>
+          <div class="watk-gen-label">generals</div>
+        </div>
+        <div class="watk-result ${hit.range === 'out' ? 'wmcl' : 'watk-yes'}">${hit.range === 'optimal' ? 'OPTIMAL' : hit.range === 'ok' ? 'GOOD' : 'OUT'}</div>
+      </div>`;
+  });
+  h += '</div></div>';
+
+  // Full wave for context — compact, own rows highlighted
+  h += `<div style="margin-top:20px" class="wsech">// FULL WAVE (context)</div>
+    <table style="width:100%;border-collapse:collapse;font-size:15px">
+      <tbody>${seq.map(x => `
+        <tr style="border-bottom:1px solid #2b3333${x.provSlot === prov.slot ? ';background:rgba(255,212,0,.08)' : ''}">
+          <td style="padding:3px 8px;color:#7a9090;font-family:monospace">#${x.n}</td>
+          <td style="padding:3px 8px;font-family:monospace">${x.availableAt <= 0 ? 'now' : '+' + fA(x.availableAt)}</td>
+          <td style="padding:3px 8px${x.provSlot === prov.slot ? ';color:#ffd400;font-weight:700' : ''}">${esc(x.attacker)}</td>
+          <td style="padding:3px 8px">${esc(x.target)}</td>
+          <td style="padding:3px 8px;color:#7a9090">${x.type} · ${x.gens}g · ${fK(x.sentOff)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  return h;
+}
+
 function _buildPlayer() {
   if (!S.own || !S.enemy) return '<div class="watk-noprov">Loading data...</div>';
   if (!S.playerProv)      return _buildProvPicker();
 
   const prov = S.playerProv;
+
+  // Published kingdom wave takes over My Orders (Max Gain still overrides)
+  if (S.waveSeq?.length && !S.maxGainMode) return _buildWaveSlice(prov);
 
   // Always run the wave planner for header stats (ownPop, armyStatus, gensHome)
   const wavePlan = calcAttacks(prov);
