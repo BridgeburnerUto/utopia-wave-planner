@@ -160,6 +160,9 @@ function _buildWavePlan() {
   const popWarnCount = seq ? seq.filter(x => x.popWarn).length : 0;
   if (popWarnCount)
     warn.push(`🏠 <b>${popWarnCount} hit${popWarnCount > 1 ? 's' : ''} against pop% strategy</b> — attacker pop suggests a different attack type (marked in the table).`);
+  const dumpCount = seq ? seq.filter(x => x.dump).length : 0;
+  if (dumpCount)
+    warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
   if (warn.length) {
     h += `<div style="margin-bottom:12px;padding:8px 14px;background:#201808;border:1px solid #805020;
       border-radius:3px;font-size:17px;color:#e09040;display:grid;gap:4px">${warn.map(w => `<div>${w}</div>`).join('')}</div>`;
@@ -194,6 +197,7 @@ function _buildWavePlan() {
     const flags = (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
                 + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
+                + (hit.dump     ? ' <span style="color:#617070;font-size:15px" title="Leftover offense spent — low value, but nothing stays home">♻ dump</span>' : '')
                 + (hit.popWarn  ? ` <span style="color:#e09040;font-size:15px" title="${esc(hit.popWarn)}">🏠 ${esc(hit.popWarn)}</span>` : '');
     h += `<tr style="border-bottom:1px solid #617070${hit.marginal || hit.risky ? ';background:rgba(224,144,64,.06)' : ''}">
       <td style="padding:6px 8px;color:#7a9090;font-family:monospace">${hit.n}</td>

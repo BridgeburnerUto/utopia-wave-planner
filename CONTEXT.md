@@ -166,8 +166,22 @@ Harness-verified: gens home+away, stray flag, elite % edit → withheld off matc
   from calcAttacks to utils.js (shared).
 - calcAttacks/My Orders stays as the engine when no waveSeq is published + Max Gain mode.
 - Harness-verified: 3-gen hit sends 276k vs 304k def (×1.10 ✓); ambush hold triggered on
-  the low-off Faery; selection pass unchanged (conservative def+1 depletion — spare-gen
-  savings don't unlock extra hits; documented).
+  the low-off Faery.
+
+**Dump pass + pop% refinement (same day, second leader Q&A):**
+- Selection now depletes offense by `_wpTroopsFor(def, minGens)` (gen bonus counted), and a
+  **dump pass** follows: leftover offense is spent on the best still-breakable enemy
+  (targets+walls, range band → enemy pop% → gain), hits marked `dump: true` (♻ in UI +
+  Discord " · dump"). "An attacker should not leave much, if any, offence at home during
+  war." Ambush hold now only triggers when leftover can't break anything at all.
+- **Enemy pop% priority**: all candidate sorts use `_wpByBandPopGain` — range band first,
+  then enemy pop% DESC (fat enemies before thin), then gain. Never trades range for pop.
+- **Own pop% flags (display only, never steer)**: <70% = "fat — raze/mass", ≥100% =
+  "needs acres". Shown as Pop% column on Kingdom roster; wave-table 🏠 warning fires
+  only on mismatched hits (fat prov on TM, needs-acres prov on raze/mass).
+- Harness-verified: 2 dump hits on small out-of-range walls; ambush warning correctly
+  disappeared (offense spent instead); Pop% column shows 100–103% "needs acres" on the
+  end-of-age dump.
 
 ### Stage 3 — TODO: My Orders integration (player's numbered slice of waveSeq, send
 timing per hit; fall back to current calcAttacks when no waveSeq published)

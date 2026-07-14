@@ -68,12 +68,23 @@ function _wpFinalizeSlotHits(sl, hits, extras) {
   return { heldGen, leftover };
 }
 
-/** Pop-strategy warning: solver never overrides leader flags, only warns. */
+/** Pop-strategy warning: solver never overrides leader flags, only warns.
+ *  Own prov <70% pop = "fat" (wants raze/mass); ≥100% = "needs acres" (wants TM). */
 function _wpPopWarn(popPct, type) {
   if (popPct == null) return null;
-  if (popPct < 70  && type === 'TM') return `pop ${popPct}% — raze/mass preferred`;
-  if (popPct > 100 && type !== 'TM') return `pop ${popPct}% — TM preferred`;
+  if (popPct < 70   && type === 'TM') return `fat (pop ${popPct}%) — raze/mass preferred`;
+  if (popPct >= 100 && type !== 'TM') return `needs acres (pop ${popPct}%) — TM preferred`;
   return null;
+}
+
+/** Candidate ordering: range band first, then enemy pop% (fat enemies before
+ *  thin ones — user rule), then estimated gain. Never trades a better band
+ *  for a fatter target. */
+function _wpBandRank(r) { return r === 'optimal' ? 0 : r === 'ok' ? 1 : 2; }
+function _wpByBandPopGain(a, b) {
+  return _wpBandRank(a.range) - _wpBandRank(b.range)
+      || (b.t.pop || 0) - (a.t.pop || 0)
+      || b.gain - a.gain;
 }
 
 // ── Unit offense helper ──────────────────────────────────────────────────────
@@ -182,6 +193,7 @@ function buildWaveTargets() {
         def:  tp?.calcs?.defPointsSummary?.defPointsHome || 0,
         nw:   tp?.networth || ep.networth || 0,
         land: tp?.land || 0,
+        pop:  _enemyPopPct(tp),
         intelAge: tp?.calcs?.defPointsSummary?.ageSeconds,
         needsRaze:     plan.needsRaze     || false,
         needsMassacre: plan.needsMassacre || false,
@@ -206,6 +218,7 @@ function _wpWallPool() {
         def:  tp?.calcs?.defPointsSummary?.defPointsHome || 0,
         nw:   tp?.networth || ep.networth || 0,
         land: tp?.land || 0,
+        pop:  _enemyPopPct(tp),
         intelAge: tp?.calcs?.defPointsSummary?.ageSeconds,
         needsRaze: false, needsMassacre: false, bloat: false,
         simNW: tp?.networth || ep.networth || 0,
@@ -322,12 +335,11 @@ function generateWaveSeq() {
 
       // 1. Raze/Massacre still needed, in range preferred
       const rm = pool.filter(c => (c.t.needsRaze && !c.t.razeDone) || (c.t.needsMassacre && !c.t.massDone))
-        .sort((a, b) => (a.range === 'optimal' ? 0 : 1) - (b.range === 'optimal' ? 0 : 1));
-      // 2. Uncovered targets (0 hits), best range then highest gain
-      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat)
-        .sort((a, b) => (a.range === 'optimal' ? 0 : 1) - (b.range === 'optimal' ? 0 : 1) || b.gain - a.gain);
-      // 3. Any in-range flagged, highest gain
-      const any = pool.filter(c => !c.t.bloat).sort((a, b) => b.gain - a.gain);
+        .sort(_wpByBandPopGain);
+      // 2. Uncovered targets (0 hits): range band → enemy pop% → gain
+      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat).sort(_wpByBandPopGain);
+      // 3. Any in-range flagged: range band → enemy pop% → gain
+      const any = pool.filter(c => !c.t.bloat).sort(_wpByBandPopGain);
 
       if      (rm.length)    { pick = rm[0]; type = pick.t.needsRaze && !pick.t.razeDone ? 'RAZE' : 'MASS'; }
       else if (uncov.length) { pick = uncov[0]; }
@@ -341,8 +353,7 @@ function generateWaveSeq() {
           const range = _wpRange(sl.nw, w.simNW);
           if (range === 'out') return null;
           return { t: w, mg, range, gain: estGain(w, sl) };
-        }).filter(Boolean).sort((a, b) =>
-          (a.range === 'optimal' ? 0 : 1) - (b.range === 'optimal' ? 0 : 1) || b.gain - a.gain);
+        }).filter(Boolean).sort(_wpByBandPopGain);
         if (wall.length) { pick = wall[0]; fallback = 'wall'; }
         else {
           // b) least-bad flagged target by NW ratio, breakable, marked marginal
@@ -358,9 +369,29 @@ function generateWaveSeq() {
       if (reservedHits[pick.t.slot] > 0 && slotHadReservation) reservedHits[pick.t.slot]--;
       applyHit(pick.t, sl, type, pick.mg, gensLeft, offLeft, { marginal, fallback });
       gensLeft -= pick.mg;
-      offLeft  -= (pick.t.def + 1);
+      offLeft  -= _wpTroopsFor(pick.t.def, pick.mg); // gen bonus already saves troops here
       hitsThisSlot++;
       type = 'TM';
+    }
+
+    // Dump pass — an attacker should not leave offense home in war. Spend
+    // what's left on the best still-breakable enemy (usually small and out of
+    // range; range band → enemy pop% → gain). The ambush hold below can then
+    // only trigger when the leftover genuinely can't break anything.
+    const dumpPool = targets.concat(walls);
+    while (gensLeft > 0 && offLeft > 0 && hitsThisSlot < WP_MAX_HITS_PER_SLOT) {
+      const dcands = dumpPool.map(t => {
+        if (t.bloat) return null;
+        const mg = _wpMinGens(t.def, offLeft, gensLeft);
+        if (!mg) return null;
+        return { t, mg, range: _wpRange(sl.nw, t.simNW), gain: estGain(t, sl) };
+      }).filter(Boolean).sort(_wpByBandPopGain);
+      if (!dcands.length) break;
+      const d = dcands[0];
+      applyHit(d.t, sl, 'TM', d.mg, gensLeft, offLeft, { dump: true });
+      gensLeft -= d.mg;
+      offLeft  -= _wpTroopsFor(d.t.def, d.mg);
+      hitsThisSlot++;
     }
 
     if (hitsThisSlot === 0) { idleSlots.push(sl.key); continue; }
@@ -421,7 +452,7 @@ function resimulateWaveSeq(seq) {
       estGain: Math.round(gain),
       risky: mg === 0,
     });
-    if (mg) { sl.gensLeft -= mg; sl.offLeft -= (t.def + 1); }
+    if (mg) { sl.gensLeft -= mg; sl.offLeft -= _wpTroopsFor(t.def, mg); }
     if (gain > 0) {
       const nwPerAcre = t.simLand > 0 ? t.simNW / t.simLand : 0;
       t.simLand = Math.max(0, t.simLand - gain);
@@ -453,7 +484,8 @@ async function postWaveSeqToDiscord(seq) {
     `**#${h.n}** ${h.attacker} → **${h.target}** · ${h.type} · ${h.gens} gen${h.gens > 1 ? 's' : ''}` +
     ` · ${fK(h.sentOff)} off · ${fmtT(h.availableAt)}` +
     (h.estGain ? ` · ~${fK(h.estGain)} ac` : '') +
-    (h.marginal ? ' · ⚠ marginal' : '') + (h.isWall ? ' · wall' : ''));
+    (h.marginal ? ' · ⚠ marginal' : '') + (h.isWall ? ' · wall' : '') +
+    (h.dump ? ' · dump' : ''));
 
   // Discord: max 4096 chars per embed description, 10 embeds per message
   const embeds = [];

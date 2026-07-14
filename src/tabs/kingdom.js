@@ -201,6 +201,7 @@ function _buildKingdom() {
         <th style="${thStyle}">Province</th>
         <th style="${thStyle}">Race · Pers</th>
         <th style="${thStyle}">NW</th>
+        <th style="${thStyle}" title="Own population % — <70% fat (raze/mass), ≥100% needs acres (TM)">Pop%</th>
         <th style="${thStyle}">Gens</th>
         <th style="${thStyle}">SoT Off</th>
         <th style="${thStyle}" title="Offensive Military Efficiency from SoM — already included in SoT Off">OME</th>
@@ -246,6 +247,14 @@ function _buildKingdom() {
       <td style="padding:6px 8px;font-weight:600">${esc(p.name)}${warnHtml}</td>
       <td style="padding:6px 8px;color:#7a9090">${esc(p.race || '?')} · ${esc(p.sot?.personality || '?')}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(p.networth || 0)}</td>
+      <td style="padding:6px 8px;font-family:monospace">${(() => {
+        const pop = _ownPopPct(p);
+        if (pop == null) return '<span style="color:#617070">—</span>';
+        const flag = pop < 70 ? '<div style="font-size:13px;color:#e09040">fat — raze/mass</div>'
+                   : pop >= 100 ? '<div style="font-size:13px;color:#60C040">needs acres</div>' : '';
+        const col = pop < 70 ? '#e09040' : pop >= 100 ? '#60C040' : '#ffd400';
+        return `<span style="color:${col}">${pop}%</span>${flag}`;
+      })()}</td>
       <td style="padding:6px 8px;font-family:monospace" title="${mo.sendableGens} sendable (1 stays home) → ×${mo.genMult.toFixed(2)}">${mo.totalGens} <span style="color:#7a9090">(${mo.sendableGens}⚔)</span></td>
       <td style="padding:6px 8px;font-family:monospace">${fK(mo.baseOff)}</td>
       <td style="padding:6px 8px;font-family:monospace;color:#7a9090">${p.som?.ome ? p.som.ome + '%' : '—'}</td>
