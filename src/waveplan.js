@@ -26,6 +26,7 @@
 const WP_SLOT_MERGE_SEC = 3600;   // armies returning within 1h = one slot
 const WP_MAX_HITS_PER_SLOT = 6;
 const WP_AMBUSH_OFF_PCT = 0.20;   // leftover-off share worth holding a spare gen for ambush
+const WP_MIN_SLOT_OFF   = 1000;   // slots below this offense are not attackers (pure-def provs)
 
 /** Raw troops to send: game applies +5% per extra general to the troops sent. */
 function _wpTroopsFor(def, gens) {
@@ -111,8 +112,7 @@ function buildWaveSlots() {
   const slots = [];
   for (const p of (S.own?.provinces || [])) {
     const som = p.som || {};
-    const set = S.atkSettings[p.slot] || {};
-    const elitePct = set.elitePct != null ? set.elitePct : 100;
+    const elitePct = _elitePctFor(p);   // shared setting, else race default (def elites → 0%)
     const ome  = (som.ome || 100) / 100;
     const pers = p.sot?.personality;
 
@@ -158,7 +158,7 @@ function buildWaveSlots() {
 
     const stray = merged.length > 1;
     const popPct = _ownPopPct(p);
-    merged.forEach((s, i) => slots.push({
+    merged.filter(s => s.off >= WP_MIN_SLOT_OFF).forEach((s, i) => slots.push({
       key:      p.slot + (merged.length > 1 ? '_' + i : ''),
       provSlot: p.slot,
       attacker: p.name,

@@ -35,6 +35,24 @@ async function _saveAtkSettings() {
 
 function _atkSet(slot) { return S.atkSettings[slot] || {}; }
 
+/**
+ * Default % of elites sent, by race: races with DEFENSIVE elites (off < def,
+ * e.g. Faery 4/16, Halfling 10/13) keep them home → 0%. Offensive elites →
+ * 100%. Without this, pure-defense provinces look like attackers because
+ * sot.offPoints includes their elites' small offense value.
+ */
+function _defaultElitePct(race) {
+  const u = RACE_UNITS[(race || '').toLowerCase()];
+  if (!u) return 100;
+  return u.elite[0] >= u.elite[1] ? 100 : 0;
+}
+
+/** Effective elite % for a province: shared setting wins, else race default. */
+function _elitePctFor(prov) {
+  const set = _atkSet(prov.slot);
+  return set.elitePct != null ? set.elitePct : _defaultElitePct(prov.race);
+}
+
 /** Inline input handler: % of elites this province sends on attacks (0–100). */
 function setElitePct(slot, rawVal) {
   let v = parseInt(rawVal);
@@ -98,7 +116,7 @@ function _eliteOffValue(race, personality) {
  */
 function calcMaxOff(prov) {
   const set      = _atkSet(prov.slot);
-  const elitePct = set.elitePct != null ? set.elitePct : 100;
+  const elitePct = _elitePctFor(prov);   // race default: defensive elites → 0%
   const baseOff  = prov.sot?.offPoints || 0;
   const ome      = (prov.som?.ome || 100) / 100;
 

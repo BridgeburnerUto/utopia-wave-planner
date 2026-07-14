@@ -183,6 +183,13 @@ Harness-verified: gens home+away, stray flag, elite % edit → withheld off matc
   disappeared (offense spent instead); Pop% column shows 100–103% "needs acres" on the
   end-of-age dump.
 
+**Defensive-elite fix (leader-spotted in mock):** pure-def provinces (Faery Mystics) were
+counted as attackers because sot.offPoints includes their elites' small off value. Fix:
+`_defaultElitePct(race)` — races whose elite is DEFENSIVE (off < def: Faery 4/16,
+Halfling 10/13) default to 0% elites sent; offensive elites default 100%. Shared setting
+still overrides per province (`_elitePctFor`). Plus `WP_MIN_SLOT_OFF = 1000` — slots under
+that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of the wave.
+
 ### Stage 3 — TODO: My Orders integration (player's numbered slice of waveSeq, send
 timing per hit; fall back to current calcAttacks when no waveSeq published)
 
