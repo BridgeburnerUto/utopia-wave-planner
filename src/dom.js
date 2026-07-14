@@ -55,7 +55,7 @@ function buildOverlay() {
   <div class="wt"     id="__wpt_player"      onclick="__wpA.tab('player')">MY ORDERS</div>
   <div class="wt"     id="__wpt_intel"       onclick="__wpA.tab('intel')">INTEL</div>
   <div class="wt"     id="__wpt_kingdom"     onclick="__wpA.tab('kingdom')">KINGDOM</div>
-  <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">SUMMARY</div>
+  <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">WAVE PLAN</div>
   <div class="wt"     id="__wpt_nwgraph"     onclick="__wpA.tab('nwgraph')">NW GRAPH</div>
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
   <div class="wt"     id="__wpt_leaderboard" onclick="__wpA.tab('leaderboard')">LEADERBOARD</div>

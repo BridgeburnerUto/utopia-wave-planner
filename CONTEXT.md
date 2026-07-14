@@ -131,8 +131,31 @@ Harness-verified: gens home+away, stray flag, elite % edit → withheld off matc
   input with amber warning). Also unverified: per-army offense/generals fields on armiesAway
   (needed for stage-2 slot model).
 
-### Stage 2 — TODO: solver (`src/waveplan.js`) + Wave Plan tab (repurpose summary.js)
-### Stage 3 — TODO: My Orders integration + Discord hitlist post on publish
+### Stage 2 — DONE (harness-verified 2026-07-14, committed, NOT live-tested)
+- **`src/waveplan.js`** — solver. `buildWaveSlots()`: home slot + one per returning army
+  (units × RACE_UNITS × ome × fanaticism; elite % applied), merged when ≤1h apart
+  (WP_SLOT_MERGE_SEC), stray flag otherwise; sorted by availableAt then NW DESC (big
+  attackers pick first at the same time). `generateWaveSeq()`: greedy in slot order —
+  raze/mass still needed → uncovered flagged → any in-range flagged by gain; reservation
+  heuristic protects targets that are a later slot's only in-range option; fallbacks:
+  in-range breakable wall (non-target, non-bloat) → least-bad flagged marked `marginal`.
+  Target simNW/simLand drop per hit (attacker NW static). `resimulateWaveSeq()` re-runs
+  projections after manual edits. `postWaveSeqToDiscord()` chunks the hitlist into ≤10
+  embeds (≤3800 chars each) on one webhook message.
+- **Wave Plan tab** (tabs/summary.js REWRITTEN, tab label WAVE PLAN, internal key still
+  'summary', renderSummary → renderWavePlan everywhere). Generate → draft table (send
+  time, attacker, target, range badge, type, gens, off sent, proj target NW, est gain)
+  with per-hit reassign dropdown + remove (both resimulate); Publish (confirm dialog) →
+  S.waveSeq into plan JSON (save/load/clearPlan wired in app.js), assignedTo derived per
+  target from the seq, Discord hitlist posted when webhook set.
+- Harness-verified end-to-end on the real dump: 35 slots/23 provinces, 81 hits, 3/3
+  targets covered, ~21k acres est, reassign/remove/publish/Discord all exercised.
+- Known simplifications: attacker NW static; defender losses not modeled; send times
+  are offsets measured at generation (shown in UI); late big slots can end up with
+  0-gain marginal hits once walls chain out of their range — leader should prune those.
+
+### Stage 3 — TODO: My Orders integration (player's numbered slice of waveSeq, send
+timing per hit; fall back to current calcAttacks when no waveSeq published)
 
 ## Next up (roadmap remainder)
 1. Wave Planner stages 2–3 (above).

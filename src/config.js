@@ -94,19 +94,19 @@ const PERSONALITY_DEF_MULT = {};
 const FANATICISM_OFF_MULT = 1.05;
 
 // ── Age 116 unit stats: [offense, defense] per unit ──────────────────────────
-// Used to subtract withheld-elite offense from sot.offPoints when a province
-// keeps (part of) its elites home on defense. UPDATE EVERY AGE.
+// Used to subtract withheld-elite offense from sot.offPoints and to compute
+// per-army offense for wave slots (units × values × ome). UPDATE EVERY AGE.
 const RACE_UNITS = {
-  'avian':    { soldier: [3,0], ospec: [12,0], dspec: [0,10], elite: [16,2]  },
-  'dark elf': { soldier: [3,0], ospec: [14,0], dspec: [0,12], elite: [16,2]  },
-  'dryad':    { soldier: [3,0], ospec: [10,0], dspec: [0,11], elite: [16,3]  },
-  'dwarf':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [15,7]  },
-  'elf':      { soldier: [3,0], ospec: [10,0], dspec: [0,13], elite: [14,4]  },
-  'faery':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [4,16]  },
-  'halfling': { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [10,13] },
-  'human':    { soldier: [3,0], ospec: [15,0], dspec: [0,12], elite: [15,5]  },
-  'orc':      { soldier: [3,0], ospec: [13,0], dspec: [0,10], elite: [18,3]  },
-  'undead':   { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [16,4]  },
+  'avian':    { soldier: [3,0], ospec: [12,0], dspec: [0,10], elite: [16,2],  horse: [0,0] }, // no war horses
+  'dark elf': { soldier: [3,0], ospec: [14,0], dspec: [0,12], elite: [16,2],  horse: [2,0] },
+  'dryad':    { soldier: [3,0], ospec: [10,0], dspec: [0,11], elite: [16,3],  horse: [2,0] },
+  'dwarf':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [15,7],  horse: [2,0] },
+  'elf':      { soldier: [3,0], ospec: [10,0], dspec: [0,13], elite: [14,4],  horse: [2,0] },
+  'faery':    { soldier: [3,0], ospec: [10,0], dspec: [0,10], elite: [4,16],  horse: [2,0] },
+  'halfling': { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [10,13], horse: [2,0] },
+  'human':    { soldier: [3,0], ospec: [15,0], dspec: [0,12], elite: [15,5],  horse: [3,0] },
+  'orc':      { soldier: [3,0], ospec: [13,0], dspec: [0,10], elite: [18,3],  horse: [2,0] },
+  'undead':   { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [16,4],  horse: [2,0] },
 };
 
 // Personality unit-strength modifiers (Age 116, affect unit values above):

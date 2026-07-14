@@ -78,6 +78,10 @@ const S = {
   atkSettings: {},         // per-province attacker settings {[slot]: {elitePct, eliteCount?, setAt}} — shared via meta/{kdId}_atk_settings
   atkSettingsLoaded: false, // true once loadAtkSettings() has run (success or not)
 
+  waveSeq: null,     // PUBLISHED wave sequence (array of hit objects) — persisted in war plan JSON
+  waveDraft: null,   // generated-but-unpublished sequence (leader's working copy, session only)
+  waveGenAt: 0,      // Unix ms when the draft/published seq was generated
+
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
   tmMatchupOp: 'ns',      // T/M Matchup: active op id (see TM_OPS in tmmatchup.js)

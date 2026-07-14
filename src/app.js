@@ -169,6 +169,8 @@ window.__wpA = {
           S.ageStartDate    = parsed.ageStartDate   || 0;
           S.apiEndpoint     = parsed.apiEndpoint    || '';
           S.apiKey          = parsed.apiKey         || '';
+          S.waveSeq         = parsed.waveSeq        || null;
+          S.waveGenAt       = parsed.waveGenAt      || 0;
         } catch (e) { console.warn('[WavePlanner] Malformed plan JSON — starting fresh'); }
       }
 
@@ -213,7 +215,7 @@ window.__wpA = {
 
       renderBoard();
       renderAlerts();
-      renderSummary();
+      renderWavePlan();
       renderPlayer();
       this.setRole('leader');
 
@@ -299,7 +301,7 @@ window.__wpA = {
       this.syncBackend();
       renderBoard();
       renderAlerts();
-      renderSummary();
+      renderWavePlan();
       renderKingdom();
       renderPlayer();
     } catch (e) {
@@ -331,6 +333,8 @@ window.__wpA = {
         ageStartDate:    S.ageStartDate   || 0,
         apiEndpoint:     S.apiEndpoint    || '',
         apiKey:          S.apiKey         || '',
+        waveSeq:         S.waveSeq        || null,
+        waveGenAt:       S.waveGenAt      || 0,
       });
       const r = await fbWrite(`warplan/${kdId}`, {
         json,
@@ -371,7 +375,7 @@ window.__wpA = {
     if (t === 'player')      renderPlayer();
     if (t === 'intel')       renderIntel();
     if (t === 'kingdom')     renderKingdom();
-    if (t === 'summary')     renderSummary();
+    if (t === 'summary')     renderWavePlan();
     if (t === 'nwgraph')     renderNwGraph();
     if (t === 'alerts')      renderAlerts();
     if (t === 'leaderboard') renderLeaderboard();
@@ -423,10 +427,15 @@ window.__wpA = {
   toggleMaxGain,
   setElitePct,
   setEliteCount,
+  generateWavePlan,
+  publishWavePlan,
+  discardWaveDraft,
+  wpReassign,
+  wpRemoveHit,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
-  renderSummary,
+  renderWavePlan,
   renderKingdom,
   renderPlayer,
   renderIntel,
@@ -879,6 +888,9 @@ window.__wpA = {
     S.provinces  = {};
     S.cols       = [];
     S.thresholds = { enemyFoodRich:0, enemyFoodLow:0, enemyGcRich:0, enemyRunesRich:0, solds:0, ownFoodLow:0, ownPeasLow:0 };
+    S.waveSeq    = null;
+    S.waveDraft  = null;
+    S.waveGenAt  = 0;
     // Keep Discord webhook — user doesn't want to re-enter it each war
     // Save empty plan to IS backend to overwrite the saved one
     await this.save();
@@ -888,7 +900,7 @@ window.__wpA = {
     this.meta();
     renderBoard();
     renderAlerts();
-    renderSummary();
+    renderWavePlan();
     renderPlayer();
     setSav('War plan cleared', 'ok');
     setTimeout(() => setSav('', ''), 3000);
