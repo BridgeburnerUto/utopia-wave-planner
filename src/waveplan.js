@@ -198,6 +198,7 @@ function buildWaveTargets() {
         needsRaze:     plan.needsRaze     || false,
         needsMassacre: plan.needsMassacre || false,
         bloat:         plan.bloat         || false,
+        targetAcres:   plan.targetAcres   || 0,   // chain goal: hit until simLand ≤ this
         // sim state
         simNW: tp?.networth || ep.networth || 0,
         simLand: tp?.land || 0,
@@ -248,11 +249,22 @@ function _wpMinGens(def, off, gensAvail) {
 }
 
 // ── Solver ───────────────────────────────────────────────────────────────────
+/** Chain-goal progress for every target with targetAcres set. */
+function _wpChainStatus(targets) {
+  return targets.filter(t => t.targetAcres > 0).map(t => ({
+    name: t.name, slot: t.slot,
+    from: t.land, to: Math.round(t.simLand), goal: t.targetAcres,
+    done: t.simLand <= t.targetAcres,
+  }));
+}
+
 /**
- * Generate the wave sequence. Pure: reads S, returns
- * {seq, slots, targets, uncovered, idleSlots, totalGains}. Does not mutate S.
+ * Generate the wave sequence. Pure: reads S, returns {seq, slots, targets,
+ * uncovered, idleSlots, ambushHolds, chainStatus, waveType, totalGains}.
+ * Does not mutate S. waveType is plumbed through for future wave-type
+ * variants (only 'standard' exists so far — behavior identical).
  */
-function generateWaveSeq() {
+function generateWaveSeq(waveType) {
   const slots   = buildWaveSlots();
   const targets = buildWaveTargets();
   const walls   = _wpWallPool();
@@ -293,6 +305,7 @@ function generateWaveSeq() {
       sentOff: _wpTroopsFor(t.def, gens),
       popWarn: _wpPopWarn(sl.popPct, type),
       projNW,
+      projLand: Math.round(t.simLand),
       range: _wpRange(sl.nw, t.simNW),
       estGain: Math.round(gain),
       ...extra,
@@ -333,15 +346,24 @@ function generateWaveSeq() {
 
       let pick = null, type = 'TM', marginal = false, fallback = null;
 
+      // Chain goal helpers: unmet chains come first; met chains ("done") drop
+      // to overflow — they only soak dump hits / last-resort marginals.
+      const chainNeeded = t => t.targetAcres > 0 && t.simLand > t.targetAcres;
+      const chainDone   = t => t.targetAcres > 0 && t.simLand <= t.targetAcres;
+
       // 1. Raze/Massacre still needed, in range preferred
       const rm = pool.filter(c => (c.t.needsRaze && !c.t.razeDone) || (c.t.needsMassacre && !c.t.massDone))
         .sort(_wpByBandPopGain);
-      // 2. Uncovered targets (0 hits): range band → enemy pop% → gain
-      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat).sort(_wpByBandPopGain);
-      // 3. Any in-range flagged: range band → enemy pop% → gain
-      const any = pool.filter(c => !c.t.bloat).sort(_wpByBandPopGain);
+      // 2. Chain quota: unmet chain targets before everything else — the wave
+      //    is built around the chain
+      const chain = pool.filter(c => chainNeeded(c.t) && !c.t.bloat).sort(_wpByBandPopGain);
+      // 3. Uncovered targets (0 hits): range band → enemy pop% → gain
+      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat && !chainDone(c.t)).sort(_wpByBandPopGain);
+      // 4. Any in-range flagged (met chains excluded): band → pop% → gain
+      const any = pool.filter(c => !c.t.bloat && !chainDone(c.t)).sort(_wpByBandPopGain);
 
       if      (rm.length)    { pick = rm[0]; type = pick.t.needsRaze && !pick.t.razeDone ? 'RAZE' : 'MASS'; }
+      else if (chain.length) { pick = chain[0]; }
       else if (uncov.length) { pick = uncov[0]; }
       else if (any.length)   { pick = any[0]; }
       else {
@@ -406,7 +428,10 @@ function generateWaveSeq() {
 
   const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => t.name);
   const totalGains = seq.reduce((s, h) => s + (h.estGain || 0), 0);
-  return { seq, slots, targets, uncovered, idleSlots, ambushHolds, totalGains };
+  return { seq, slots, targets, uncovered, idleSlots, ambushHolds,
+           chainStatus: _wpChainStatus(targets),
+           waveType: waveType || S.waveType || 'standard',
+           totalGains };
 }
 
 /**
@@ -472,7 +497,7 @@ function resimulateWaveSeq(seq) {
       attacker: sl.attacker, slotKey: key, leftover: Math.round(fin.leftover),
     });
   }
-  return { seq: out, ambushHolds };
+  return { seq: out, ambushHolds, chainStatus: _wpChainStatus(targets) };
 }
 
 // ── Discord hitlist ──────────────────────────────────────────────────────────

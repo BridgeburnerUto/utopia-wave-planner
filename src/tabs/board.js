@@ -29,8 +29,16 @@ function _pp(slot) {
 function setProvWave(slot, wave) {
   _pp(slot).wave = wave || null;
   renderBoard();
-  renderSummary();
+  renderWavePlan();
   renderPlayer();
+}
+
+/** Chain goal: plan hits on this province until it reaches this many acres (0 = off) */
+function setProvTargetAcres(slot, rawVal) {
+  const v = parseInt(rawVal);
+  _pp(slot).targetAcres = v > 0 ? v : 0;
+  renderBoard();
+  renderWavePlan();
 }
 
 function setProvNeedsRaze(slot, val) {
@@ -117,6 +125,7 @@ function _buildBoard() {
       rtpa, castles, wt,
       intelAge: da,
       wave:          plan.wave,
+      targetAcres:   plan.targetAcres   || 0,
       assignedTo:    plan.assignedTo    || [],
       bloat:         plan.bloat         || false,
       needsRaze:     plan.needsRaze,
@@ -196,6 +205,16 @@ function _buildBoard() {
            style="cursor:pointer;width:14px;height:14px;accent-color:#9060c0;">`
       : r.bloat ? '<span style="color:#9060c0">✓</span>' : '—';
 
+    // Chain goal: target acres for the wave solver (0/empty = no chain goal)
+    const chainCell = isLeader
+      ? `<input type="number" min="0" value="${r.targetAcres || ''}" placeholder="—"
+           title="Chain goal: the solver plans hits until this province is down to these acres (now ${fK(r.land)})"
+           onchange="__wpA.setProvTargetAcres(${r.slot},this.value)"
+           onkeydown="if(event.key==='Enter')this.blur()"
+           style="background:#1a2828;border:1px solid ${r.targetAcres?'#E05050':'#617070'};color:${r.targetAcres?'#E05050':'#ffffff'};
+                  font-family:monospace;font-size:17px;padding:3px 6px;border-radius:3px;width:64px;text-align:right;">`
+      : r.targetAcres ? `<span style="color:#E05050;font-family:monospace">${fK(r.targetAcres)}</span>` : '—';
+
     // Assignment picker — own province multi-select
     const ownProvNames = (S.own?.provinces || []).map(p => p.name);
     const isPickerOpen = _assignPickerSlot === r.slot;
@@ -249,6 +268,7 @@ function _buildBoard() {
       <td style="padding:7px 10px;text-align:right;">${r.wt != null ? r.wt.toFixed(1)+'%' : '—'}</td>
       <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
       <td style="padding:7px 10px;text-align:center;">${waveSelect}</td>
+      <td style="padding:7px 10px;text-align:center;">${chainCell}</td>
       <td style="padding:5px 7px;vertical-align:middle;">${assignCell}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.bloat?'#9060c0':'#7a9090'};">${bloatCheck}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.needsRaze?'#ffd400':'#7a9090'};">${razeCheck}</td>
@@ -296,6 +316,7 @@ function _buildBoard() {
           ${th('wt','WT%',true)}
           ${th('intelAge','Intel',true)}
           ${thS('Wave')}
+          ${thS('Chain ⌖')}
           ${thS('Assigned')}
           ${thS('Bloat')}
           ${thS('Raze')}

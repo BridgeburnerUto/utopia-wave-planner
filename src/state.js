@@ -81,6 +81,7 @@ const S = {
   waveSeq: null,     // PUBLISHED wave sequence (array of hit objects) — persisted in war plan JSON
   waveDraft: null,   // generated-but-unpublished sequence (leader's working copy, session only)
   waveGenAt: 0,      // Unix ms when the draft/published seq was generated
+  waveType: 'standard', // wave type selector — only 'standard' so far, more types planned
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only

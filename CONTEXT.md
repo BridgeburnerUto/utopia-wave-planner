@@ -202,7 +202,26 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
 - syncBackend payload now includes `waveSeq`/`waveGenAt` (companion PWA can render the
   hitlist later — companion UI itself not yet built).
 
+### Chain targets + wave types (2026-07-14, late — committed & pushed)
+- **Chain goal**: War Board gets a "Chain ⌖" column — leader sets target acres per enemy
+  province (`S.provinces[slot].targetAcres`, persists in plan JSON; `setProvTargetAcres`).
+  Solver priority is now rm → **chain quota** (unmet chains pounded first — the wave is
+  built around the chain) → uncovered → any flagged. Met chains drop to overflow (dump
+  pool / last-resort only). `_wpChainStatus` reports progress; Wave Plan warnings show
+  "⛓ Chain goal reached / incomplete: X only planned down to ~N acres (goal G, from F)"
+  with EXACT acres (fK rounding hid 2050 vs 2000). Hits on chain targets get a ⛓ badge
+  with projected acres. `projLand` stored on every seq entry.
+- **Wave types scaffold**: `S.waveType` ('standard' only so far — more types to be
+  specified by the leader later). Dropdown on Wave Plan action bar (`setWaveType`),
+  plumbed through `generateWaveSeq(waveType)` (no behavioral difference yet), persisted
+  in plan JSON. New types = extend the dropdown + branch in the solver.
+- **Bug fixed**: board.js `setProvWave` still called the renamed `renderSummary` →
+  ReferenceError on every wave-assignment change since the stage-2 rename. Now
+  `renderWavePlan`. (Found while adding the chain column; the harness path had never
+  exercised a wave re-assignment.)
+
 ### Possible next steps (all optional)
+- Define the additional wave types (leader will specify).
 - Companion (war-companion.html): render waveSeq slice on mobile (data already synced).
 - Live re-check at send time: compare planned def vs latest intel before "SEND NOW".
 - Flag more targets in harness plan to demo a realistic war-start wave.

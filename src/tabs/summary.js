@@ -29,10 +29,16 @@ function _wpEditableDraft() {
 // ── Actions (exposed through __wpA) ─────────────────────────────────────────
 
 function generateWavePlan() {
-  const r = generateWaveSeq();
+  const r = generateWaveSeq(S.waveType);
   S.waveDraft = r.seq;
   S.waveGenAt = Date.now();
-  S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots, ambushHolds: r.ambushHolds };
+  S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots,
+                  ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
+  renderWavePlan();
+}
+
+function setWaveType(v) {
+  S.waveType = v || 'standard';
   renderWavePlan();
 }
 
@@ -47,7 +53,7 @@ function wpRemoveHit(n) {
   if (!draft) return;
   const r = resimulateWaveSeq(draft.filter(h => h.n !== n));
   S.waveDraft = r.seq;
-  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds };
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
   renderWavePlan();
 }
 
@@ -59,7 +65,7 @@ function wpReassign(n, slotKey) {
   hit.slotKey = slotKey;
   const r = resimulateWaveSeq(draft);
   S.waveDraft = r.seq;
-  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds };
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
   renderWavePlan();
 }
 
@@ -132,6 +138,10 @@ function _buildWavePlan() {
 
   // Action bar
   h += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <select onchange="__wpA.setWaveType(this.value)" title="Wave type — more types coming"
+      style="background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:6px 8px;border-radius:3px;cursor:pointer">
+      <option value="standard" ${S.waveType === 'standard' ? 'selected' : ''}>Standard wave</option>
+    </select>
     <button class="wb g" onclick="__wpA.generateWavePlan()">⚙ Generate Wave Plan</button>
     ${seq ? `<button class="wb" style="border-color:#D4A017;color:#D4A017" onclick="__wpA.publishWavePlan()">📢 Publish${S.discordWebhook ? ' + Discord' : ''}</button>` : ''}
     ${isDraft ? `<button class="wb r" onclick="__wpA.discardWaveDraft()">✕ Discard draft</button>` : ''}
@@ -163,6 +173,11 @@ function _buildWavePlan() {
   const dumpCount = seq ? seq.filter(x => x.dump).length : 0;
   if (dumpCount)
     warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
+  for (const cs of (S._waveGen?.chainStatus || [])) {
+    warn.push(cs.done
+      ? `<span style="color:#60C040">⛓ <b>Chain goal reached:</b> ${esc(cs.name)} ${cs.from} → ~${cs.to} acres (goal ${cs.goal})</span>`
+      : `⛓ <b>Chain incomplete:</b> ${esc(cs.name)} only planned down to ~${cs.to} acres (goal ${cs.goal}, from ${cs.from}) — not enough breakable offense in range.`);
+  }
   if (warn.length) {
     h += `<div style="margin-bottom:12px;padding:8px 14px;background:#201808;border:1px solid #805020;
       border-radius:3px;font-size:17px;color:#e09040;display:grid;gap:4px">${warn.map(w => `<div>${w}</div>`).join('')}</div>`;
@@ -194,7 +209,9 @@ function _buildWavePlan() {
     const typeBadge = hit.type === 'RAZE' ? '<span class="watk-type watk-type-rz">Raze</span>'
                     : hit.type === 'MASS' ? '<span class="watk-type watk-type-ms">Mass</span>'
                     : '<span class="watk-type watk-type-tm">TM</span>';
-    const flags = (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
+    const chainGoal = S.provinces[hit.targetSlot]?.targetAcres || 0;
+    const flags = (chainGoal    ? ` <span style="color:#E05050;font-size:15px" title="Chain target — goal ${fK(chainGoal)} acres">⛓${hit.projLand != null ? ' ' + fK(hit.projLand) + '→' : ''}</span>` : '')
+                + (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
                 + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
                 + (hit.dump     ? ' <span style="color:#617070;font-size:15px" title="Leftover offense spent — low value, but nothing stays home">♻ dump</span>' : '')

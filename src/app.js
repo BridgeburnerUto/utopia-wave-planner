@@ -171,6 +171,7 @@ window.__wpA = {
           S.apiKey          = parsed.apiKey         || '';
           S.waveSeq         = parsed.waveSeq        || null;
           S.waveGenAt       = parsed.waveGenAt      || 0;
+          S.waveType        = parsed.waveType       || 'standard';
         } catch (e) { console.warn('[WavePlanner] Malformed plan JSON — starting fresh'); }
       }
 
@@ -335,6 +336,7 @@ window.__wpA = {
         apiKey:          S.apiKey         || '',
         waveSeq:         S.waveSeq        || null,
         waveGenAt:       S.waveGenAt      || 0,
+        waveType:        S.waveType       || 'standard',
       });
       const r = await fbWrite(`warplan/${kdId}`, {
         json,
@@ -432,6 +434,8 @@ window.__wpA = {
   discardWaveDraft,
   wpReassign,
   wpRemoveHit,
+  setWaveType,
+  setProvTargetAcres,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
