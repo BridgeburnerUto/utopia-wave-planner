@@ -30,10 +30,10 @@ function aC(s) {
   return 'wao';
 }
 
-/** NW range check: can attacker NW a hit target NW? (75–133% rule) */
+/** NW range check: can attacker NW a hit target NW? (war-range rule) */
 function canHit(attackerNW, targetNW) {
   const r = attackerNW / targetNW;
-  return r >= 0.75 && r <= 1.33;
+  return r >= NW_WAR_RANGE.min && r <= NW_WAR_RANGE.max;
 }
 
 /** HTML-escape a string to prevent XSS in innerHTML strings */
@@ -64,7 +64,8 @@ function $id(id) {
  *   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35 (survey when available)
  *   Mod Living Space   = Raw × Race Bonus × (1 + Housing Science %)
  *   Pop%               = Current Population / Mod Living Space × 100 (capped 150)
- * Race: Halfling ×1.10, Faery ×0.95, others ×1.00. Honor bonus not available → ×1.0.
+ * Race pop multiplier from config RACE_POP_MULT (Halfling & Faery differ from
+ * ×1.0 — update it each age). Honor bonus not available → ×1.0.
  * sot.ppa is peasants-per-acre only, NOT total people — don't use it directly.
  * Returns int % or null when land/space unknown.
  */
@@ -76,7 +77,7 @@ function _ownPopPct(prov) {
                   + (_sot.thieves  || 0) + (_sot.wizards    || 0);
 
   const r = (prov.race || '').toLowerCase();
-  const _racePopMult = r === 'halfling' ? 1.10 : r === 'faery' ? 0.95 : 1;
+  const _racePopMult = RACE_POP_MULT[r] || 1;
 
   const _bArr = prov.survey?.buildings;
   let _rawLS;

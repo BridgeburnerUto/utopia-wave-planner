@@ -140,7 +140,7 @@ function calcMaxOff(prov) {
   const awayGens  = (prov.som?.armiesAway || []).reduce((s, a) => s + (a?.generals || 0), 0);
   const totalGens = homeGens != null ? homeGens + awayGens : 5;
   const sendableGens = Math.max(0, totalGens - 1);           // 1 general always home
-  const genMult      = sendableGens > 0 ? 1 + 0.05 * (sendableGens - 1) : 0;
+  const genMult      = sendableGens > 0 ? 1 + GEN_OFF_BONUS * (sendableGens - 1) : 0;
 
   const maxOff = sendableGens > 0
     ? Math.round(Math.max(0, baseOff - withheld) * genMult * FANATICISM_OFF_MULT)

@@ -6,35 +6,37 @@
 function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
   if (!tLand || !ownLand || !tNW || !aNW) return null;
 
+  const G = TM_GAIN, P = G.RPNW, K = G.RKNW;
+
   const rpnw = tNW / aNW;
   let rpnwF = 0;
-  if      (rpnw >= 0.567 && rpnw < 0.9)  rpnwF = 3 * rpnw - 1.7;
-  else if (rpnw >= 0.9   && rpnw <= 1.1) rpnwF = 1;
-  else if (rpnw >  1.1   && rpnw <= 1.6) rpnwF = -2 * rpnw + 3.2;
+  if      (rpnw >= P.FLOOR    && rpnw < P.LOW_MAX)   rpnwF = P.LOW_SLOPE * rpnw + P.LOW_INT;
+  else if (rpnw >= P.LOW_MAX  && rpnw <= P.HIGH_MIN) rpnwF = 1;
+  else if (rpnw >  P.HIGH_MIN && rpnw <= P.CEIL)     rpnwF = P.HIGH_SLOPE * rpnw + P.HIGH_INT;
   if (rpnwF <= 0) return 0;
 
   const rknw  = ownKdAvgNW > 0 ? eneKdAvgNW / ownKdAvgNW : 1;
-  const rknwF = rknw < 0.5 ? 0.8 : rknw < 0.9 ? rknw / 2 + 0.55 : 1;
+  const rknwF = rknw < K.LOW ? K.LOW_F : rknw < K.MID ? rknw * K.MID_SLOPE + K.MID_INT : 1;
 
   const mapText  = tp?.sot?.map || '';
   const mapF     = (!mapText || mapText === 'Not much') ? 1.0
-                 : mapText === 'A little'               ? 0.90
-                 : 0.80;
+                 : mapText === 'A little'               ? G.MAP_F.LITTLE
+                 : G.MAP_F.LOTS;
 
   const castlePct = tp?.survey?.buildings?.find(b => b.name === 'Castles')?.pctTot;
-  const castleF   = castlePct != null ? Math.max(0, 1 - (castlePct / 100 * 2.25)) : 1.0;
+  const castleF   = castlePct != null ? Math.max(0, 1 - (castlePct / 100 * G.CASTLE_MULT)) : 1.0;
 
-  const relF = 1.10;
+  const relF = G.REL_F;
 
   let enemyRitualF = 1.0;
   const eRitual = (S.enemy?.kdEffects?.ritual || '').toLowerCase();
   if (eRitual.includes('protection') || eRitual.includes('shield') || eRitual.includes('barrier')) {
-    const eff = S.enemy?.kdEffects?.ritualEff || 15;
-    enemyRitualF = Math.max(0.5, 1 - eff / 100);
+    const eff = S.enemy?.kdEffects?.ritualEff || G.RITUAL_DEFAULT_EFF;
+    enemyRitualF = Math.max(G.RITUAL_FLOOR, 1 - eff / 100);
   }
 
-  const raw = tLand * 0.12 * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
-  const cap = Math.min(ownLand, tLand) * 0.20;
+  const raw = tLand * G.BASE_PCT * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
+  const cap = Math.min(ownLand, tLand) * G.CAP_PCT;
   return Math.round(Math.min(raw, cap));
 }
 // "My Orders" tab — province picker + attack plan calculator.
@@ -195,8 +197,8 @@ function calcAttacks(prov) {
     if (!gensAvail || offLeft <= 0) return 0;
     if (!tDef)                      return 1;
     if (offLeft > tDef)             return 1;
-    // Need gen bonus: solve offLeft*(1+0.05*(N-1)) > tDef → N > 1+(tDef/offLeft-1)/0.05
-    const n = Math.ceil(1 + (tDef / offLeft - 1) / 0.05);
+    // Need gen bonus: solve offLeft*(1+GEN_OFF_BONUS*(N-1)) > tDef → N > 1+(tDef/offLeft-1)/GEN_OFF_BONUS
+    const n = Math.ceil(1 + (tDef / offLeft - 1) / GEN_OFF_BONUS);
     return n <= gensAvail ? n : 0;
   }
 
@@ -215,8 +217,8 @@ function calcAttacks(prov) {
   function nwQuality(tNW) {
     if (!aNW || !tNW) return 1;
     const r = aNW / tNW;
-    if (r >= 0.90 && r <= 1.10) return 3;
-    if (r >= 0.75 && r <= 1.33) return 2;
+    if (r >= NW_OPTIMAL.min   && r <= NW_OPTIMAL.max)   return 3;
+    if (r >= NW_WAR_RANGE.min && r <= NW_WAR_RANGE.max) return 2;
     return 1;
   }
 
@@ -392,7 +394,7 @@ function calcAttacks(prov) {
     // For a neutral attacker (ownOffMult=1): sentOff = tDef + 1  ← simplest case
     // For Avian (+20% off):  sentOff = ceil(tDef / 1.20) + 1     ← sends fewer raw troops
     // For Elf  (−5% off):   sentOff = ceil(tDef / 0.95) + 1     ← must send slightly more
-    const _genBonus = 1 + 0.05 * (mg - 1);
+    const _genBonus = 1 + GEN_OFF_BONUS * (mg - 1);
     const sentOff = mg > 0
       ? Math.ceil(enriched.tDef / (ownOffMult * _genBonus)) + 1
       : 0;
@@ -1165,7 +1167,7 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const away  = tp?.som?.armiesAway?.length > 0;
     // NW quality (no hard cutoff — any target is hittable)
     const nwQ   = (!aNW || !tNW) ? 1
-                : (() => { const r = aNW / tNW; return r >= 0.90 && r <= 1.10 ? 3 : r >= 0.75 && r <= 1.33 ? 2 : 1; })();
+                : (() => { const r = aNW / tNW; return r >= NW_OPTIMAL.min && r <= NW_OPTIMAL.max ? 3 : r >= NW_WAR_RANGE.min && r <= NW_WAR_RANGE.max ? 2 : 1; })();
     const nwLabel = nwQ === 3 ? '✓ optimal' : nwQ === 2 ? '✓ good' : '~ marginal';
     const nwCls   = nwQ === 3 ? 'wmyes' : nwQ === 2 ? 'wmyes' : 'wmcl';
     const pct   = tDef > 0 && aOff > 0 ? Math.round(aOff / tDef * 100) : 0;

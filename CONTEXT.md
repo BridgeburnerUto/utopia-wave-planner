@@ -18,6 +18,14 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - Inline `onclick=""` handlers can only reach globals â€” route everything through
   `window.__wpA.*` (defined in `src/app.js`), never internal module functions.
 - All shared in-memory state lives on the `S` object in `src/state.js`.
+- **Age-varying game constants are centralized in `src/config.js`** under the
+  "AGE-VARYING SOLVER CONSTANTS -- UPDATE EVERY AGE" block: `RACE_UNITS`,
+  `PERS_ELITE_OFF_BONUS`, `FANATICISM_OFF_MULT`, `NW_OPTIMAL`, `NW_WAR_RANGE`,
+  `GEN_OFF_BONUS`, `TM_GAIN` (land-gain curve), `RACE_POP_MULT`. Every consumer
+  (utils/player/waveplan/kingdom/tmmatchup) references these -- a per-age update
+  is a one-file edit here, not a grep hunt. The OME/DME mult tables stay EMPTY
+  (SoT points already include efficiency). Per-age steps: edit this block from
+  the "AGE nnn FINAL CHANGES" doc, then harness-verify.
 - Firestore access is plain REST (`src/firebase.js`): `fbWrite`, `fbGet`, `fbQuery`, `fbDelete`.
   Project `utopia-leaderboard`, rules wide open, docs keyed by `kdId` = own location with `:` â†’ `_`.
 - Thresholds, webhook, API endpoint/key persist inside the war plan JSON (`warplan/{kdId}`) â€”

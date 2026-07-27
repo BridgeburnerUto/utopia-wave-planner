@@ -30,7 +30,7 @@ const WP_MIN_SLOT_OFF   = 1000;   // slots below this offense are not attackers 
 
 /** Raw troops to send: game applies +5% per extra general to the troops sent. */
 function _wpTroopsFor(def, gens) {
-  return Math.ceil((def + 1) / (1 + 0.05 * (Math.max(1, gens) - 1)));
+  return Math.ceil((def + 1) / (1 + GEN_OFF_BONUS * (Math.max(1, gens) - 1)));
 }
 
 /**
@@ -235,8 +235,8 @@ function _wpWallPool() {
 function _wpRange(aNW, tNW) {
   if (!aNW || !tNW) return 'out';
   const r = aNW / tNW;
-  if (r >= 0.90 && r <= 1.10) return 'optimal';
-  if (r >= 0.75 && r <= 1.33) return 'ok';
+  if (r >= NW_OPTIMAL.min   && r <= NW_OPTIMAL.max)   return 'optimal';
+  if (r >= NW_WAR_RANGE.min && r <= NW_WAR_RANGE.max) return 'ok';
   return 'out';
 }
 
@@ -244,7 +244,7 @@ function _wpMinGens(def, off, gensAvail) {
   if (!gensAvail || off <= 0) return 0;
   if (!def)                   return 1;
   if (off > def)              return 1;
-  const n = Math.ceil(1 + (def / off - 1) / 0.05);
+  const n = Math.ceil(1 + (def / off - 1) / GEN_OFF_BONUS);
   return n <= gensAvail ? n : 0;
 }
 

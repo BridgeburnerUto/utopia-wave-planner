@@ -94,16 +94,19 @@ function _buildTmMatchup() {
     return parts.join(' &nbsp;·&nbsp; ');
   }
 
-  // RPNW band — greyscale: light = best range, dark = dead zone
+  // RPNW band — greyscale: light = best range, dark = dead zone.
+  // Canonical edges come from config (optimal band + TM-gain floor); the 0.7 /
+  // 1.4 / 1.6 breakpoints are display-only greyscale midpoints, not decisions.
   function _nwBand(ownNw, enemyNw) {
     if (!ownNw || !enemyNw) return { label: 'NW?', col: '#444' };
     const r = enemyNw / ownNw;
-    if (r >= 0.9 && r <= 1.1) return { label: `NW ${r.toFixed(2)}`, col: '#aaa' }; // sweet spot — light
-    if (r >= 0.7 && r <  0.9) return { label: `NW ${r.toFixed(2)}`, col: '#777' }; // close — mid grey
-    if (r >  1.1 && r <= 1.4) return { label: `NW ${r.toFixed(2)}`, col: '#777' }; // close — mid grey
-    if (r >= 0.567 && r < 0.7)return { label: `NW ${r.toFixed(2)}`, col: '#555' }; // low — dark grey
-    if (r >  1.4 && r <= 1.6) return { label: `NW ${r.toFixed(2)}`, col: '#555' }; // high — dark grey
-    return                            { label: `NW ${r.toFixed(2)}`, col: '#333' }; // dead zone — darkest
+    const oMin = NW_OPTIMAL.min, oMax = NW_OPTIMAL.max, floor = TM_GAIN.RPNW.FLOOR;
+    if (r >= oMin  && r <= oMax) return { label: `NW ${r.toFixed(2)}`, col: '#aaa' }; // sweet spot — light
+    if (r >= 0.7   && r <  oMin) return { label: `NW ${r.toFixed(2)}`, col: '#777' }; // close — mid grey
+    if (r >  oMax  && r <= 1.4)  return { label: `NW ${r.toFixed(2)}`, col: '#777' }; // close — mid grey
+    if (r >= floor && r <  0.7)  return { label: `NW ${r.toFixed(2)}`, col: '#555' }; // low — dark grey
+    if (r >  1.4   && r <= 1.6)  return { label: `NW ${r.toFixed(2)}`, col: '#555' }; // high — dark grey
+    return                              { label: `NW ${r.toFixed(2)}`, col: '#333' }; // dead zone — darkest
   }
 
   // WT% from survey buildings

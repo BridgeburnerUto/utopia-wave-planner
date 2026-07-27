@@ -93,6 +93,50 @@ const PERSONALITY_DEF_MULT = {};
 // attacker casts it before hitting.
 const FANATICISM_OFF_MULT = 1.05;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ── AGE-VARYING SOLVER CONSTANTS — UPDATE EVERY AGE ─────────────────────────
+// Single source of truth for the numbers that change when the game is
+// rebalanced each age. Previously these were duplicated inline across
+// utils.js / player.js / waveplan.js / kingdom.js / tabs/tmmatchup.js; every
+// consumer now references the constants below so an age update is a one-file
+// edit. Cross-check against the "AGE nnn FINAL CHANGES" doc each age.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// NW ratio bands (attackerNW / targetNW). Optimal = full combat gains; the war
+// range is the acceptable 75–133% window the solver keeps every hit inside.
+const NW_OPTIMAL   = { min: 0.90, max: 1.10 };
+const NW_WAR_RANGE = { min: 0.75, max: 1.33 };
+
+// Each extra general sent adds +5% to the offense sent (and to troops needed).
+const GEN_OFF_BONUS = 0.05;
+
+// Race max-population multiplier (living-space bonus). Only races that differ
+// from ×1.0 are listed; every other race falls back to 1.0.
+//   Age 116: Halfling +12.5% Population, Faery −5% Population.
+const RACE_POP_MULT = { halfling: 1.125, faery: 0.95 };
+
+// TM land-gain estimate (_estimateTMGain in tabs/player.js). Piecewise curves +
+// modifier factors, all game-tuned. rawGain = tLand × BASE_PCT × rpnwF × rknwF
+// × relF × mapF × castleF × ritualF, capped at min(ownLand,tLand) × CAP_PCT.
+const TM_GAIN = {
+  BASE_PCT: 0.12,          // base share of target land taken
+  CAP_PCT:  0.20,          // hard cap vs the smaller of the two lands
+  // Relative province NW (target/attacker) → gain factor (piecewise linear):
+  //   [FLOOR,LOW_MAX): LOW_SLOPE·r + LOW_INT · [LOW_MAX,HIGH_MIN]: flat 1
+  //   (HIGH_MIN,CEIL]: HIGH_SLOPE·r + HIGH_INT · else 0
+  RPNW: { FLOOR: 0.567, LOW_MAX: 0.9, HIGH_MIN: 1.1, CEIL: 1.6,
+          LOW_SLOPE: 3, LOW_INT: -1.7, HIGH_SLOPE: -2, HIGH_INT: 3.2 },
+  // Relative kingdom NW (enemyKdAvg/ownKdAvg) → gain factor:
+  //   < LOW: LOW_F · [LOW,MID): MID_SLOPE·r + MID_INT · ≥ MID: 1
+  RKNW: { LOW: 0.5, MID: 0.9, LOW_F: 0.8, MID_SLOPE: 0.5, MID_INT: 0.55 },
+  // Target map ("science")-based reduction: none/"Not much"=1.0.
+  MAP_F: { LITTLE: 0.90, LOTS: 0.80 },
+  CASTLE_MULT: 2.25,       // castleF = max(0, 1 − castlePct/100 × CASTLE_MULT)
+  REL_F: 1.10,             // relations/honor gain factor
+  RITUAL_FLOOR: 0.5,       // floor for an enemy protection-ritual reduction
+  RITUAL_DEFAULT_EFF: 15,  // assumed ritual effectiveness % when unknown
+};
+
 // ── Age 116 unit stats: [offense, defense] per unit ──────────────────────────
 // Used to subtract withheld-elite offense from sot.offPoints and to compute
 // per-army offense for wave slots (units × values × ome). UPDATE EVERY AGE.
