@@ -90,12 +90,18 @@ function _wpByBandPopGain(a, b) {
 
 // ── Unit offense helper ──────────────────────────────────────────────────────
 // Offense points of a unit bundle for a race, at the given OME and elite %.
+// Rebuilt from raw units, so it must apply the same unit-strength bonuses the
+// game bakes into offPoints: General +2 elite, War Hero +2 ospec (always), and
+// Avian Dive Bomb +2 ospec (war — always active in this war-planning tool).
 function _wpUnitsOff(units, race, personality, ome, elitePct) {
-  const u = RACE_UNITS[(race || '').toLowerCase()];
+  const r = (race || '').toLowerCase();
+  const p = (personality || '').toLowerCase();
+  const u = RACE_UNITS[r];
   if (!u) return 0;
-  const eliteOff = u.elite[0] + (PERS_ELITE_OFF_BONUS[(personality || '').toLowerCase()] || 0);
+  const eliteOff = u.elite[0] + (PERS_ELITE_OFF_BONUS[p] || 0);
+  const ospecOff = u.ospec[0] + (PERS_OSPEC_OFF_BONUS[p] || 0) + (RACE_WAR_OSPEC_OFF_BONUS[r] || 0);
   const raw = (units.solds  || 0) * u.soldier[0]
-            + (units.oSpecs || 0) * u.ospec[0]
+            + (units.oSpecs || 0) * ospecOff
             + (units.elites || 0) * eliteOff * (elitePct / 100)
             + (units.horses || 0) * u.horse[0];
   return raw * ome;

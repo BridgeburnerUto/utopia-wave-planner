@@ -36,6 +36,67 @@ function canHit(attackerNW, targetNW) {
   return r >= NW_WAR_RANGE.min && r <= NW_WAR_RANGE.max;
 }
 
+// ── War doctrines (display-only, shared by Kingdom + War Board) ───────────────
+// Race war doctrines are kingdom-wide bonuses active WHILE AT WAR; strength
+// scales with how many provinces of that race the kingdom has (see config).
+// While at war the API already folds the active doctrine into the reported
+// ome/dme and off/def points, so this is awareness only — never offense math.
+function _wdRaceCounts(provinces) {
+  const c = {};
+  for (const p of (provinces || [])) {
+    const r = (p.race || '').toLowerCase();
+    if (r) c[r] = (c[r] || 0) + 1;
+  }
+  return c;
+}
+function _wdStrength(race, count) {
+  if (!count) return 0;
+  const perExtra = WAR_DOCTRINE_PER_EXTRA[race] || 1;
+  return Math.min(WAR_DOCTRINE_MAX, WAR_DOCTRINE_FIRST + (count - 1) * perExtra);
+}
+/** Scaled effect chips for a race at the current strength, e.g. "+10.0% OME". */
+function _wdEffects(race, counts) {
+  const r = (race || '').toLowerCase();
+  const d = WAR_DOCTRINES[r];
+  if (!d) return [];
+  const s = _wdStrength(r, counts[r] || 0);
+  return d.effects.map(e => ({
+    text:    `${e.sign}${Math.min(e.cap, s).toFixed(1)}% ${e.label}`,
+    offense: !!d.offense && e.label === 'OME',
+  }));
+}
+/** Small doctrine line shown under a province's race in a roster/board row. */
+function _wdSubtitle(race, counts) {
+  const effs = _wdEffects(race, counts);
+  if (!effs.length) return '';
+  const parts = effs.map(e => e.offense
+    ? `<span style="color:#ffd400">${esc(e.text)}</span>` : esc(e.text)).join(' · ');
+  return `<div style="font-size:13px;color:#617070" title="Race war doctrine — active while at war, already reflected in the reported OME/DME and off/def">⚔ ${parts}</div>`;
+}
+/** "Active War Doctrines" summary cards for a set of provinces (own or enemy).
+ *  opts: { title, offenseNote?, note? }. Returns '' when no race has a doctrine. */
+function _wdSummarySection(provinces, opts) {
+  const counts = _wdRaceCounts(provinces);
+  const active = Object.keys(counts).filter(r => WAR_DOCTRINES[r]).sort((a, b) => counts[b] - counts[a]);
+  if (!active.length) return '';
+  const hasOffense = active.some(r => WAR_DOCTRINES[r].offense);
+  let h = `<div class="wsech">// ${opts.title}</div><div class="wsum" style="margin-bottom:8px">`;
+  for (const r of active) {
+    const cnt  = counts[r];
+    const s    = _wdStrength(r, cnt);
+    const effs = _wdEffects(r, counts).map(e => e.offense
+      ? `<span style="color:#ffd400">${esc(e.text)}</span>`
+      : `<span style="color:#b8c8c8">${esc(e.text)}</span>`).join('<br>');
+    h += `<div class="wscard"><div class="l">${esc(r)}${WAR_DOCTRINES[r].offense ? ' ⚔' : ''}</div>`
+       + `<div style="font-size:15px;color:#7a9090;margin-bottom:5px">${cnt} prov · strength ${s.toFixed(1)}%</div>`
+       + `<div style="font-size:17px;line-height:1.5">${effs}</div></div>`;
+  }
+  h += `</div><div style="margin-bottom:18px;font-size:15px;color:#617070">`
+     + `Strength scales with same-race provinces (1st +2.0%, +1%/extra; Elf/Faery/Halfling +2%/extra; cap 12.5%). `
+     + `${hasOffense && opts.offenseNote ? opts.offenseNote + ' ' : ''}${opts.note || ''}</div>`;
+  return h;
+}
+
 /** HTML-escape a string to prevent XSS in innerHTML strings */
 function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')

@@ -153,12 +153,47 @@ const RACE_UNITS = {
   'undead':   { soldier: [3,0], ospec: [11,0], dspec: [0,10], elite: [16,4],  horse: [2,0] },
 };
 
-// Personality unit-strength modifiers (Age 116, affect unit values above):
-//   The General:  +2 offensive elite strength
-//   The Cleric:   +1 elite defensive value, +1 defensive specialist strength
-//   The War Hero: +2 offensive specialist strength
-// Only the elite-offense one matters for the withheld-elite calculation.
+// Unit-strength bonuses that raise a unit's OFFENSE value ("Affects NW", so the
+// game already folds them into sot.offPoints / offPointsHome). They matter here
+// ONLY where the tool REBUILDS offense from raw unit counts — the withheld-elite
+// subtraction and the per-army wave slots (_wpUnitsOff) — so those match the API
+// total. NEVER add them on top of offPoints/offPointsHome (that double-counts).
+// UPDATE EVERY AGE.
+//
+// Elite offense (Age 116):  The General +2.
 const PERS_ELITE_OFF_BONUS = { 'general': 2 };
+// Offensive-specialist offense (Age 116):  The War Hero +2 (always active).
+const PERS_OSPEC_OFF_BONUS = { 'war hero': 2 };
+// Race ospec bonuses that apply ONLY in war. The wave planner always plans war
+// attacks, so these are treated as active in the offense split.
+//   Avian "Dive Bomb": +2 offensive-specialist offense (war only).
+const RACE_WAR_OSPEC_OFF_BONUS = { 'avian': 2 };
+// (Defensive personality bonuses — Cleric +1 elite def / +1 dspec — are not used
+//  by the offense model; the game already reflects them in defPointsHome.)
+
+// ── Race war doctrines (Age 116) ─────────────────────────────────────────────
+// A kingdom-wide bonus each race grants WHILE AT WAR. Strength scales with how
+// many provinces of that race you have: 1st province +2.0%, each additional +1%
+// (Elf/Faery/Halfling +2%), capped per effect (global cap 12.5%). Each effect's
+// `cap` is its "up to" ceiling from the FINAL doc.
+// DISPLAY-ONLY in this tool: while at war the API's som.ome/som.dme already
+// include the active doctrine, so this NEVER feeds the offense math (only Orc's
+// OME would, and it is already inside som.ome). UPDATE EVERY AGE.
+const WAR_DOCTRINE_FIRST     = 2.0;    // % from the 1st province of a race
+const WAR_DOCTRINE_MAX       = 12.5;   // global strength cap
+const WAR_DOCTRINE_PER_EXTRA = { elf: 2, faery: 2, halfling: 2 };  // per extra prov (else 1)
+const WAR_DOCTRINES = {
+  'avian':    { effects: [{ label: 'Attack Time',       sign: '-', cap: 10   }, { label: 'Military Wage',      sign: '-', cap: 12.5 }] },
+  'dark elf': { effects: [{ label: 'Instant Spell Dmg', sign: '+', cap: 12.5 }, { label: 'Rune Cost',          sign: '-', cap: 12.5 }] },
+  'dryad':    { effects: [{ label: 'DME',               sign: '+', cap: 10   }, { label: 'Def Casualties',     sign: '-', cap: 12.5 }] },
+  'dwarf':    { effects: [{ label: 'Construction Cost', sign: '-', cap: 12.5 }, { label: 'Building Eff',       sign: '+', cap: 12.5 }] },
+  'elf':      { effects: [{ label: 'Enemy Sorcery Dmg', sign: '-', cap: 12.5 }, { label: 'Spell Duration',     sign: '+', cap: 12.5 }] },
+  'faery':    { effects: [{ label: 'Def WPA',           sign: '+', cap: 12.5 }, { label: 'Enemy Thievery Dmg', sign: '-', cap: 12.5 }] },
+  'halfling': { effects: [{ label: 'Sabotage Dmg',      sign: '+', cap: 12.5 }, { label: 'Thief Losses',       sign: '-', cap: 12.5 }] },
+  'human':    { effects: [{ label: 'Spec Credit Gains', sign: '+', cap: 12.5 }, { label: 'Training Cost',      sign: '-', cap: 12.5 }] },
+  'orc':      { effects: [{ label: 'OME',               sign: '+', cap: 10   }, { label: 'Raze Dmg',           sign: '+', cap: 12.5 }], offense: true },
+  'undead':   { effects: [{ label: 'Enemy Battle Gains',sign: '-', cap: 12.5 }, { label: 'Plague Spread',      sign: '+', cap: 12.5 }] },
+};
 
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#2b3333;color:#ffffff;font-family:Rajdhani,sans-serif;font-size:19px;display:flex;flex-direction:column;overflow:hidden}

@@ -20,12 +20,26 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - All shared in-memory state lives on the `S` object in `src/state.js`.
 - **Age-varying game constants are centralized in `src/config.js`** under the
   "AGE-VARYING SOLVER CONSTANTS -- UPDATE EVERY AGE" block: `RACE_UNITS`,
-  `PERS_ELITE_OFF_BONUS`, `FANATICISM_OFF_MULT`, `NW_OPTIMAL`, `NW_WAR_RANGE`,
-  `GEN_OFF_BONUS`, `TM_GAIN` (land-gain curve), `RACE_POP_MULT`. Every consumer
+  `PERS_ELITE_OFF_BONUS`, `PERS_OSPEC_OFF_BONUS`, `RACE_WAR_OSPEC_OFF_BONUS`,
+  `FANATICISM_OFF_MULT`, `NW_OPTIMAL`, `NW_WAR_RANGE`, `GEN_OFF_BONUS`,
+  `TM_GAIN` (land-gain curve), `RACE_POP_MULT`, `WAR_DOCTRINES`. Every consumer
   (utils/player/waveplan/kingdom/tmmatchup) references these -- a per-age update
   is a one-file edit here, not a grep hunt. The OME/DME mult tables stay EMPTY
   (SoT points already include efficiency). Per-age steps: edit this block from
   the "AGE nnn FINAL CHANGES" doc, then harness-verify.
+- **Unit-strength offense bonuses** (General +2 elite, War Hero +2 ospec, Avian
+  Dive Bomb +2 ospec) are applied ONLY in `waveplan.js:_wpUnitsOff`, the one
+  place offense is rebuilt from raw unit counts (per-army wave slots). Everywhere
+  else uses the API's `offPoints`, which already bakes them in -- never add them
+  on top of `offPoints`/`offPointsHome` (double-count). New per-age unit bonuses
+  go in the config tables above.
+- **War doctrines are display-only.** Shared helpers in `utils.js`
+  (`_wdRaceCounts`/`_wdStrength`/`_wdEffects`/`_wdSubtitle`/`_wdSummarySection`)
+  render a per-province line + an "Active/Enemy War Doctrines" summary, strength
+  scaled by same-race province count. Kingdom tab shows OWN doctrines; War Board
+  (board.js) shows the ENEMY's. At war the API's `som.ome/dme` and off/def points
+  already include the active doctrine, so `WAR_DOCTRINES` never feeds the offense
+  math -- not even Orc's OME.
 - Firestore access is plain REST (`src/firebase.js`): `fbWrite`, `fbGet`, `fbQuery`, `fbDelete`.
   Project `utopia-leaderboard`, rules wide open, docs keyed by `kdId` = own location with `:` â†’ `_`.
 - Thresholds, webhook, API endpoint/key persist inside the war plan JSON (`warplan/{kdId}`) â€”

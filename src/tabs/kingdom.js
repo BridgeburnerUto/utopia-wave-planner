@@ -166,6 +166,9 @@ function _armyReturnInfo(prov) {
   return { away: armies.length, returns: armies, stray, allOverdue };
 }
 
+// War-doctrine helpers (_wdRaceCounts/_wdStrength/_wdEffects/_wdSubtitle/
+// _wdSummarySection) are shared from utils.js — used here and on the War Board.
+
 // ── Render ───────────────────────────────────────────────────────────────────
 
 function renderKingdom() {
@@ -180,6 +183,7 @@ function _buildKingdom() {
   }
 
   const provs = [...S.own.provinces].sort((a, b) => (b.networth || 0) - (a.networth || 0));
+  const raceCounts = _wdRaceCounts(S.own.provinces);
 
   let kdMaxOff = 0, unknownElites = 0, tunedCount = 0, strayCount = 0;
   const rows = provs.map(p => {
@@ -212,6 +216,13 @@ function _buildKingdom() {
       for provinces that keep elites home.</span>
     </div>`;
   }
+
+  // ── Active war doctrines (own kingdom, awareness only) ──────────────────────
+  h += _wdSummarySection(S.own.provinces, {
+    title:       'ACTIVE WAR DOCTRINES — kingdom-wide while at war',
+    offenseNote: "Orc's ⚔ OME is already included in each province's SoT off (shown for awareness, not added on top).",
+    note:        'Already reflected in the OME/DME the API reports.',
+  });
 
   h += `<div class="wsech">// ATTACKER ROSTER — Age 116 unit values · fanaticism assumed cast</div>
     <table style="width:100%;border-collapse:collapse;font-size:17px">
@@ -263,7 +274,7 @@ function _buildKingdom() {
 
     h += `<tr style="border-bottom:1px solid #617070">
       <td style="padding:6px 8px;font-weight:600">${esc(p.name)}${warnHtml}</td>
-      <td style="padding:6px 8px;color:#7a9090">${esc(p.race || '?')} · ${esc(p.sot?.personality || '?')}</td>
+      <td style="padding:6px 8px;color:#7a9090">${esc(p.race || '?')} · ${esc(p.sot?.personality || '?')}${_wdSubtitle(p.race, raceCounts)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(p.networth || 0)}</td>
       <td style="padding:6px 8px;font-family:monospace">${(() => {
         const pop = _ownPopPct(p);

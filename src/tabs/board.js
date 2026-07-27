@@ -104,6 +104,8 @@ function _buildBoard() {
 
   if (!S.boardSort) S.boardSort = { col: 'slot', dir: 1 };
 
+  const enemyCounts = _wdRaceCounts(S.enemy.provinces);
+
   // Build row data from enemy provinces
   const rows = S.enemy.provinces.map(p => {
     const sot  = p.sot || {};
@@ -256,7 +258,7 @@ function _buildBoard() {
         ${opTags ? `<div style="margin-top:2px;">${opTags}</div>` : ''}
         ${r.notes ? `<div style="font-size:17px;color:#7a9090;font-style:italic;margin-top:1px;">${esc(r.notes.substring(0,40))}${r.notes.length>40?'…':''}</div>` : ''}
       </td>
-      <td style="padding:7px 10px;color:#7a9090;font-size:17px;">${esc(r.race)}</td>
+      <td style="padding:7px 10px;color:#7a9090;font-size:17px;">${esc(r.race)}${_wdSubtitle(r.race, enemyCounts)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.nw)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.land)}</td>
       <td style="padding:7px 10px;text-align:right;">${fK(r.nwpa)}</td>
@@ -326,7 +328,14 @@ function _buildBoard() {
       </table>
     </div>`;
 
-  return enemyBar + table + _buildOpsPanel();
+  // Enemy war-doctrine awareness — what the enemy KD gains in war (display only)
+  const doctrines = _wdSummarySection(S.enemy.provinces, {
+    title:       'ENEMY WAR DOCTRINES — active while at war',
+    offenseNote: "Orc's ⚔ OME boosts the enemy's own attacks (already in their Off).",
+    note:        'Already reflected in the Off/Def the API reports for enemy provinces.',
+  });
+
+  return enemyBar + doctrines + table + _buildOpsPanel();
 }
 
 // ── Ops panel (modal overlay) ──────────────────────────────────────────────────
