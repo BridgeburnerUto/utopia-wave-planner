@@ -86,7 +86,10 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - Verified in harness: Total NW view unchanged (2 polylines), Popspace view 4 polylines
   (2 dashed), correct legend/cards/precision, no console errors.
 
-### Economy tab -- DONE (built + harness-verified 2026-07-28, NOT committed/live-tested)
+### Economy tab -- DONE (committed & pushed 2026-07-28/29, NOT live-tested)
+- **2026-07-29: Own/Enemy KD switch** at the top of the tab (`S.econView`,
+  `__wpA.econView`), **defaults to ENEMY** -- enemy econ matters most in war
+  (user request; the old stacked own+enemy layout buried the enemy table).
 - **New ECONOMY tab** (src/tabs/economy.js, between NW Graph and Alerts): own + enemy
   per-province tables (Peas, Empl% = jobs filled, Banks%, Arm%, Inc Sci, Gross/t,
   Wages/t, Net/t, flags), sorted by net DESC, with KD summary cards (gross/wages/net/
