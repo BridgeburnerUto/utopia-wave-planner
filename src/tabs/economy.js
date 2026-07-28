@@ -169,13 +169,20 @@ function _econSection(title, provinces, accent) {
 function renderEconomy() {
   const el = $id('__wpc_economy');
   if (!el) return;
+  const isEnemy = S.econView !== 'own';
   renderTab('__wpc_economy', () =>
-    `<div style="font-size:15px;color:#7a9090;margin-bottom:12px">
+    `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+      <span style="font-size:17px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:4px">Kingdom</span>
+      <button class="wb${isEnemy ? ' g' : ''}" style="font-size:17px;padding:3px 12px" onclick="__wpA.econView('enemy')">Enemy${S.eLoc ? ' (' + esc(S.eLoc) + ')' : ''}</button>
+      <button class="wb${!isEnemy ? ' g' : ''}" style="font-size:17px;padding:3px 12px" onclick="__wpA.econView('own')">Own${S.own?.location ? ' (' + esc(S.own.location) + ')' : ''}</button>
+    </div>
+    <div style="font-size:15px;color:#7a9090;margin-bottom:12px">
       Net = gross income − army wages, per tick. Wage rate from Military Advisor intel where
       available, else ${WAGE_RATE_ASSUMED}%* assumed. Dragons, rituals, riots and plague income
       effects not modeled. ⚠ = no survey (banks/armouries as 0, est).
     </div>`
-    + _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040')
-    + _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400'));
+    + (isEnemy
+      ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400')
+      : _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040')));
   renderEconBadges();
 }

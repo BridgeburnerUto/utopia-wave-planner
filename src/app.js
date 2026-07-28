@@ -461,6 +461,7 @@ window.__wpA = {
   togOp,
   setNote(slot, v) { if (slot != null) _pp(slot).notes = v; },
   nwView(v) { S.nwView = v; renderNwGraph(); },
+  econView(v) { S.econView = v; renderEconomy(); },
 
   /** Read current location inputs + reload graph */
   nwLoad() {

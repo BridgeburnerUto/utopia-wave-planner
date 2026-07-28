@@ -40,6 +40,7 @@ const S = {
   currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
   snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
   nwView: 'total',
+  econView: 'enemy',  // Economy tab KD switch — enemy econ matters most in war
   nwLocA: '',         // KD A location for world NW graph (defaults to own on first open)
   nwLocB: '',         // KD B location for world NW graph (defaults to enemy on first open)
   nwLookback: 24,     // lookback in hours/ticks for world NW graph (preset mode)
