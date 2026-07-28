@@ -47,6 +47,7 @@ function buildOverlay() {
   <div class="wkb"><div class="l">Enemy</div><div class="v va" id="__wpene">—</div></div>
   <div class="wkb"><div class="l">War</div><div class="v" id="__wpwar">—</div></div>
   <div id="__wprit" style="display:contents"></div>
+  <div id="__wpecon" style="display:contents"></div>
   <span class="wsav" id="__wpsav"></span>
 </div>
 
@@ -57,6 +58,7 @@ function buildOverlay() {
   <div class="wt"     id="__wpt_kingdom"     onclick="__wpA.tab('kingdom')">KINGDOM</div>
   <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">WAVE PLAN</div>
   <div class="wt"     id="__wpt_nwgraph"     onclick="__wpA.tab('nwgraph')">NW GRAPH</div>
+  <div class="wt"     id="__wpt_economy"     onclick="__wpA.tab('economy')">ECONOMY</div>
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
   <div class="wt"     id="__wpt_leaderboard" onclick="__wpA.tab('leaderboard')">LEADERBOARD</div>
   <div class="wt"     id="__wpt_kddb"        onclick="__wpA.tab('kddb')">KD DATABASE</div>
@@ -71,6 +73,7 @@ function buildOverlay() {
   <div id="__wpc_kingdom"     style="display:none"></div>
   <div id="__wpc_summary"     style="display:none"></div>
   <div id="__wpc_nwgraph"     style="display:none"></div>
+  <div id="__wpc_economy"     style="display:none"></div>
   <div id="__wpc_alerts"      style="display:none"></div>
   <div id="__wpc_leaderboard" style="display:none"></div>
   <div id="__wpc_kddb"        style="display:none"></div>

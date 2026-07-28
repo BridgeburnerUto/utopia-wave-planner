@@ -115,6 +115,33 @@ const GEN_OFF_BONUS = 0.05;
 //   Age 116: Halfling +12.5% Population, Faery −5% Population.
 const RACE_POP_MULT = { halfling: 1.125, faery: 0.95 };
 
+// ── Economy (income / wages) — base formulas from utopiawiki.com Economy +
+// Growth pages, age-specific modifiers from the AGE 116 doc. Used by
+// tabs/economy.js. Wage rate (20–200% setting) is invisible in intel and
+// assumed 100%; dragons/rituals/riots/plague income effects not modeled.
+const INCOME_PER_EMPLOYED   = 3.0;   // gc per employed peasant per tick
+const INCOME_PER_UNEMPLOYED = 1.0;
+const INCOME_PER_PRISONER   = 0.75;
+const HUMAN_PRISONER_EXTRA_GC = 2.0; // Civil Administration (Age 116)
+const JOBS_PER_ACRE         = 25;    // jobs per built non-home acre
+const BANK_FLAT_GC          = 25;    // gc per bank acre × BE
+const BANK_INCOME_RATE      = 1.5;   // % income per % built (x·(1−x) curve, max 37.5%)
+const ARMOURY_WAGE_RATE     = 2.0;   // % wage cut per % built (x·(1−x) curve, max 50%)
+const WAGE_PER_SPEC         = 0.5;   // gc/tick per off+def spec (soldiers/mercs unpaid)
+const WAGE_PER_ELITE        = 0.75;  // gc/tick per elite
+// Age 116 race/personality economy modifiers (1.0 fallback):
+const RACE_INCOME_MULT    = { human: 1.30 };
+const RACE_WAGE_MULT      = { human: 1.25, avian: 0.75 };
+const PERS_INCOME_MULT    = {};                 // none this age
+const PERS_WAGE_MULT      = {};                 // none this age
+const PERS_BANK_PROD_MULT = { artisan: 1.25 };  // +25% Building Production (Banks)
+// Honor income % by title (cumulative; War Hero's +100% Honor Effects doubles it)
+const HONOR_INCOME_PCT = {
+  peasant: 0, knight: 2, lady: 2, lord: 4, 'noble lady': 4,
+  baron: 6, baroness: 6, viscount: 8, viscountess: 8, count: 12, countess: 12,
+  marquis: 16, marchioness: 16, duke: 20, duchess: 20, prince: 24, princess: 24,
+};
+
 // TM land-gain estimate (_estimateTMGain in tabs/player.js). Piecewise curves +
 // modifier factors, all game-tuned. rawGain = tLand × BASE_PCT × rpnwF × rknwF
 // × relF × mapF × castleF × ritualF, capped at min(ownLand,tLand) × CAP_PCT.

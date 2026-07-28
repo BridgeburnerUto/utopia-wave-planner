@@ -34,6 +34,7 @@ const ORDER = [
   'tabs/summary.js',
   'tabs/alerts.js',
   'tabs/nwgraph.js',
+  'tabs/economy.js',
   'tabs/intel.js',
   'tabs/leaderboard.js',
   'tabs/kddb.js',

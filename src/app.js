@@ -247,6 +247,7 @@ window.__wpA = {
 
       // Render ritual badges and load SN ack state
       renderRitualBadges();
+      renderEconBadges();
       loadSnAck().then(() => renderAlerts());
 
       // Silent background op sync — never blocks UI
@@ -297,6 +298,7 @@ window.__wpA = {
       _refreshWarStatus();  // refresh war status cache after own + enemy are loaded
       this.meta();
       renderRitualBadges();
+      renderEconBadges();
       snapshotNW();
       checkAndSendDiscordAlerts();
       this.syncBackend();
@@ -368,7 +370,7 @@ window.__wpA = {
 
   tab(t) {
     S.tab = t;
-    ['board', 'player', 'intel', 'kingdom', 'summary', 'nwgraph', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
+    ['board', 'player', 'intel', 'kingdom', 'summary', 'nwgraph', 'economy', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
       $id('__wpc_' + x).style.display = x === t ? '' : 'none';
       const el = $id('__wpt_' + x);
       el.className = 'wt' + (x === t ? (x === 'player' ? ' on ong' : ' on') : '');
@@ -379,6 +381,7 @@ window.__wpA = {
     if (t === 'kingdom')     renderKingdom();
     if (t === 'summary')     renderWavePlan();
     if (t === 'nwgraph')     renderNwGraph();
+    if (t === 'economy')     renderEconomy();
     if (t === 'alerts')      renderAlerts();
     if (t === 'leaderboard') renderLeaderboard();
     if (t === 'kddb')        renderKddb();

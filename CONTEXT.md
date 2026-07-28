@@ -1,6 +1,8 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-07-14 (evening).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-07-28.
+
+**Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
 ## The two tools
 
@@ -48,6 +50,77 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - IS SoT field names (verified from the IS bundle): `sot.soldiers`, `sot.food`, `sot.money`,
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
+
+## Recent work (2026-07-28) -- Popspace graph DONE (harness-verified, NOT committed); Economy tab designed
+
+### Popspace graph (built + harness-verified this session)
+- **New "Popspace" view button** on the NW Graph tab (S.nwView = 'pop'), alongside Total/War NW.
+- Per KD up to two lines: **capacity** (solid) and **current pop** (dashed, same color, 0.65 opacity).
+- **Hybrid data source** (user-chosen): capacity baseline = land x 25 from the hourly
+  `kd_nw_history` dump docs (works for ANY two KDs, full back-history already exists);
+  where own war snapshots exist, the survey/race/science-precise value REPLACES the
+  baseline in that hour (mixing both in one hour would zigzag by the race multiplier).
+  Current-pop lines come only from war snapshots (world dump has no population).
+- **utils.js refactor**: `_ownPopPct` split into shared `_provLivingSpace(prov)` ->
+  {cap, precise} (raw LS x RACE_POP_MULT x housing science; precise = survey used;
+  works for enemy provinces too -- they carry survey/sos when opped) and
+  `_provCurrentPop(prov)` (peasants+troops+thieves+wizards). Behavior verified
+  unchanged (Kingdom roster still shows 100-103% "needs acres" on the fixture).
+  `_enemyPopPct` deliberately NOT upgraded to surveys (solver sort behavior untouched)
+  -- possible future improvement.
+- **snapshotNW() now also writes**: `eneLoc` (so a previous war's enemy values are never
+  overlaid onto a different KD B -- overlay requires snap.eneLoc === graphed loc),
+  `ownCap/ownPop/ownSurveyed/ownN`, `eneCap/enePop/eneSurveyed/eneN` (via new
+  `_calcKdPopspace()`). Old snapshot docs lack these -> their enemy values are skipped.
+- **SVG renderer generalized**: `_nwSvgGraph(times, series, opts)` in nwgraph.js renders
+  N series ({vals, color, label, dash, opacity, width}); `opts.connectGaps` draws one
+  continuous line through nulls (used by pop view; NW views keep gap-breaking segments).
+  `_buildWorldGraph` now delegates to it; `_buildPopGraph` builds the pop view with
+  summary cards: cap A/B + delta, Current Pop A vs B, Precision ("own 23/23 - eny 8/22
+  provs surveyed" from the latest snapshot, or "acres x25 / no war snapshots in range").
+- **Harness upgraded** (mockup/harness.html, gitignored): the Firestore `:runQuery` mock
+  now parses the structuredQuery body and serves synthetic `kd_nw_history` (25 hourly
+  docs per KD, hour-ALIGNED storedAt -- real batches share one storedAt; misaligned
+  timestamps produce dots instead of lines) and `nw_snapshots` (13 war-tick docs with
+  precise caps != land x 25 so the overlay is visible). Other collections still [].
+- Verified in harness: Total NW view unchanged (2 polylines), Popspace view 4 polylines
+  (2 dashed), correct legend/cards/precision, no console errors.
+
+### Economy tab -- DONE (built + harness-verified 2026-07-28, NOT committed/live-tested)
+- **New ECONOMY tab** (src/tabs/economy.js, between NW Graph and Alerts): own + enemy
+  per-province tables (Peas, Empl% = jobs filled, Banks%, Arm%, Inc Sci, Gross/t,
+  Wages/t, Net/t, flags), sorted by net DESC, with KD summary cards (gross/wages/net/
+  precision) per section. **Header cards** `#__wpecon` next to the ritual badges:
+  "Own Net X/t" / "Eny Net X/t" (~ marker when estimates involved), click -> tab.
+  Rendered via renderEconBadges() after both renderRitualBadges() call sites in app.js.
+- **Net = gross - army wages** (user decision). Formulas (utopiawiki.com Economy +
+  Growth -- NOTE: NEW wiki, https://utopiawiki.com; old wiki.utopia-game.com has an
+  EXPIRED CERT; fandom wiki paywalled):
+  - jobs = built non-home acres x 25; employed = min(peasants, jobs)
+  - raw = 3 x employed + 1 x unemployed + 0.75 x prisoners (+2.0 human Civil Admin)
+          + bankAcres x 25 x BE (x1.25 Artisan Building Production)
+  - %-buildings use x(1-x) curve: rate x pct x (1-pct/100) x BE, cap rate x 25
+    (Banks rate 1.5 -> max 37.5% income; Armouries rate 2.0 -> max 50% wage cut)
+  - gross = raw x (1+banks%) x (1+Alchemy sci) x (1+honor) x race x pers
+  - wages = (specs x 0.5 + elites x 0.75) x (1-armoury%) x (1-Bookkeeping sci) x race
+    (soldiers/mercs/horses unpaid; wage rate 20-200% NOT in intel -> assumed 100%)
+  - honor income % from `p.title` (HONOR_INCOME_PCT table, approximate; War Hero x2)
+- **Age 116 constants centralized in config.js** economy block: INCOME_PER_*,
+  JOBS_PER_ACRE, BANK_FLAT_GC, BANK_INCOME_RATE, ARMOURY_WAGE_RATE, WAGE_PER_SPEC/
+  ELITE, RACE_INCOME_MULT {human 1.30}, RACE_WAGE_MULT {human 1.25, avian 0.75},
+  PERS_BANK_PROD_MULT {artisan 1.25}, HUMAN_PRISONER_EXTRA_GC, HONOR_INCOME_PCT.
+  UPDATE EVERY AGE (source: AGE 116 FINAL CHANGES doc + utopiawiki).
+- `sot.be` (a %) is used directly as BE. `sot.gcpa` is stockpiled gold per acre
+  (gcpa x land ~= money), NOT income. Enemy has NO som -> wages from sot totals.
+- **Missing intel handling** (user decision): no survey -> banks/armouries/homes = 0,
+  row flagged with warning emoji, precision card counts "N est"; no SoT -> skipped.
+  Plague flagged (emoji) but income effect NOT applied (multiplier unknown);
+  dragons/rituals/Incite Riots/war-doctrine wage effects not modeled (v1).
+- Harness-verified: 23 own + 22 enemy rows, humans top earners (sanity: 34k peas
+  x3 x1.3 x~1.5 alch x1.06 baron ~= 213k/t matches), est flags on 14 unsurveyed
+  enemy provs, badges "Own Net 1.9M/t / Eny Net 624k/t ~", no console errors,
+  Board/NW Graph unaffected. Wired in build.js (tabs/economy.js), dom.js (tab
+  button + content div + #__wpecon), app.js (tab list/render/badges).
 
 ## Recent work (2026-07-13/14) â€” committed & pushed 2026-07-14, NOT yet live-tested
 
@@ -243,6 +316,9 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
   exercised a wave re-assignment.)
 
 ### Possible next steps (all optional)
+- Economy v2: plague/dragon/riot/war-doctrine income-wage modifiers; honor pop bonus
+  in _provLivingSpace; upgrade _enemyPopPct to surveys (changes solver sort!); net
+  income graphed over time (user declined for v1).
 - Define the additional wave types (leader will specify).
 - Companion (war-companion.html): render waveSeq slice on mobile (data already synced).
 - Live re-check at send time: compare planned def vs latest intel before "SEND NOW".

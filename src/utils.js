@@ -133,29 +133,25 @@ function $id(id) {
 }
 
 /**
- * Own-province pop% — Utopia formula (moved out of calcAttacks; also used by
- * the wave solver's pop-strategy warnings):
- *   Current Population = peasants + totalTroops + thieves + wizards
- *   Raw Living Space   = builtAcres*25 + barrenAcres*15 + homesAcres*35 (survey when available)
- *   Mod Living Space   = Raw × Race Bonus × (1 + Housing Science %)
- *   Pop%               = Current Population / Mod Living Space × 100 (capped 150)
+ * Living space (max population capacity) of a province — Utopia formula:
+ *   Raw Living Space = builtAcres*25 + barrenAcres*15 + homesAcres*35 (survey when available)
+ *   Mod Living Space = Raw × Race Bonus × (1 + Housing Science %)
  * Race pop multiplier from config RACE_POP_MULT (Halfling & Faery differ from
  * ×1.0 — update it each age). Honor bonus not available → ×1.0.
- * sot.ppa is peasants-per-acre only, NOT total people — don't use it directly.
- * Returns int % or null when land/space unknown.
+ * Works for own AND enemy provinces — enemy survey/sos are present when opped.
+ * Returns { cap, precise } (precise = a survey informed the number) or null
+ * when land is unknown.
  */
-function _ownPopPct(prov) {
+function _provLivingSpace(prov) {
   const _sot  = prov.sot || {};
   const _land = prov.land || _sot.land || 0;
   if (!(_land > 0)) return null;
-  const _totalPop = (_sot.peasants || 0) + (_sot.totalTroops || 0)
-                  + (_sot.thieves  || 0) + (_sot.wizards    || 0);
 
   const r = (prov.race || '').toLowerCase();
   const _racePopMult = RACE_POP_MULT[r] || 1;
 
   const _bArr = prov.survey?.buildings;
-  let _rawLS;
+  let _rawLS, _precise = false;
   if (_bArr && _bArr.length > 0) {
     const _barrenEntry = _bArr.find(b => /barren/i.test(b.name));
     const _homesEntry  = _bArr.find(b => /^homes$/i.test(b.name));
@@ -167,13 +163,35 @@ function _ownPopPct(prov) {
     const _barrenAcres = _land * _barrenPct / 100;
     const _homesAcres  = _land * _homesPct  / 100;
     const _builtAcres  = _land - _barrenAcres - _homesAcres;
-    _rawLS = _builtAcres * 25 + _barrenAcres * 15 + _homesAcres * 35; // Homes = 25 built + 10 bonus
+    _rawLS   = _builtAcres * 25 + _barrenAcres * 15 + _homesAcres * 35; // Homes = 25 built + 10 bonus
+    _precise = true;
   } else {
     _rawLS = _land * 25; // no survey — simplified fallback
   }
   const _housingEffect = prov.sos?.books?.find(b => b.type === 'Housing')?.effect || 0;
-  const _modLS = _rawLS * _racePopMult * (1 + _housingEffect / 100);
-  return _modLS > 0 ? Math.min(Math.round(_totalPop / _modLS * 100), 150) : null;
+  const cap = _rawLS * _racePopMult * (1 + _housingEffect / 100);
+  return cap > 0 ? { cap, precise: _precise } : null;
+}
+
+/** Current population = peasants + totalTroops + thieves + wizards (SoT).
+ *  sot.ppa is peasants-per-acre only, NOT total people — don't use it.
+ *  Returns null when no SoT population components are present. */
+function _provCurrentPop(prov) {
+  const _sot = prov.sot || {};
+  if (_sot.peasants == null && _sot.totalTroops == null) return null;
+  return (_sot.peasants || 0) + (_sot.totalTroops || 0)
+       + (_sot.thieves  || 0) + (_sot.wizards    || 0);
+}
+
+/**
+ * Own-province pop% (moved out of calcAttacks; also used by the wave solver's
+ * pop-strategy warnings): Current Population / Mod Living Space × 100, capped
+ * at 150. Returns int % or null when land/space unknown.
+ */
+function _ownPopPct(prov) {
+  const _ls = _provLivingSpace(prov);
+  if (!_ls) return null;
+  return Math.min(Math.round((_provCurrentPop(prov) || 0) / _ls.cap * 100), 150);
 }
 
 /**
