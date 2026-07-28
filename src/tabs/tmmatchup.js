@@ -159,7 +159,7 @@ function _buildTmMatchup() {
     const wtStr = wt != null ? `WT ${wt.toFixed(1)}%` : 'WT —';
     const wtCol = wt == null ? '#555' : wt >= 15 ? '#c8843a' : wt >= 7 ? '#c8c03a' : '#7a9090';
     return `<th style="padding:6px 8px;font-size:13px;color:#9ab;white-space:nowrap;border-bottom:1px solid #2a3a3a;min-width:90px;">
-      <div style="font-weight:700;color:#cde">${esc(ep.name || '?')}</div>
+      <div style="font-weight:700;color:#cde">${esc(pnum(ep.slot, ep.name || '?'))}</div>
       <div style="color:#7a9090;font-size:11px">${ep.race ? esc(ep.race) : ''} · ${fK(ep.networth||0)} NW</div>
       <div style="font-size:11px;margin-top:2px;display:flex;gap:6px;align-items:center;">
         <span style="color:#9ab;">def ${colKey}: <b style="color:#cde">${activeOp.type === 'wpa' ? _fmt(_dWpa(ep)) : _fmt(_dTpa(ep))}</b></span>
@@ -188,7 +188,7 @@ function _buildTmMatchup() {
 
     return `<tr>
       <td style="padding:6px 10px;white-space:nowrap;border-bottom:1px solid #1a2a2a;border-right:2px solid #2a4a4a;position:sticky;left:0;background:#0e1a1a;z-index:1;">
-        <div style="font-weight:700;color:#cde;font-size:14px">${esc(op.name || '?')}</div>
+        <div style="font-weight:700;color:#cde;font-size:14px">${esc(pnum(op.slot, op.name || '?'))}</div>
         <div style="font-size:11px;color:#7a9090">${op.race ? esc(op.race) : ''} · ${fK(ownNw)} NW</div>
         <div style="font-size:12px;color:#9ab;margin-top:2px;">
           off ${colKey}: <b style="color:#cde">${_fmt(ownVal)}</b>

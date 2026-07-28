@@ -428,11 +428,11 @@ function generateWaveSeq(waveType) {
     // fewer losses); hold one back for ambush when plenty of off stays home.
     const fin = _wpFinalizeSlotHits(sl, seq.slice(slotSeqStart), gensLeft);
     if (fin.heldGen) ambushHolds.push({
-      attacker: sl.attacker, slotKey: sl.key, leftover: Math.round(fin.leftover),
+      attacker: sl.attacker, provSlot: sl.provSlot, slotKey: sl.key, leftover: Math.round(fin.leftover),
     });
   }
 
-  const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => t.name);
+  const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => pnum(t.slot, t.name));
   const totalGains = seq.reduce((s, h) => s + (h.estGain || 0), 0);
   return { seq, slots, targets, uncovered, idleSlots, ambushHolds,
            chainStatus: _wpChainStatus(targets),
@@ -500,7 +500,7 @@ function resimulateWaveSeq(seq) {
     if (!sl) continue;
     const fin = _wpFinalizeSlotHits(sl, hits.filter(h => !h.risky), Math.max(0, sl.gensLeft));
     if (fin.heldGen) ambushHolds.push({
-      attacker: sl.attacker, slotKey: key, leftover: Math.round(fin.leftover),
+      attacker: sl.attacker, provSlot: sl.provSlot, slotKey: key, leftover: Math.round(fin.leftover),
     });
   }
   return { seq: out, ambushHolds, chainStatus: _wpChainStatus(targets) };
@@ -512,7 +512,7 @@ async function postWaveSeqToDiscord(seq) {
   if (!S.discordWebhook || !seq?.length) return false;
   const fmtT = s => s <= 0 ? 'now' : fA(s);
   const lines = seq.map(h =>
-    `**#${h.n}** ${h.attacker} → **${h.target}** · ${h.type} · ${h.gens} gen${h.gens > 1 ? 's' : ''}` +
+    `**#${h.n}** ${pnum(h.provSlot, h.attacker)} → **${pnum(h.targetSlot, h.target)}** · ${h.type} · ${h.gens} gen${h.gens > 1 ? 's' : ''}` +
     ` · ${fK(h.sentOff)} off · ${fmtT(h.availableAt)}` +
     (h.estGain ? ` · ~${fK(h.estGain)} ac` : '') +
     (h.marginal ? ' · ⚠ marginal' : '') + (h.isWall ? ' · wall' : '') +

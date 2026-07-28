@@ -324,46 +324,46 @@ function _gatherAlerts(thr) {
         if (food  != null && thr.enemyFoodRich  > 0 && food  > thr.enemyFoodRich)
           al.push({ group: 'enemy_rich', badge: 'FOOD', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
-            t: `<b>${esc(p.name)}</b> has ${fK(food)} food — steal / vermin${age}` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> has ${fK(food)} food — steal / vermin${age}` });
 
         if (gc    != null && thr.enemyGcRich    > 0 && gc    > thr.enemyGcRich)
           al.push({ group: 'enemy_rich', badge: 'GC', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
-            t: `<b>${esc(p.name)}</b> has ${fK(gc)} gc — fools gold / steal${age}` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> has ${fK(gc)} gc — fools gold / steal${age}` });
 
         if (runes != null && thr.enemyRunesRich > 0 && runes > thr.enemyRunesRich)
           al.push({ group: 'enemy_rich', badge: 'RUNES', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
-            t: `<b>${esc(p.name)}</b> has ${fK(runes)} runes — lightning strike / steal${age}` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> has ${fK(runes)} runes — lightning strike / steal${age}` });
 
         if (solds != null && thr.solds          > 0 && solds > thr.solds)
           al.push({ group: 'enemy_rich', badge: 'SOLDS', cls: 'wai',
             bg: 'background:rgba(170,102,255,.06);border:1px solid rgba(170,102,255,.15);',
-            t: `<b>${esc(p.name)}</b> has ${fK(solds)} soldiers — nightmares / meteor showers${age}` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> has ${fK(solds)} soldiers — nightmares / meteor showers${age}` });
 
         if (food  != null && thr.enemyFoodLow   > 0 && food  < thr.enemyFoodLow)
           al.push({ group: 'enemy_low', badge: 'STARVE', cls: 'wau',
             bg: 'background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);',
-            t: `<b>${esc(p.name)}</b> only ${fK(food)} food — vermin + drought + gluttony${age}` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> only ${fK(food)} food — vermin + drought + gluttony${age}` });
       }
 
       // Missing SoM on high OPA
       const opa = p.sot?.opa || 0;
       if (opa > 80 && !p.som)
         al.push({ group: 'military', badge: 'SOM', cls: 'waw2',
-          t: `Missing SoM: <b>${esc(p.name)}</b> — ${opa} OPA attacker` });
+          t: `Missing SoM: <b>${esc(pnum(p.slot, p.name))}</b> — ${opa} OPA attacker` });
 
       // Armies away
       p.som?.armiesAway?.forEach(a => {
         al.push({ group: 'military', badge: 'AWAY', cls: 'wai',
-          t: `Army away: <b>${esc(p.name)}</b> — ${a.oSpecs || 0} oSpecs, ${a.land || 0} acres, ${a.secondsRemaining > 0 ? fA(a.secondsRemaining) + ' to return' : 'overdue'}` });
+          t: `Army away: <b>${esc(pnum(p.slot, p.name))}</b> — ${a.oSpecs || 0} oSpecs, ${a.land || 0} acres, ${a.secondsRemaining > 0 ? fA(a.secondsRemaining) + ' to return' : 'overdue'}` });
       });
 
       // Stale intel
       const da2 = p.calcs?.defPointsSummary?.ageSeconds;
       if (da2 != null && da2 > 28800)
         al.push({ group: 'military', badge: 'STALE', cls: 'waw2',
-          t: `Stale intel: <b>${esc(p.name)}</b> — ${fA(da2)} old` });
+          t: `Stale intel: <b>${esc(pnum(p.slot, p.name))}</b> — ${fA(da2)} old` });
     });
   }
 
@@ -377,17 +377,17 @@ function _gatherAlerts(thr) {
         if (food != null && thr.ownFoodLow > 0 && food < thr.ownFoodLow)
           al.push({ group: 'own', badge: 'FOOD', cls: 'waw2',
             bg: 'background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);',
-            t: `<b>${esc(p.name)}</b> only ${fK(food)} food — send aid!` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> only ${fK(food)} food — send aid!` });
 
         if (peas != null && thr.ownPeasLow > 0 && peas < thr.ownPeasLow)
           al.push({ group: 'own', badge: 'PEONS', cls: 'wau',
             bg: 'background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.2);',
-            t: `<b>${esc(p.name)}</b> only ${fK(peas)} peasants — beware!` });
+            t: `<b>${esc(pnum(p.slot, p.name))}</b> only ${fK(peas)} peasants — beware!` });
       }
 
       p.som?.armiesAway?.forEach(a => {
         al.push({ group: 'own', badge: 'AWAY', cls: 'wai',
-          t: `Own army away: <b>${esc(p.name)}</b> — ${a.secondsRemaining > 0 ? fA(a.secondsRemaining) + ' to return' : 'overdue'}` });
+          t: `Own army away: <b>${esc(pnum(p.slot, p.name))}</b> — ${a.secondsRemaining > 0 ? fA(a.secondsRemaining) + ' to return' : 'overdue'}` });
       });
     });
   }

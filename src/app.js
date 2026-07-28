@@ -823,7 +823,7 @@ window.__wpA = {
       const nw   = p.networth ? fK(p.networth) : '?';
       return `<a class="wnwlink" href="${esc(url)}" target="_blank"
         onclick="this.classList.add('wv')"
-      >${esc(p.name)} <span style="color:#7a9090;font-size:14px">${esc(nw)}</span></a>`;
+      >${esc(pnum(slot, p.name))} <span style="color:#7a9090;font-size:14px">${esc(nw)}</span></a>`;
     }).join('');
 
     panel.innerHTML = `

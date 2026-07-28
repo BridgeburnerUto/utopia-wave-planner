@@ -223,7 +223,7 @@ function _buildBoard() {
     const safeSlot     = r.slot;
     const assignTags   = r.assignedTo.length === 0
       ? '<span style="color:#617070;font-size:15px">KD pool</span>'
-      : r.assignedTo.map(n => `<span class="wtag" style="font-size:13px;margin:1px;cursor:default">${esc(n)}</span>`).join('');
+      : r.assignedTo.map(n => `<span class="wtag" style="font-size:13px;margin:1px;cursor:default">${esc(pnum(_ownSlotByName(n), n))}</span>`).join('');
     const assignCell = isLeader
       ? `<div class="wp-assign-wrap" onclick="event.stopPropagation()">
            <div class="wp-assign-btn" onclick="__wpA.toggleAssignPicker(${safeSlot})">${assignTags}</div>
@@ -238,7 +238,7 @@ function _buildBoard() {
                    return `<label class="wp-assign-item">
                      <input type="checkbox" ${r.assignedTo.includes(name)?'checked':''}
                        onchange="__wpA.toggleProvAssign(${safeSlot},'${safeName}',this.checked)">
-                     <span>${esc(name)}</span>
+                     <span>${esc(pnum(_ownSlotByName(name), name))}</span>
                    </label>`;
                  }).join('')
                : '<div style="font-size:17px;color:#617070;padding:4px">No own provinces loaded</div>'

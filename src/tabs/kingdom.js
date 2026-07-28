@@ -273,7 +273,7 @@ function _buildKingdom() {
       ? `<div style="font-size:13px;color:#e09040">⚠ ${esc(mo.warnings.join(' · '))}</div>` : '';
 
     h += `<tr style="border-bottom:1px solid #617070">
-      <td style="padding:6px 8px;font-weight:600">${esc(p.name)}${warnHtml}</td>
+      <td style="padding:6px 8px;font-weight:600">${esc(pnum(p.slot, p.name))}${warnHtml}</td>
       <td style="padding:6px 8px;color:#7a9090">${esc(p.race || '?')} · ${esc(p.sot?.personality || '?')}${_wdSubtitle(p.race, raceCounts)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(p.networth || 0)}</td>
       <td style="padding:6px 8px;font-family:monospace">${(() => {

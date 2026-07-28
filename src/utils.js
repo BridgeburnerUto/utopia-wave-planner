@@ -97,6 +97,20 @@ function _wdSummarySection(provinces, opts) {
   return h;
 }
 
+/** "[3] Name" — province label with its kingdom slot number (matches in-game
+ *  numbering). Slot unknown → name alone. NOT escaped — wrap in esc(). */
+function pnum(slot, name) {
+  const n = name || '—';
+  return (slot == null || slot === '') ? n : '[' + slot + '] ' + n;
+}
+
+/** Own-province slot lookup by name — for labels where only the name is stored
+ *  (assignedTo lists, ops leaderboard). Returns null when not found. */
+function _ownSlotByName(name) {
+  const p = (S.own?.provinces || []).find(p => p.name === name);
+  return p ? p.slot : null;
+}
+
 /** HTML-escape a string to prevent XSS in innerHTML strings */
 function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')

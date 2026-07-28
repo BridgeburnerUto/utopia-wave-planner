@@ -91,12 +91,12 @@ async function checkAndSendDiscordAlerts() {
   if (foodThr > 0) {
     const lowFood = (S.own.provinces || [])
       .filter(p => p.sot && p.sot.food != null && p.sot.food < foodThr)
-      .map(p => ({ name: p.name, food: p.sot.food }));
+      .map(p => ({ name: p.name, slot: p.slot, food: p.sot.food }));
     next.own_food_low = lowFood.map(p => p.name);
     const prevLowFood = prev.own_food_low || [];
     const newLowFood  = lowFood.filter(p => !prevLowFood.includes(p.name));
     if (newLowFood.length) {
-      const foodLines = newLowFood.map(p => `· ${p.name} — ${fK(p.food)} food`).join('\n');
+      const foodLines = newLowFood.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.food)} food`).join('\n');
       toSend.push({
         _key: 'own_food_low',
         content: '',
@@ -121,12 +121,12 @@ async function checkAndSendDiscordAlerts() {
         const peas = p.sot?.peasants ?? p.sot?.peons;
         return peas != null && peas > 0 && peas < peasThr;
       })
-      .map(p => ({ name: p.name, peas: p.sot?.peasants ?? p.sot?.peons }));
+      .map(p => ({ name: p.name, slot: p.slot, peas: p.sot?.peasants ?? p.sot?.peons }));
     next.own_peas_low = lowPeas.map(p => p.name);
     const prevLowPeas = prev.own_peas_low || [];
     const newLowPeas  = lowPeas.filter(p => !prevLowPeas.includes(p.name));
     if (newLowPeas.length) {
-      const peasLines = newLowPeas.map(p => `· ${p.name} — ${fK(p.peas)} peasants`).join('\n');
+      const peasLines = newLowPeas.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.peas)} peasants`).join('\n');
       toSend.push({
         _key: 'own_peas_low',
         content: '',
@@ -227,7 +227,7 @@ async function checkAndSendDiscordAlerts() {
       const missingLines = newMissing.map(name => {
         const p = S.enemy?.provinces?.find(p => p.name === name);
         const opa = p?.sot?.opa || 0;
-        return `· ${name}${opa ? ' (' + opa + ' OPA)' : ''}${_ageTag(p)}`;
+        return `· ${pnum(p?.slot, name)}${opa ? ' (' + opa + ' OPA)' : ''}${_ageTag(p)}`;
       }).join('\n');
       toSend.push({
         _key: 'missing_som',
@@ -247,7 +247,7 @@ async function checkAndSendDiscordAlerts() {
     if (foodRichThr > 0) {
       const richFood = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.food != null && p.sot.food > foodRichThr)
-        .map(p => ({ name: p.name, food: p.sot.food, age: _ageTag(p) }));
+        .map(p => ({ name: p.name, slot: p.slot, food: p.sot.food, age: _ageTag(p) }));
       next.enemy_food_rich = richFood.map(p => p.name);
       const newRichFood = richFood.filter(p => !(prev.enemy_food_rich || []).includes(p.name));
       if (newRichFood.length) {
@@ -256,7 +256,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🍞 Enemy food target — ${newRichFood.length} province${newRichFood.length > 1 ? 's' : ''}`,
-            description: newRichFood.map(p => `· ${p.name} — ${fK(p.food)} food${p.age}`).join('\n') + '\nUse steal food / vermin.',
+            description: newRichFood.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.food)} food${p.age}`).join('\n') + '\nUse steal food / vermin.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(foodRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -270,7 +270,7 @@ async function checkAndSendDiscordAlerts() {
     if (foodLowThr > 0) {
       const starveProv = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.food != null && p.sot.food < foodLowThr)
-        .map(p => ({ name: p.name, food: p.sot.food, age: _ageTag(p) }));
+        .map(p => ({ name: p.name, slot: p.slot, food: p.sot.food, age: _ageTag(p) }));
       next.enemy_food_low = starveProv.map(p => p.name);
       const newStarve = starveProv.filter(p => !(prev.enemy_food_low || []).includes(p.name));
       if (newStarve.length) {
@@ -279,7 +279,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💀 Enemy starvation risk — ${newStarve.length} province${newStarve.length > 1 ? 's' : ''}`,
-            description: newStarve.map(p => `· ${p.name} — only ${fK(p.food)} food${p.age}`).join('\n') + '\nUse vermin + drought + gluttony.',
+            description: newStarve.map(p => `· ${pnum(p.slot, p.name)} — only ${fK(p.food)} food${p.age}`).join('\n') + '\nUse vermin + drought + gluttony.',
             color: DISCORD.COLORS.red,
             footer: { text: `Threshold: ${fK(foodLowThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -293,7 +293,7 @@ async function checkAndSendDiscordAlerts() {
     if (gcRichThr > 0) {
       const richGc = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.money != null && p.sot.money > gcRichThr)
-        .map(p => ({ name: p.name, gc: p.sot.money, age: _ageTag(p) }));
+        .map(p => ({ name: p.name, slot: p.slot, gc: p.sot.money, age: _ageTag(p) }));
       next.enemy_gc_rich = richGc.map(p => p.name);
       const newRichGc = richGc.filter(p => !(prev.enemy_gc_rich || []).includes(p.name));
       if (newRichGc.length) {
@@ -302,7 +302,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `💰 Enemy GC target — ${newRichGc.length} province${newRichGc.length > 1 ? 's' : ''}`,
-            description: newRichGc.map(p => `· ${p.name} — ${fK(p.gc)} GC${p.age}`).join('\n') + '\nUse fools gold / steal gold.',
+            description: newRichGc.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.gc)} GC${p.age}`).join('\n') + '\nUse fools gold / steal gold.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(gcRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -316,7 +316,7 @@ async function checkAndSendDiscordAlerts() {
     if (runesRichThr > 0) {
       const richRunes = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.runes != null && p.sot.runes > runesRichThr)
-        .map(p => ({ name: p.name, runes: p.sot.runes, age: _ageTag(p) }));
+        .map(p => ({ name: p.name, slot: p.slot, runes: p.sot.runes, age: _ageTag(p) }));
       next.enemy_runes_rich = richRunes.map(p => p.name);
       const newRichRunes = richRunes.filter(p => !(prev.enemy_runes_rich || []).includes(p.name));
       if (newRichRunes.length) {
@@ -325,7 +325,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🔮 Enemy runes target — ${newRichRunes.length} province${newRichRunes.length > 1 ? 's' : ''}`,
-            description: newRichRunes.map(p => `· ${p.name} — ${fK(p.runes)} runes${p.age}`).join('\n') + '\nUse lightning strike / steal runes.',
+            description: newRichRunes.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.runes)} runes${p.age}`).join('\n') + '\nUse lightning strike / steal runes.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(runesRichThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),
@@ -339,7 +339,7 @@ async function checkAndSendDiscordAlerts() {
     if (soldsThr > 0) {
       const soldStack = (S.enemy.provinces || [])
         .filter(p => p.sot && p.sot.soldiers != null && p.sot.soldiers > soldsThr)
-        .map(p => ({ name: p.name, solds: p.sot.soldiers, age: _ageTag(p) }));
+        .map(p => ({ name: p.name, slot: p.slot, solds: p.sot.soldiers, age: _ageTag(p) }));
       next.enemy_soldiers = soldStack.map(p => p.name);
       const newSoldStack = soldStack.filter(p => !(prev.enemy_soldiers || []).includes(p.name));
       if (newSoldStack.length) {
@@ -348,7 +348,7 @@ async function checkAndSendDiscordAlerts() {
           content: `<@&${DISCORD.ATTACKER_ROLE}>`,
           embeds: [{
             title: `🪖 Enemy soldier stack — ${newSoldStack.length} province${newSoldStack.length > 1 ? 's' : ''}`,
-            description: newSoldStack.map(p => `· ${p.name} — ${fK(p.solds)} soldiers${p.age}`).join('\n') + '\nUse nightmares / meteor showers.',
+            description: newSoldStack.map(p => `· ${pnum(p.slot, p.name)} — ${fK(p.solds)} soldiers${p.age}`).join('\n') + '\nUse nightmares / meteor showers.',
             color: DISCORD.COLORS.yellow,
             footer: { text: `Threshold: ${fK(soldsThr)} · Wave Planner` },
             timestamp: new Date().toISOString(),

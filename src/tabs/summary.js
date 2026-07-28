@@ -116,7 +116,8 @@ function _buildWavePlan() {
   const seq   = _wpActiveSeq();
   const isDraft = !!S.waveDraft;
 
-  const strayProvs = [...new Set(slots.filter(s => s.stray).map(s => s.attacker))];
+  const strayProvs = [...new Map(slots.filter(s => s.stray)
+    .map(s => [s.provSlot, pnum(s.provSlot, s.attacker)])).values()];
 
   // Status line
   const status = isDraft
@@ -166,7 +167,7 @@ function _buildWavePlan() {
     warn.push(`⚠ <b>${marginalCount} marginal/risky hit${marginalCount > 1 ? 's' : ''}</b> — out of range or may not break; review below.`);
   if (S._waveGen?.ambushHolds?.length)
     warn.push(`🛡 <b>Ambush gens held:</b> ${S._waveGen.ambushHolds.map(a =>
-      `${esc(a.attacker)} (${fK(a.leftover)} off stays home)`).join(', ')} — 1 spare general kept back since substantial offense remains home.`);
+      `${esc(pnum(a.provSlot, a.attacker))} (${fK(a.leftover)} off stays home)`).join(', ')} — 1 spare general kept back since substantial offense remains home.`);
   const popWarnCount = seq ? seq.filter(x => x.popWarn).length : 0;
   if (popWarnCount)
     warn.push(`🏠 <b>${popWarnCount} hit${popWarnCount > 1 ? 's' : ''} against pop% strategy</b> — attacker pop suggests a different attack type (marked in the table).`);
@@ -175,8 +176,8 @@ function _buildWavePlan() {
     warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
   for (const cs of (S._waveGen?.chainStatus || [])) {
     warn.push(cs.done
-      ? `<span style="color:#60C040">⛓ <b>Chain goal reached:</b> ${esc(cs.name)} ${cs.from} → ~${cs.to} acres (goal ${cs.goal})</span>`
-      : `⛓ <b>Chain incomplete:</b> ${esc(cs.name)} only planned down to ~${cs.to} acres (goal ${cs.goal}, from ${cs.from}) — not enough breakable offense in range.`);
+      ? `<span style="color:#60C040">⛓ <b>Chain goal reached:</b> ${esc(pnum(cs.slot, cs.name))} ${cs.from} → ~${cs.to} acres (goal ${cs.goal})</span>`
+      : `⛓ <b>Chain incomplete:</b> ${esc(pnum(cs.slot, cs.name))} only planned down to ~${cs.to} acres (goal ${cs.goal}, from ${cs.from}) — not enough breakable offense in range.`);
   }
   if (warn.length) {
     h += `<div style="margin-bottom:12px;padding:8px 14px;background:#201808;border:1px solid #805020;
@@ -190,7 +191,7 @@ function _buildWavePlan() {
 
   // Reassign dropdown options (shared)
   const slotOpts = slots.map(s =>
-    `<option value="${s.key}">${esc(s.attacker)}${s.stray ? ' ('+_wpFmtTime(s.availableAt)+')' : ''} · ${fK(s.off)} off</option>`).join('');
+    `<option value="${s.key}">${esc(pnum(s.provSlot, s.attacker))}${s.stray ? ' ('+_wpFmtTime(s.availableAt)+')' : ''} · ${fK(s.off)} off</option>`).join('');
 
   // Sequence table
   const thStyle = 'text-align:left;padding:5px 8px;font-size:15px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070';
@@ -219,8 +220,8 @@ function _buildWavePlan() {
     h += `<tr style="border-bottom:1px solid #617070${hit.marginal || hit.risky ? ';background:rgba(224,144,64,.06)' : ''}">
       <td style="padding:6px 8px;color:#7a9090;font-family:monospace">${hit.n}</td>
       <td style="padding:6px 8px;font-family:monospace">${_wpFmtTime(hit.availableAt)}</td>
-      <td style="padding:6px 8px;font-weight:600">${esc(hit.attacker)}</td>
-      <td style="padding:6px 8px">${esc(hit.target)}${flags}</td>
+      <td style="padding:6px 8px;font-weight:600">${esc(pnum(hit.provSlot, hit.attacker))}</td>
+      <td style="padding:6px 8px">${esc(pnum(hit.targetSlot, hit.target))}${flags}</td>
       <td style="padding:6px 8px">${_wpRangeBadge(hit.range)}</td>
       <td style="padding:6px 8px">${typeBadge}</td>
       <td style="padding:6px 8px;font-family:monospace">${hit.gens}</td>

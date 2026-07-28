@@ -630,7 +630,7 @@ function calcMaxGainAttacks(prov) {
       isAssigned: false,
       gains:      bestGain,
       sodNote:    hitCount[s] > 1
-                    ? `Take a fresh SoD on ${best.ep.name} before sending this attack`
+                    ? `Take a fresh SoD on ${pnum(s, best.ep.name)} before sending this attack`
                     : null,
       waveName:   'Max Gain',
       tPop:       null,
@@ -699,7 +699,7 @@ function _buildWaveSlice(prov) {
 
     hitCount[hit.targetSlot] = (hitCount[hit.targetSlot] || 0) + 1;
     const sodNote = hitCount[hit.targetSlot] > 1
-      ? `Take a fresh SoD on ${hit.target} before sending this attack` : null;
+      ? `Take a fresh SoD on ${pnum(hit.targetSlot, hit.target)} before sending this attack` : null;
 
     const plan  = S.provinces[hit.targetSlot] || {};
     const ops   = plan.requiredOps || [];
@@ -720,7 +720,7 @@ function _buildWaveSlice(prov) {
         <div class="watk-num" style="color:#7a9090" title="Hit number in the full kingdom wave">#${hit.n}</div>
         <div class="watk-main">
           <div class="watk-target" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-            <span>${esc(hit.target)}</span>${typeBadge}${flags}
+            <span>${esc(pnum(hit.targetSlot, hit.target))}</span>${typeBadge}${flags}
           </div>
           <div class="watk-detail">
             ${sendLabel} · ${fK(hit.def)} def · send ${fK(hit.sentOff)} off · proj NW ${fK(hit.projNW)}
@@ -766,8 +766,8 @@ function _buildWaveSlice(prov) {
         <tr style="border-bottom:1px solid #2b3333${x.provSlot === prov.slot ? ';background:rgba(255,212,0,.08)' : ''}">
           <td style="padding:3px 8px;color:#7a9090;font-family:monospace">#${x.n}</td>
           <td style="padding:3px 8px;font-family:monospace">${x.availableAt <= 0 ? 'now' : '+' + fA(x.availableAt)}</td>
-          <td style="padding:3px 8px${x.provSlot === prov.slot ? ';color:#ffd400;font-weight:700' : ''}">${esc(x.attacker)}</td>
-          <td style="padding:3px 8px">${esc(x.target)}</td>
+          <td style="padding:3px 8px${x.provSlot === prov.slot ? ';color:#ffd400;font-weight:700' : ''}">${esc(pnum(x.provSlot, x.attacker))}</td>
+          <td style="padding:3px 8px">${esc(pnum(x.targetSlot, x.target))}</td>
           <td style="padding:3px 8px;color:#7a9090">${x.type} · ${x.gens}g · ${fK(x.sentOff)}</td>
         </tr>`).join('')}
       </tbody>
@@ -947,7 +947,7 @@ function _buildProvPicker() {
                    display:flex;align-items:center;justify-content:space-between;transition:border-color .15s"
             onmouseover="this.style.borderColor='#617070'" onmouseout="this.style.borderColor='#617070'">
             <div>
-              <div style="font-size:21px;font-weight:700">${esc(p.name)}</div>
+              <div style="font-size:21px;font-weight:700">${esc(pnum(p.slot, p.name))}</div>
               <div style="font-family:monospace;font-size:17px;color:#7a9090">${esc(p.race || '')} · ${esc(p.sot?.personality || '')}</div>
             </div>
             <div style="text-align:right">
@@ -1004,7 +1004,7 @@ function _playerHeader(prov, aOff, gensHome, attackableGens, ownPop, targetCount
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div>
-        <div style="font-size:21px;font-weight:700">${esc(prov.name)}</div>
+        <div style="font-size:21px;font-weight:700">${esc(pnum(prov.slot, prov.name))}</div>
         <div style="font-family:monospace;font-size:17px;color:#7a9090">${esc(prov.race || '')} · ${esc(prov.sot?.personality || '')}</div>
       </div>
       <button onclick="__wpA.pickProv('')"
@@ -1107,7 +1107,7 @@ function _buildAttackCard(wave, atkList) {
         <div class="watk-num" style="color:#7a9090">${atk.n}</div>
         <div class="watk-main">
           <div class="watk-target" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-            <span>${esc(t.item.province.name)}</span>
+            <span>${esc(pnum(t.item.province.rawSlot, t.item.province.name))}</span>
             ${typeBadge}${srcBadge}
             ${away ? '<span style="color:#60C040;font-size:17px">↗ army away</span>' : ''}
           </div>
@@ -1184,13 +1184,13 @@ function _buildContextTable(waveTargets, prov, aOff) {
     const assigned = item.province.assignedTo || [];
     const assignHtml = assigned.length === 0
       ? '<span style="color:#617070;font-size:15px">KD pool</span>'
-      : assigned.map(n => `<span class="wtag" style="font-size:13px;margin:1px;cursor:default">${esc(n)}</span>`).join('');
+      : assigned.map(n => `<span class="wtag" style="font-size:13px;margin:1px;cursor:default">${esc(pnum(_ownSlotByName(n), n))}</span>`).join('');
     const bloatHtml = bloat
       ? '<span style="color:#9060c0;font-size:17px;font-weight:700">● Bloat</span>'
       : '—';
 
     return `<tr style="border-bottom:1px solid #617070${bloat?';background:rgba(100,60,130,.06)':''}">
-      <td style="padding:6px 8px;font-weight:600">${esc(item.province.name)}</td>
+      <td style="padding:6px 8px;font-weight:600">${esc(pnum(item.province.rawSlot, item.province.name))}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tDef)}</td>
       <td style="padding:6px 8px;font-family:monospace">${fK(tNW)}</td>
       <td style="padding:6px 8px"><span class="wmatch ${breaksCls}">${pct}%</span></td>

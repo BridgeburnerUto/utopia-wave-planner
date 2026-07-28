@@ -286,7 +286,7 @@ function _buildLeaderboard(allOps) {
 
     return `<tr>
       <td style="font-family:monospace;font-size:19px">${medal}</td>
-      <td style="font-weight:700">${esc(p.name)}</td>
+      <td style="font-weight:700">${esc(pnum(_ownSlotByName(p.name), p.name))}</td>
       <td style="text-align:right;font-family:monospace">
         ${fK(p.totalDamage)}
         <div style="height:3px;background:#617070;border-radius:2px;margin-top:2px">
