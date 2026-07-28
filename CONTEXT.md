@@ -102,8 +102,11 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   - %-buildings use x(1-x) curve: rate x pct x (1-pct/100) x BE, cap rate x 25
     (Banks rate 1.5 -> max 37.5% income; Armouries rate 2.0 -> max 50% wage cut)
   - gross = raw x (1+banks%) x (1+Alchemy sci) x (1+honor) x race x pers
-  - wages = (specs x 0.5 + elites x 0.75) x (1-armoury%) x (1-Bookkeeping sci) x race
-    (soldiers/mercs/horses unpaid; wage rate 20-200% NOT in intel -> assumed 100%)
+  - wages = (specs x 0.5 + elites x 0.75) x wageRate x (1-armoury%) x
+    (1-Bookkeeping sci) x race (soldiers/mercs/horses unpaid)
+  - **wageRate = `prov.ma.wages`%** (Military Advisor intel -- own always, enemy
+    when opped; fixture 2/22) else WAGE_RATE_ASSUMED = 200% (config.js), shown in
+    a Wage% column with "*" + dim color when assumed
   - honor income % from `p.title` (HONOR_INCOME_PCT table, approximate; War Hero x2)
 - **Age 116 constants centralized in config.js** economy block: INCOME_PER_*,
   JOBS_PER_ACRE, BANK_FLAT_GC, BANK_INCOME_RATE, ARMOURY_WAGE_RATE, WAGE_PER_SPEC/

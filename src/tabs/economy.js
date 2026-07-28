@@ -6,8 +6,10 @@
 //   jobs        = built non-home acres × JOBS_PER_ACRE
 //   raw         = 3×employed + 1×unemployed + prisGc×prisoners + bankAcres×25×BE
 //   gross       = raw × (1+banks%) × (1+Alchemy sci) × (1+honor) × race × pers
-//   wages       = (specs×0.5 + elites×0.75) × (1−armoury%) × (1−Bookkeeping sci)
-//                 × race × pers          (wage rate assumed 100% — not in intel)
+//   wages       = (specs×0.5 + elites×0.75) × wageRate × (1−armoury%)
+//                 × (1−Bookkeeping sci) × race × pers
+//                 (wageRate = ma.wages% from Military Advisor intel — own always,
+//                  enemy when opped; else WAGE_RATE_ASSUMED)
 //   %-building effects use the x·(1−x) curve: rate × pct × (1−pct/100) × BE.
 // Provinces without a survey are estimated acres-only (banks/armouries/homes
 // treated as 0) and flagged ⚠ est. Plague is flagged 🦠 but its income effect
@@ -62,7 +64,11 @@ function _provEconomy(prov) {
   const elites   = sot.elites || 0;
   const wageBase = specs * WAGE_PER_SPEC + elites * WAGE_PER_ELITE;
   const armCut   = curve(ARMOURY_WAGE_RATE, armPct);
-  const wages = wageBase * (1 - armCut / 100) * (1 - book / 100)
+  // Wage rate from the Military Advisor when intel has it (own always, enemy
+  // when opped); otherwise WAGE_RATE_ASSUMED.
+  const maWages   = prov.ma?.wages;
+  const wageRate  = (maWages != null ? maWages : WAGE_RATE_ASSUMED) / 100;
+  const wages = wageBase * wageRate * (1 - armCut / 100) * (1 - book / 100)
               * (RACE_WAGE_MULT[race] || 1) * (PERS_WAGE_MULT[pers] || 1);
 
   return {
@@ -70,6 +76,8 @@ function _provEconomy(prov) {
     est, plague: !!sot.plague,
     emplPct: jobs > 0 ? Math.min(100, Math.round(peasants / jobs * 100)) : null,
     banksPct, armPct, bankPct, armCut, alch, book, honor,
+    wagePct: maWages != null ? maWages : WAGE_RATE_ASSUMED,
+    wageAssumed: maWages == null,
   };
 }
 
@@ -135,6 +143,7 @@ function _econSection(title, provinces, accent) {
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.emplPct != null ? e.emplPct + '%' : '—'}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.est ? '—' : e.banksPct.toFixed(1) + '%'}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.est ? '—' : e.armPct.toFixed(1) + '%'}</td>
+      <td style="padding:6px 10px;text-align:right;color:${e.wageAssumed ? '#617070' : '#b8c8c8'}"${e.wageAssumed ? ' title="Assumed — no Military Advisor intel"' : ''}>${e.wagePct}%${e.wageAssumed ? '*' : ''}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.alch ? '+' + e.alch.toFixed(1) + '%' : '—'}</td>
       <td style="padding:6px 10px;text-align:right">${fK(e.gross)}</td>
       <td style="padding:6px 10px;text-align:right;color:#E05050">−${fK(e.wages)}</td>
@@ -150,7 +159,7 @@ function _econSection(title, provinces, accent) {
       <thead><tr style="border-bottom:1px solid #617070">
         <th style="padding:7px 10px;text-align:left;color:#7a9090;font-size:15px;letter-spacing:1px;text-transform:uppercase">Province</th>
         <th style="padding:7px 10px;text-align:left;color:#7a9090;font-size:15px;letter-spacing:1px;text-transform:uppercase">Race</th>
-        ${th('Peas')}${th('Empl')}${th('Banks')}${th('Arm')}${th('Inc Sci')}${th('Gross/t')}${th('Wages/t')}${th('Net/t')}
+        ${th('Peas')}${th('Empl')}${th('Banks')}${th('Arm')}${th('Wage%')}${th('Inc Sci')}${th('Gross/t')}${th('Wages/t')}${th('Net/t')}
         <th></th>
       </tr></thead>
       <tbody>${tr}</tbody>
@@ -162,8 +171,9 @@ function renderEconomy() {
   if (!el) return;
   renderTab('__wpc_economy', () =>
     `<div style="font-size:15px;color:#7a9090;margin-bottom:12px">
-      Net = gross income − army wages, per tick. Wage rate assumed 100%; dragons, rituals,
-      riots and plague income effects not modeled. ⚠ = no survey (banks/armouries as 0, est).
+      Net = gross income − army wages, per tick. Wage rate from Military Advisor intel where
+      available, else ${WAGE_RATE_ASSUMED}%* assumed. Dragons, rituals, riots and plague income
+      effects not modeled. ⚠ = no survey (banks/armouries as 0, est).
     </div>`
     + _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040')
     + _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400'));

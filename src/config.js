@@ -129,6 +129,7 @@ const BANK_INCOME_RATE      = 1.5;   // % income per % built (x·(1−x) curve, 
 const ARMOURY_WAGE_RATE     = 2.0;   // % wage cut per % built (x·(1−x) curve, max 50%)
 const WAGE_PER_SPEC         = 0.5;   // gc/tick per off+def spec (soldiers/mercs unpaid)
 const WAGE_PER_ELITE        = 0.75;  // gc/tick per elite
+const WAGE_RATE_ASSUMED     = 200;   // % assumed when ma.wages absent (most run 200%)
 // Age 116 race/personality economy modifiers (1.0 fallback):
 const RACE_INCOME_MULT    = { human: 1.30 };
 const RACE_WAGE_MULT      = { human: 1.25, avian: 0.75 };
