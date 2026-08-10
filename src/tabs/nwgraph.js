@@ -24,16 +24,38 @@ function _calcKdWarNW(provinces) {
 }
 
 /** KD-level popspace: sums _provLivingSpace / _provCurrentPop over provinces.
- *  surveyed = provinces whose capacity came from a real survey. */
+ *  surveyed = provinces whose capacity came from a real survey.
+ *  popN     = provinces that actually contributed population (SoT present) —
+ *             without it an enemy KD with 8/22 SoTs silently reads as a tiny
+ *             current pop instead of an incomplete one. */
 function _calcKdPopspace(provinces) {
-  let cap = 0, pop = 0, surveyed = 0;
+  let cap = 0, pop = 0, surveyed = 0, popN = 0;
   for (const p of provinces) {
     const ls = _provLivingSpace(p);
     if (ls) { cap += ls.cap; if (ls.precise) surveyed++; }
     const cp = _provCurrentPop(p);
-    if (cp != null) pop += cp;
+    if (cp != null) { pop += cp; popN++; }
   }
-  return { cap: Math.round(cap), pop: Math.round(pop), surveyed, n: provinces.length };
+  return { cap: Math.round(cap), pop: Math.round(pop), surveyed, popN, n: provinces.length };
+}
+
+/**
+ * Live popspace point built from the SoT data currently in memory (refreshed
+ * every load/refresh of the tool). Same shape as an nw_snapshots doc so the
+ * Popspace graph can treat it as just another snapshot — this is what makes
+ * current pop visible immediately instead of only after a snapshot lands.
+ */
+function _livePopSnap() {
+  if (!S.own?.provinces?.length) return null;
+  const own = _calcKdPopspace(S.own.provinces);
+  const ene = S.enemy?.provinces?.length ? _calcKdPopspace(S.enemy.provinces) : null;
+  return {
+    live: true,
+    eneLoc: S.eLoc || '',
+    ownCap: own.cap, ownPop: own.pop, ownSurveyed: own.surveyed, ownPopN: own.popN, ownN: own.n,
+    eneCap: ene?.cap, enePop: ene?.pop, eneSurveyed: ene?.surveyed, enePopN: ene?.popN, eneN: ene?.n,
+    storedAt: Date.now(),
+  };
 }
 
 function _enemyFresh(provinces) {
@@ -48,7 +70,10 @@ function _enemyFresh(provinces) {
 // ── Own war snapshot (kept for war-period detail tracking) ───────────────────
 
 async function snapshotNW() {
-  if (!S.own?.war)   return; // only during war
+  // _atWar(), never the raw S.own.war boolean — the IS API does not reliably
+  // populate it, so the raw check silently wrote NO snapshots for whole wars
+  // (and the Popspace graph then had no current-pop data to draw).
+  if (!_atWar()) return; // only during war
   if (!S.own || !S.enemy) return;
 
   const kdId    = S.own.location.replace(':', '_');
@@ -71,8 +96,8 @@ async function snapshotNW() {
   await fbWrite(`nw_snapshots/${kdId}_${tick}`, {
     kdId, tick, tickName, ownTotal, ownWarNW, eneTotal, eneWarNW, eneFresh,
     eneLoc: S.eLoc || '',
-    ownCap: ownPS.cap, ownPop: ownPS.pop, ownSurveyed: ownPS.surveyed, ownN: ownPS.n,
-    eneCap: enePS.cap, enePop: enePS.pop, eneSurveyed: enePS.surveyed, eneN: enePS.n,
+    ownCap: ownPS.cap, ownPop: ownPS.pop, ownSurveyed: ownPS.surveyed, ownPopN: ownPS.popN, ownN: ownPS.n,
+    eneCap: enePS.cap, enePop: enePS.pop, eneSurveyed: enePS.surveyed, enePopN: enePS.popN, eneN: enePS.n,
     storedAt: Date.now(),
   });
 }
@@ -293,10 +318,12 @@ async function _loadAndRenderNwGraph() {
     ]);
 
     // Popspace view: also load own war-tick snapshots (precise capacity +
-    // current pop) when one of the graphed KDs is our own kingdom.
+    // current pop) when one of the graphed KDs is our own kingdom or the
+    // kingdom we are currently facing (own snapshots carry both sides).
     let snaps = [];
     if (S.nwView === 'pop' && S.own?.location
-        && [S.nwLocA, S.nwLocB].includes(S.own.location)) {
+        && ([S.nwLocA, S.nwLocB].includes(S.own.location)
+            || (S.eLoc && [S.nwLocA, S.nwLocB].includes(S.eLoc)))) {
       const kdId = S.own.location.replace(':', '_');
       try {
         const all = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
@@ -304,6 +331,12 @@ async function _loadAndRenderNwGraph() {
           .filter(d => d.ownCap != null && d.storedAt >= fromTs && d.storedAt <= toTs)
           .sort((a, b) => a.storedAt - b.storedAt);
       } catch(e) { /* precise overlay is optional — baseline still renders */ }
+
+      // Live point from the SoT data already in memory — current pop must not
+      // wait for the next stored snapshot (and outside war none is ever
+      // written). Included whenever the window reaches the present.
+      const live = _livePopSnap();
+      if (live && Date.now() >= fromTs && Date.now() <= toTs + 3_600_000) snaps.push(live);
     }
 
     if (!docsA.length && !docsB.length && !snaps.length) {
@@ -573,15 +606,27 @@ function _buildPopGraph(docsA, docsB, snaps, locA, locB) {
   const dc = v => v >= 0 ? '#60C040' : '#E05050';
   const ds = v => v >= 0 ? '+' : '';
 
-  // Precision note — how many provinces the latest snapshot had real surveys for
+  // Precision note — how many provinces the latest snapshot had real surveys
+  // for, plus how many contributed population at all (no SoT = no pop).
   let precLabel = 'acres ×25', precSub = 'no war snapshots in range';
-  const latestSnap = snaps.length ? snaps[snaps.length - 1] : null;
+  const latestSnap = snaps.length ? snaps[snaps.length - 1] : null; // live point sorts last
+  let popSub = 'from war snapshots';
   if (latestSnap) {
-    const bits = [];
-    if (ownLoc && [locA, locB].includes(ownLoc)) bits.push(`own ${latestSnap.ownSurveyed ?? '?'}/${latestSnap.ownN ?? '?'}`);
     const other = locA === ownLoc ? locB : locA;
-    if (latestSnap.eneLoc === other) bits.push(`eny ${latestSnap.eneSurveyed ?? '?'}/${latestSnap.eneN ?? '?'}`);
-    if (bits.length) { precLabel = bits.join(' · '); precSub = 'provs surveyed (latest snap)'; }
+    const sides = [];
+    if (ownLoc && [locA, locB].includes(ownLoc))
+      sides.push({ k: 'own', surveyed: latestSnap.ownSurveyed, popN: latestSnap.ownPopN, n: latestSnap.ownN });
+    if (latestSnap.eneLoc === other)
+      sides.push({ k: 'eny', surveyed: latestSnap.eneSurveyed, popN: latestSnap.enePopN, n: latestSnap.eneN });
+
+    const surv = sides.map(s => `${s.k} ${s.surveyed ?? '?'}/${s.n ?? '?'}`);
+    if (surv.length) {
+      precLabel = surv.join(' · ');
+      precSub   = latestSnap.live ? 'provs surveyed (live)' : 'provs surveyed (latest snap)';
+    }
+    const cov = sides.filter(s => s.popN != null).map(s => `${s.k} ${s.popN}/${s.n ?? '?'}`);
+    popSub = cov.length ? `${cov.join(' · ')} provs with SoT` : (latestSnap.live ? 'live SoT data' : 'from war snapshots');
+    if (latestSnap.live) popSub = 'live · ' + popSub;
   }
 
   const summary = `
@@ -603,7 +648,7 @@ function _buildPopGraph(docsA, docsB, snaps, locA, locB) {
           <span style="color:#7a9090"> vs </span>
           <span style="color:#ffd400">${lastPopB != null ? fK(lastPopB) : '—'}</span>
         </div>
-        <div class="s">from war snapshots</div>
+        <div class="s">${esc(popSub)}</div>
       </div>
       <div class="wscard">
         <div class="l">Precision</div>

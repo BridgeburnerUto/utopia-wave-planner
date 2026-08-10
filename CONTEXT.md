@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-10.
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-10 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -50,6 +50,46 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - IS SoT field names (verified from the IS bundle): `sot.soldiers`, `sot.food`, `sot.money`,
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
+
+## Recent work (2026-08-10, latest) -- Popspace "current pop" fix
+
+Leader report: the NW Graph tab's Popspace view never showed current pop live,
+even though the SoT data is on the IS and refreshes every tick.
+
+**Root cause (real bug):** `snapshotNW()` gated on the RAW `S.own?.war` boolean
+-- the one `utils.js` documents as unreliable and that `_atWar()` exists to
+work around. It was the only place in the codebase still using it. On a live IS
+where `own.war` is not populated, **no nw_snapshots were ever written**, so the
+Popspace graph had no current-pop data (and no precise capacity) to draw --
+while the harness, which serves synthetic snapshots, looked perfect.
+
+**Fixes (harness-verified, minified build done):**
+- `nwgraph.js:snapshotNW()` now uses `_atWar()`. Both call sites (`init`,
+  `refresh` in app.js) already run `_refreshWarStatus()` first, so the cache is
+  fresh.
+- **Live point**: new `_livePopSnap()` builds an nw_snapshots-shaped object from
+  the in-memory `S.own`/`S.enemy` SoTs (`live:true`, `storedAt: Date.now()`) and
+  `_loadAndRenderNwGraph` pushes it onto `snaps` whenever the window reaches the
+  present. Current pop now shows on the FIRST open -- no waiting for a stored
+  snapshot, and it works out of war too (when nothing is ever written). It also
+  supplies precise capacity for the current hour.
+- Snapshot-loading gate widened: own snapshots are fetched when own loc OR the
+  current enemy loc is graphed (snapVals already filters by side).
+- **Pop coverage tracked**: `_calcKdPopspace` also returns `popN` (provs that
+  actually had SoT population); written as `ownPopN`/`enePopN` and shown in the
+  Current Pop card ("live - own 23/23 - eny 22/22 provs with SoT"). Without it
+  an enemy KD with 8/22 SoTs read as a tiny current pop, not an incomplete one.
+  Precision card now says "(live)" vs "(latest snap)".
+- Harness: Popspace shows 4 series + "live - own 23/23 - eny 22/22 provs with
+  SoT" / "provs surveyed (live)"; with nw_snapshots forced to `[]` the two
+  capacity lines still draw and each pop series renders as a single live dot
+  (this is the production case). Total/War NW views byte-identical (2 polylines,
+  same cards). No console errors.
+
+**Not done:** snapshots are still war-only, so pop HISTORY only accumulates
+during war -- out of war you get the single live point. Writing them always
+(one doc per tick, 30-day cleanup already exists) would give continuous popspace
+history; not done because it widens what `nw_snapshots` means. NOT COMMITTED.
 
 ## Recent work (2026-08-10, later) -- post-live-test fixes
 
