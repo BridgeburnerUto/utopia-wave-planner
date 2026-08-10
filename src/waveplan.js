@@ -50,11 +50,13 @@ const WP_SHRINK_AI_HITS        = 2;    // hits the AI plans per auto-picked targ
 const WP_SHRINK_AI_SLOT_SHARE  = 0.35; // max share of attack slots spent shrinking
 const WP_SHRINK_AI_MIN_POP_PCT = 90;   // hard floor — never auto-shrink an emptier province
 
-// Overflow cap: how many hits one province may soak from the low-priority tiers
-// (uncovered / any / wall / marginal / dump). CHAIN victims are exempt — piling
-// hits on one province is the whole point of a chain — as are raze/mass orders
-// and shrink quota. Without this, a single low-def province becomes the dumping
-// ground for every attacker that can't break anything else (14 hits, observed).
+// Overflow cap: how many hits one province may soak from the mid-priority tiers
+// (uncovered / any / wall / marginal). Without it, a single low-def province
+// becomes the dumping ground for every attacker that can't break anything else
+// (14 hits, observed live).
+// EXEMPT: chain victims (piling hits on one province is the whole point of a
+// chain), raze/mass orders, shrink quota, and the DUMP pass — leftover offense
+// should always be spent on whatever it can still break, cap or no cap.
 const WP_MAX_OVERFLOW_HITS_PER_TARGET = 5;
 
 /** True for the wave types that run the shrink pass. */
@@ -625,11 +627,13 @@ function generateWaveSeq(waveType) {
     // what's left on the best still-breakable enemy (usually small and out of
     // range; range band → enemy pop% → gain). The ambush hold below can then
     // only trigger when the leftover genuinely can't break anything.
-    const overflowDumpOk = t => t.targetAcres > 0 || t.hits < WP_MAX_OVERFLOW_HITS_PER_TARGET;
+    // NOT subject to WP_MAX_OVERFLOW_HITS_PER_TARGET (leader's rule): a province
+    // with very low defense is exactly where spare offense belongs, however many
+    // hits it has already taken. Leftover offense sitting at home is worth zero.
     const dumpPool = targets.concat(walls);
     while (gensLeft > 0 && offLeft > 0 && hitsThisSlot < WP_MAX_HITS_PER_SLOT) {
       const dcands = dumpPool.map(t => {
-        if (t.bloat || !overflowDumpOk(t)) return null;
+        if (t.bloat) return null;
         const mg = _wpMinGens(t.def, offLeft, gensLeft);
         if (!mg) return null;
         return { t, mg, range: _wpRange(sl.nw, t.simNW), gain: estGain(t, sl) };

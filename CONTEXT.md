@@ -71,9 +71,13 @@ chain target got 3 hits while two provinces soaked 25, and 17 hits flagged
 - **11 hits estimated ZERO gain** -- out of range → RPNW factor 0 → no acres.
 
 **Fixes shipped:**
-- `WP_MAX_OVERFLOW_HITS_PER_TARGET = 5` -- caps hits from the low-priority tiers
-  (uncovered/any/wall/marginal/dump). Chain victims are EXEMPT (pounding one
-  province is the point of a chain); raze/mass and shrink quota are unaffected.
+- `WP_MAX_OVERFLOW_HITS_PER_TARGET = 5` -- caps hits from the mid-priority tiers
+  (uncovered/any/wall/marginal). EXEMPT: chain victims (pounding one province is
+  the point of a chain), raze/mass, shrink quota, and **the DUMP pass** (leader
+  rule: a super-low-def province should always soak leftover offense, cap or no
+  cap -- offense left at home is worth zero). Harness: mid-tier max stays 5/target
+  while the dump target took 13 (5 mid + 8 dump), same 74 total hits -- the cap
+  redirects the spread, it does not idle the offense.
 - AI shrink now also skips any province the leader FLAGGED as a wave target
   (`plan.wave`), not just chain victims and bloat provs.
 - AI shrink ranking corrected AGAIN: density is the GATE (≥90% pop), then rank
