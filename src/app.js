@@ -439,6 +439,7 @@ window.__wpA = {
   wpRemoveHit,
   setWaveType,
   setProvTargetAcres,
+  setProvShrink,
   // Render functions exposed for use in edge cases
   renderBoard,
   renderAlerts,
@@ -893,7 +894,7 @@ window.__wpA = {
   },
 
   async clearPlan() {
-    if (!confirm('Clear all war plan data?\n\nThis will:\n• Reset all wave assignments\n• Clear all raze/massacre targets\n• Clear all op assignments and notes\n• Reset thresholds\n\nDiscord webhook is kept.\nThis cannot be undone.')) return;
+    if (!confirm('Clear all war plan data?\n\nThis will:\n• Reset all wave assignments\n• Clear all raze/massacre targets\n• Clear all chain and shrink goals\n• Clear all op assignments and notes\n• Reset thresholds\n\nDiscord webhook is kept.\nThis cannot be undone.')) return;
     // Reset in-memory state
     S.provinces  = {};
     S.cols       = [];
@@ -901,6 +902,7 @@ window.__wpA = {
     S.waveSeq    = null;
     S.waveDraft  = null;
     S.waveGenAt  = 0;
+    S.waveType   = 'standard';   // shrink/chain goals lived in S.provinces, now cleared
     // Keep Discord webhook — user doesn't want to re-enter it each war
     // Save empty plan to IS backend to overwrite the saved one
     await this.save();

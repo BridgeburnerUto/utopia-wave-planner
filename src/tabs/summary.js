@@ -33,7 +33,8 @@ function generateWavePlan() {
   S.waveDraft = r.seq;
   S.waveGenAt = Date.now();
   S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots,
-                  ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
+                  ambushHolds: r.ambushHolds, chainStatus: r.chainStatus,
+                  shrinkStatus: r.shrinkStatus, waveType: r.waveType };
   renderWavePlan();
 }
 
@@ -51,9 +52,10 @@ function discardWaveDraft() {
 function wpRemoveHit(n) {
   const draft = _wpEditableDraft();
   if (!draft) return;
-  const r = resimulateWaveSeq(draft.filter(h => h.n !== n));
+  const r = resimulateWaveSeq(draft.filter(h => h.n !== n), S.waveType);
   S.waveDraft = r.seq;
-  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds,
+                 chainStatus: r.chainStatus, shrinkStatus: r.shrinkStatus };
   renderWavePlan();
 }
 
@@ -63,9 +65,10 @@ function wpReassign(n, slotKey) {
   const hit = draft.find(h => h.n === n);
   if (!hit) return;
   hit.slotKey = slotKey;
-  const r = resimulateWaveSeq(draft);
+  const r = resimulateWaveSeq(draft, S.waveType);
   S.waveDraft = r.seq;
-  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds, chainStatus: r.chainStatus };
+  S._waveGen = { ...(S._waveGen || {}), ambushHolds: r.ambushHolds,
+                 chainStatus: r.chainStatus, shrinkStatus: r.shrinkStatus };
   renderWavePlan();
 }
 
@@ -112,6 +115,9 @@ function _buildWavePlan() {
   if (!S.own || !S.enemy) return '<div class="watk-noprov">Loading data...</div>';
 
   const flaggedCount = S.enemy.provinces.filter(p => S.provinces[p.slot]?.wave).length;
+  // Shrink targets are targets too — count the ones that aren't already flagged
+  const shrinkOnlyCount = S.enemy.provinces.filter(p =>
+    (S.provinces[p.slot]?.shrink || 0) > 0 && !S.provinces[p.slot]?.wave).length;
   const slots = buildWaveSlots();
   const seq   = _wpActiveSeq();
   const isDraft = !!S.waveDraft;
@@ -128,20 +134,35 @@ function _buildWavePlan() {
   // Cards
   const covered = seq ? new Set(seq.filter(h => !h.isWall).map(h => h.targetSlot)).size : 0;
   const totalGains = seq ? seq.reduce((s, h) => s + (h.estGain || 0), 0) : 0;
+  const isShrinkWave = _wpIsShrinkWave(S.waveType);
+  const shrinkStatus = S._waveGen?.shrinkStatus || [];
+  const shrinkHits   = seq ? seq.filter(x => x.shrink).length : 0;
+  const shrinkWanted = shrinkStatus.reduce((s, x) => s + x.goal, 0);
+  // AI-picked shrink targets are targets too, even though nothing is flagged on the board
+  const shrinkTargetCount = shrinkStatus.length
+    ? shrinkStatus.filter(x => !S.provinces[x.slot]?.wave).length
+    : shrinkOnlyCount;
+  const targetTotal = flaggedCount + (isShrinkWave ? shrinkTargetCount : 0);
   let h = `
     <div class="wsum">
       <div class="wscard"><div class="l">Attack Slots</div><div class="v">${slots.length}</div>
         <div class="s">${strayProvs.length ? strayProvs.length + ' stray-army prov' + (strayProvs.length > 1 ? 's' : '') : 'incl. army returns'}</div></div>
       <div class="wscard"><div class="l">Hits Planned</div><div class="v">${seq ? seq.length : '—'}</div><div class="s">${status}</div></div>
-      <div class="wscard"><div class="l">Targets Covered</div><div class="v">${seq ? covered + '/' + flaggedCount : '—/' + flaggedCount}</div><div class="s">flagged on board</div></div>
+      <div class="wscard"><div class="l">Targets Covered</div><div class="v">${seq ? covered + '/' + targetTotal : '—/' + targetTotal}</div>
+        <div class="s">${isShrinkWave ? 'flagged + shrink targets' : 'flagged on board'}</div></div>
+      ${isShrinkWave ? `<div class="wscard"><div class="l">Shrink Hits</div>
+        <div class="v" style="color:#40a0c0">${seq ? shrinkHits + '/' + (shrinkWanted || '—') : '—'}</div>
+        <div class="s">${shrinkStatus.length} shrink target${shrinkStatus.length === 1 ? '' : 's'}${shrinkStatus.some(x => x.ai) ? ' (AI picked)' : ''}</div></div>` : ''}
       <div class="wscard"><div class="l">Est. Gains</div><div class="v">${totalGains ? '~' + fK(totalGains) : '—'}</div><div class="s">acres, TM only</div></div>
     </div>`;
 
   // Action bar
   h += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-    <select onchange="__wpA.setWaveType(this.value)" title="Wave type — more types coming"
+    <select onchange="__wpA.setWaveType(this.value)" title="Wave type — how the solver spends the wave"
       style="background:#2b3333;border:1px solid #617070;color:#ffffff;font-size:17px;padding:6px 8px;border-radius:3px;cursor:pointer">
       <option value="standard" ${S.waveType === 'standard' ? 'selected' : ''}>Standard wave</option>
+      <option value="shrink"   ${S.waveType === 'shrink'   ? 'selected' : ''}>Shrink wave (leader picks)</option>
+      <option value="shrinkai" ${S.waveType === 'shrinkai' ? 'selected' : ''}>Shrink wave (AI picks)</option>
     </select>
     <button class="wb g" onclick="__wpA.generateWavePlan()">⚙ Generate Wave Plan</button>
     ${seq ? `<button class="wb" style="border-color:#D4A017;color:#D4A017" onclick="__wpA.publishWavePlan()">📢 Publish${S.discordWebhook ? ' + Discord' : ''}</button>` : ''}
@@ -149,7 +170,24 @@ function _buildWavePlan() {
     ${S.waveGenAt ? `<span style="font-size:15px;color:#617070">generated ${new Date(S.waveGenAt).toLocaleTimeString()} — send times were measured then</span>` : ''}
   </div>`;
 
-  if (!flaggedCount) {
+  // Wave-type explainer — what the solver will do with this setting
+  const shrinkFlagged = S.enemy.provinces.filter(p => (S.provinces[p.slot]?.shrink || 0) > 0).length;
+  if (isShrinkWave) {
+    h += `<div style="margin-bottom:12px;padding:8px 14px;background:#0e2028;border:1px solid #2a6070;
+      border-radius:3px;font-size:17px;color:#7fc8dd">
+      ⇩ <b>Shrink wave</b> — the chain runs as usual, but shrink targets are matched to attackers
+      <b>first</b> so they get optimal-range hits: fat, high-pop enemy provinces lose acres, which
+      costs the enemy living space and peons they can't regrow.
+      ${S.waveType === 'shrinkai'
+        ? `Targets are picked by the solver (fattest breakable, in range, never a chain victim or bloat prov,
+           needs defense intel) — at most ${WP_SHRINK_AI_MAX_TARGETS}, ${WP_SHRINK_AI_HITS} hits each, capped at
+           ~${Math.round(WP_SHRINK_AI_SLOT_SHARE * 100)}% of the wave's slots. Shrink flags you set on the board are kept.`
+        : `Set <b>Shrink ⇩ 1-3</b> on the WAR BOARD for each province you want shrunk
+           (${shrinkFlagged} flagged now). Chain goals stay on the Chain ⌖ column.`}
+    </div>`;
+  }
+
+  if (!flaggedCount && !(isShrinkWave && (shrinkFlagged || S.waveType === 'shrinkai'))) {
     return h + `<div class="watk-notarget">// No wave targets flagged<br>
       <span style="font-size:17px">Set waves on the WAR BOARD tab first, then generate.</span></div>`;
   }
@@ -174,6 +212,14 @@ function _buildWavePlan() {
   const dumpCount = seq ? seq.filter(x => x.dump).length : 0;
   if (dumpCount)
     warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
+  for (const ss of shrinkStatus) {
+    // Exact acres — fK rounding hides the difference between e.g. 3050 and 2600
+    const acres = `${ss.from} → ~${ss.to} acres`;
+    const who   = ss.ai ? ' <span style="font-size:15px;color:#7a9090">(AI pick)</span>' : '';
+    warn.push(ss.done
+      ? `<span style="color:#40a0c0">⇩ <b>Shrink done:</b> ${esc(pnum(ss.slot, ss.name))}${who} — ${ss.hits} hit${ss.hits > 1 ? 's' : ''} (goal ${ss.goal}), ${acres}</span>`
+      : `⇩ <b>Shrink short:</b> ${esc(pnum(ss.slot, ss.name))}${who} — only ${ss.hits} of ${ss.goal} hits planned (${acres}); no more attackers could break it in range.`);
+  }
   for (const cs of (S._waveGen?.chainStatus || [])) {
     warn.push(cs.done
       ? `<span style="color:#60C040">⛓ <b>Chain goal reached:</b> ${esc(pnum(cs.slot, cs.name))} ${cs.from} → ~${cs.to} acres (goal ${cs.goal})</span>`
@@ -212,6 +258,7 @@ function _buildWavePlan() {
                     : '<span class="watk-type watk-type-tm">TM</span>';
     const chainGoal = S.provinces[hit.targetSlot]?.targetAcres || 0;
     const flags = (chainGoal    ? ` <span style="color:#E05050;font-size:15px" title="Chain target — goal ${fK(chainGoal)} acres">⛓${hit.projLand != null ? ' ' + fK(hit.projLand) + '→' : ''}</span>` : '')
+                + (hit.shrink   ? ` <span style="color:#40a0c0;font-size:15px" title="Shrink hit — planned before the chain to cut this province's living space">⇩ shrink${hit.projLand != null ? ' ' + fK(hit.projLand) + '→' : ''}</span>` : '')
                 + (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
                 + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')

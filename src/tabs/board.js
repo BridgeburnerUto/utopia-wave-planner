@@ -20,9 +20,10 @@ function _pp(slot) {
   if (!S.provinces[slot]) {
     S.provinces[slot] = { wave: null, assignedTo: [], bloat: false, needsRaze: false, needsMassacre: false, requiredOps: [], notes: '' };
   }
-  // Migrate legacy entries that predate assignedTo / bloat
+  // Migrate legacy entries that predate assignedTo / bloat / shrink
   if (!Array.isArray(S.provinces[slot].assignedTo)) S.provinces[slot].assignedTo = [];
   if (S.provinces[slot].bloat === undefined)        S.provinces[slot].bloat = false;
+  if (S.provinces[slot].shrink === undefined)       S.provinces[slot].shrink = 0;
   return S.provinces[slot];
 }
 
@@ -37,6 +38,15 @@ function setProvWave(slot, wave) {
 function setProvTargetAcres(slot, rawVal) {
   const v = parseInt(rawVal);
   _pp(slot).targetAcres = v > 0 ? v : 0;
+  renderBoard();
+  renderWavePlan();
+}
+
+/** Shrink goal: how many hits (1-3) a shrink wave should land on this province
+ *  to cut its living space. Only used by the 'shrink' / 'shrinkai' wave types. */
+function setProvShrink(slot, rawVal) {
+  const v = parseInt(rawVal);
+  _pp(slot).shrink = v > 0 ? Math.min(3, v) : 0;
   renderBoard();
   renderWavePlan();
 }
@@ -128,6 +138,7 @@ function _buildBoard() {
       intelAge: da,
       wave:          plan.wave,
       targetAcres:   plan.targetAcres   || 0,
+      shrink:        plan.shrink        || 0,
       assignedTo:    plan.assignedTo    || [],
       bloat:         plan.bloat         || false,
       needsRaze:     plan.needsRaze,
@@ -217,6 +228,19 @@ function _buildBoard() {
                   font-family:monospace;font-size:17px;padding:3px 6px;border-radius:3px;width:64px;text-align:right;">`
       : r.targetAcres ? `<span style="color:#E05050;font-family:monospace">${fK(r.targetAcres)}</span>` : '—';
 
+    // Shrink goal: hits a shrink wave should land here (popspace denial)
+    const shrinkCell = isLeader
+      ? `<select onchange="__wpA.setProvShrink(${r.slot},this.value)"
+           title="Shrink target: a Shrink wave plans this many hits here to cut its living space (pop ${r.popPct}%, ${fK(r.land)} acres)"
+           style="background:#2b3333;border:1px solid ${r.shrink?'#40a0c0':'#617070'};color:${r.shrink?'#40a0c0':'#ffffff'};
+                  font-size:17px;padding:3px 6px;border-radius:3px;outline:none;cursor:pointer;">
+          <option value="0" ${!r.shrink     ?'selected':''}>—</option>
+          <option value="1" ${r.shrink===1  ?'selected':''}>⇩ 1</option>
+          <option value="2" ${r.shrink===2  ?'selected':''}>⇩ 2</option>
+          <option value="3" ${r.shrink===3  ?'selected':''}>⇩ 3</option>
+        </select>`
+      : r.shrink ? `<span style="color:#40a0c0;font-family:monospace">⇩ ${r.shrink}</span>` : '—';
+
     // Assignment picker — own province multi-select
     const ownProvNames = (S.own?.provinces || []).map(p => p.name);
     const isPickerOpen = _assignPickerSlot === r.slot;
@@ -271,6 +295,7 @@ function _buildBoard() {
       <td style="padding:7px 10px;text-align:right;font-size:17px;color:${ageCol};">${r.intelAge != null ? fA(r.intelAge) : '—'}</td>
       <td style="padding:7px 10px;text-align:center;">${waveSelect}</td>
       <td style="padding:7px 10px;text-align:center;">${chainCell}</td>
+      <td style="padding:7px 10px;text-align:center;">${shrinkCell}</td>
       <td style="padding:5px 7px;vertical-align:middle;">${assignCell}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.bloat?'#9060c0':'#7a9090'};">${bloatCheck}</td>
       <td style="padding:7px 10px;text-align:center;color:${r.needsRaze?'#ffd400':'#7a9090'};">${razeCheck}</td>
@@ -279,9 +304,11 @@ function _buildBoard() {
   }).join('');
 
   // Summary counts
-  const assigned   = rows.filter(r => r.wave?.startsWith('current')).length;
-  const bloatCount = rows.filter(r => r.bloat).length;
-  const preplanned = rows.filter(r => r.wave === 'preplan').length;
+  const assigned    = rows.filter(r => r.wave?.startsWith('current')).length;
+  const bloatCount  = rows.filter(r => r.bloat).length;
+  const preplanned  = rows.filter(r => r.wave === 'preplan').length;
+  const shrinkCount = rows.filter(r => r.shrink > 0).length;
+  const shrinkHits  = rows.reduce((s, r) => s + (r.shrink || 0), 0);
 
   const enemyBar = `
     <div class="webar">
@@ -295,6 +322,7 @@ function _buildBoard() {
       <div style="font-size:17px;color:#7a9090;margin-left:auto">
         ${rows.length} provinces ·
         <span style="color:#E05050;">${assigned} wave targets</span>
+        ${shrinkCount ? ` · <span style="color:#40a0c0">${shrinkCount} shrink (${shrinkHits} hits)</span>` : ''}
         ${bloatCount ? ` · <span style="color:#9060c0">${bloatCount} bloat</span>` : ''}
         ${preplanned ? ` · <span style="color:#ffd400">${preplanned} pre-plan</span>` : ''}
       </div>
@@ -319,6 +347,7 @@ function _buildBoard() {
           ${th('intelAge','Intel',true)}
           ${thS('Wave')}
           ${thS('Chain ⌖')}
+          ${thS('Shrink ⇩')}
           ${thS('Assigned')}
           ${thS('Bloat')}
           ${thS('Raze')}

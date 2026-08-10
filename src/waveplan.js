@@ -22,11 +22,37 @@
 // Fallbacks for a slot out of range of every flagged target:
 //  - in-range breakable NON-target (fat pure-def wall; never bloat) → 'wall'
 //  - else least-bad flagged target by NW ratio, flagged 'marginal'.
+//
+// WAVE TYPES (S.waveType, dropdown on the Wave Plan tab):
+//  - 'standard' — everything above, unchanged.
+//  - 'shrink'   — chain as usual, but ALSO spend 1-3 hits each on leader-picked
+//                 SHRINK targets (War Board "Shrink ⇩" column): big, high-pop
+//                 enemy provinces we want smaller so the enemy KD loses living
+//                 space/peons while the chain runs. Shrink hits are matched to
+//                 attackers BEFORE the chain is solved, so the best-ranged
+//                 (optimal RPNW) slots do the shrinking; the chain then eats
+//                 what is left.
+//  - 'shrinkai' — same, but the solver picks the shrink targets itself (fattest
+//                 breakable, in-range, non-chain, non-bloat provinces), never
+//                 more than WP_SHRINK_AI_MAX_TARGETS so the wave stays focused.
+//                 Leader-set shrink flags are honoured first, AI fills the rest.
 
 const WP_SLOT_MERGE_SEC = 3600;   // armies returning within 1h = one slot
 const WP_MAX_HITS_PER_SLOT = 6;
 const WP_AMBUSH_OFF_PCT = 0.20;   // leftover-off share worth holding a spare gen for ambush
 const WP_MIN_SLOT_OFF   = 1000;   // slots below this offense are not attackers (pure-def provs)
+
+// ── Shrink-wave tuning ───────────────────────────────────────────────────────
+const WP_SHRINK_MAX_HITS       = 3;    // leader may order 1-3 hits per shrink target
+const WP_SHRINK_MAX_PER_SLOT   = 2;    // shrink hits pre-matched to one attacker slot
+const WP_SHRINK_AI_MAX_TARGETS = 6;    // AI never spreads wider than this (too thin)
+const WP_SHRINK_AI_HITS        = 2;    // hits the AI plans per auto-picked target
+const WP_SHRINK_AI_SLOT_SHARE  = 0.35; // max share of attack slots spent shrinking
+
+/** True for the wave types that run the shrink pass. */
+function _wpIsShrinkWave(waveType) {
+  return waveType === 'shrink' || waveType === 'shrinkai';
+}
 
 /** Raw troops to send: game applies +5% per extra general to the troops sent. */
 function _wpTroopsFor(def, gens) {
@@ -186,10 +212,16 @@ function buildWaveSlots() {
 }
 
 // ── Targets ──────────────────────────────────────────────────────────────────
-/** Flagged wave targets with live intel + mutable sim state. */
-function buildWaveTargets() {
+/**
+ * Flagged wave targets with live intel + mutable sim state.
+ * shrinkGoals ({[slot]: {hits, ai}}) pulls shrink-only provinces (not flagged
+ * as wave targets on the board) into the target pool as well — empty object /
+ * omitted for a standard wave, so behaviour there is unchanged.
+ */
+function buildWaveTargets(shrinkGoals) {
+  const sg = shrinkGoals || {};
   return (S.enemy?.provinces || [])
-    .filter(ep => S.provinces[ep.slot]?.wave)
+    .filter(ep => S.provinces[ep.slot]?.wave || sg[ep.slot])
     .map(ep => {
       const plan = S.provinces[ep.slot];
       const tp   = pd('[' + ep.slot + ']');
@@ -205,6 +237,9 @@ function buildWaveTargets() {
         needsMassacre: plan.needsMassacre || false,
         bloat:         plan.bloat         || false,
         targetAcres:   plan.targetAcres   || 0,   // chain goal: hit until simLand ≤ this
+        shrinkGoal:    sg[ep.slot]?.hits  || 0,   // shrink goal: this many hits wanted
+        shrinkAI:      !!sg[ep.slot]?.ai,         // picked by the solver, not the leader
+        shrinkOnly:    !!sg[ep.slot] && !plan.wave,
         // sim state
         simNW: tp?.networth || ep.networth || 0,
         simLand: tp?.land || 0,
@@ -214,10 +249,13 @@ function buildWaveTargets() {
     .filter(t => t.nw > 0);
 }
 
-/** Non-flagged, non-bloat enemy provinces — fallback "wall" pool. */
-function _wpWallPool() {
+/** Non-flagged, non-bloat enemy provinces — fallback "wall" pool.
+ *  Shrink targets live in the target pool instead — never in both (one sim
+ *  state per province). */
+function _wpWallPool(shrinkGoals) {
+  const sg = shrinkGoals || {};
   return (S.enemy?.provinces || [])
-    .filter(ep => !S.provinces[ep.slot]?.wave && !S.provinces[ep.slot]?.bloat)
+    .filter(ep => !S.provinces[ep.slot]?.wave && !S.provinces[ep.slot]?.bloat && !sg[ep.slot])
     .map(ep => {
       const tp = pd('[' + ep.slot + ']');
       return {
@@ -254,6 +292,128 @@ function _wpMinGens(def, off, gensAvail) {
   return n <= gensAvail ? n : 0;
 }
 
+// ── Shrink pass ──────────────────────────────────────────────────────────────
+// A shrink wave keeps the chain, but first spends a few hits on the enemy's
+// biggest, fullest provinces: taking their acres removes living space, so the
+// peons they lose don't come back — econ damage while the chain runs.
+
+/** Leader-set shrink goals from the board: {[slot]: {hits, ai:false}}. */
+function _wpLeaderShrinkGoals() {
+  const out = {};
+  for (const ep of (S.enemy?.provinces || [])) {
+    const n = Math.min(WP_SHRINK_MAX_HITS, parseInt(S.provinces[ep.slot]?.shrink) || 0);
+    if (n > 0) out[ep.slot] = { hits: n, ai: false };
+  }
+  return out;
+}
+
+/**
+ * Auto-pick shrink targets ('shrinkai'): the fattest breakable enemy provinces
+ * that are in range of at least one attacker slot. Excluded: chain victims
+ * (already being pounded), bloat provinces (deliberately left to grow), and
+ * anything without fresh defense intel — the solver must not order hits on a
+ * province whose defense it does not know. Ranked by estimated POPULATION (not
+ * acres): the goal is to remove peons, and acres full of pop are worth more
+ * than empty ones. Capped by WP_SHRINK_AI_MAX_TARGETS and by the share of the
+ * wave we are willing to spend shrinking.
+ */
+function _wpAiShrinkPicks(slots, leaderGoals) {
+  const budget     = Math.max(WP_SHRINK_AI_HITS, Math.floor(slots.length * WP_SHRINK_AI_SLOT_SHARE));
+  const maxTargets = Math.min(WP_SHRINK_AI_MAX_TARGETS, Math.floor(budget / WP_SHRINK_AI_HITS));
+  const taken      = Object.keys(leaderGoals).length;
+  const room       = maxTargets - taken;
+  if (room <= 0) return {};
+
+  const cands = (S.enemy?.provinces || []).map(ep => {
+    if (leaderGoals[ep.slot]) return null;
+    const plan = S.provinces[ep.slot] || {};
+    if (plan.bloat)           return null;   // bloat = let it grow, hit with thievery
+    if (plan.targetAcres > 0) return null;   // chain victim — already the wave's focus
+    const tp   = pd('[' + ep.slot + ']') || ep;
+    const def  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
+    const nw   = tp.networth || ep.networth || 0;
+    const land = tp.land || 0;
+    if (!def || !nw || !land) return null;   // no def intel → never auto-target
+    const reachable = slots.some(sl =>
+      _wpRange(sl.nw, nw) !== 'out' && _wpMinGens(def, sl.off, sl.gens));
+    if (!reachable) return null;
+    const popPct = _enemyPopPct(tp);
+    const pop    = _provCurrentPop(tp) ?? (land * 25 * ((popPct ?? 0) / 100));
+    return { slot: ep.slot, pop };
+  }).filter(Boolean).sort((a, b) => b.pop - a.pop);
+
+  const out = {};
+  for (const c of cands.slice(0, room)) out[c.slot] = { hits: WP_SHRINK_AI_HITS, ai: true };
+  return out;
+}
+
+/** All shrink goals for a wave type (leader flags, plus AI picks in 'shrinkai'). */
+function _wpShrinkGoals(waveType, slots) {
+  if (!_wpIsShrinkWave(waveType)) return {};
+  const leader = _wpLeaderShrinkGoals();
+  return waveType === 'shrinkai'
+    ? { ...leader, ..._wpAiShrinkPicks(slots, leader) }
+    : leader;
+}
+
+/**
+ * Match shrink hits to attacker slots BEFORE the chain is solved, so shrink
+ * targets get the best-ranged attackers (user rule) instead of whatever the
+ * chain leaves over. Returns {[slotKey]: [targetSlot, ...]} — intent only; the
+ * main loop still checks it can actually break the target at that point.
+ * Protected: a slot that is the ONLY in-range breaker of a chain victim is
+ * never given shrink work.
+ */
+function _wpAssignShrink(slots, targets, gainFn) {
+  const needs = targets.filter(t => t.shrinkGoal > 0);
+  if (!needs.length) return {};
+
+  // Slots that must stay free for a chain victim only they can reach
+  const protectedSlots = new Set();
+  for (const t of targets) {
+    if (!(t.targetAcres > 0)) continue;
+    const able = slots.filter(sl => _wpRange(sl.nw, t.nw) !== 'out' && _wpMinGens(t.def, sl.off, sl.gens));
+    if (able.length === 1) protectedSlots.add(able[0].key);
+  }
+
+  const pairs = [];
+  for (const sl of slots) {
+    if (protectedSlots.has(sl.key)) continue;
+    for (const t of needs) {
+      const range = _wpRange(sl.nw, t.nw);
+      if (range === 'out') continue;                        // shrink = good-range work only
+      if (!_wpMinGens(t.def, sl.off, sl.gens)) continue;     // can't break it even at full off
+      pairs.push({ sl, t, range, gain: gainFn(t, sl) });
+    }
+  }
+  // Optimal range first, then the fattest target, then gains
+  pairs.sort((a, b) => _wpBandRank(a.range) - _wpBandRank(b.range)
+                    || (b.t.pop || 0) - (a.t.pop || 0)
+                    || b.gain - a.gain);
+
+  const assign = {};
+  const perSlot = {}, perTarget = {};
+  for (const p of pairs) {
+    if ((perTarget[p.t.slot] || 0) >= p.t.shrinkGoal)     continue;
+    if ((perSlot[p.sl.key]  || 0) >= WP_SHRINK_MAX_PER_SLOT) continue;
+    (assign[p.sl.key] = assign[p.sl.key] || []).push(p.t.slot);
+    perTarget[p.t.slot] = (perTarget[p.t.slot] || 0) + 1;
+    perSlot[p.sl.key]   = (perSlot[p.sl.key]  || 0) + 1;
+  }
+  return assign;
+}
+
+/** Shrink progress for every target with a shrink goal. `hits` is every hit the
+ *  wave lands there (a leftover dump hit shrinks it just as well), so it can
+ *  exceed the goal — the UI words it as "N hits (goal G)". */
+function _wpShrinkStatus(targets) {
+  return targets.filter(t => t.shrinkGoal > 0).map(t => ({
+    name: t.name, slot: t.slot, goal: t.shrinkGoal, hits: t.hits, ai: t.shrinkAI,
+    from: t.land, to: Math.round(t.simLand),
+    done: t.hits >= t.shrinkGoal,
+  }));
+}
+
 // ── Solver ───────────────────────────────────────────────────────────────────
 /** Chain-goal progress for every target with targetAcres set. */
 function _wpChainStatus(targets) {
@@ -266,14 +426,16 @@ function _wpChainStatus(targets) {
 
 /**
  * Generate the wave sequence. Pure: reads S, returns {seq, slots, targets,
- * uncovered, idleSlots, ambushHolds, chainStatus, waveType, totalGains}.
- * Does not mutate S. waveType is plumbed through for future wave-type
- * variants (only 'standard' exists so far — behavior identical).
+ * uncovered, idleSlots, ambushHolds, chainStatus, shrinkStatus, shrinkGoals,
+ * waveType, totalGains}. Does not mutate S.
+ * waveType: 'standard' | 'shrink' | 'shrinkai' (see header).
  */
 function generateWaveSeq(waveType) {
+  const wt      = waveType || S.waveType || 'standard';
   const slots   = buildWaveSlots();
-  const targets = buildWaveTargets();
-  const walls   = _wpWallPool();
+  const shrinkGoals = _wpShrinkGoals(wt, slots);
+  const targets = buildWaveTargets(shrinkGoals);
+  const walls   = _wpWallPool(shrinkGoals);
 
   const ownProvs   = S.own?.provinces   || [];
   const eneProvs   = S.enemy?.provinces || [];
@@ -296,6 +458,10 @@ function generateWaveSeq(waveType) {
   function estGain(t, sl) {
     return _estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW) || 0;
   }
+
+  // Shrink hits are matched to attackers up front (before the chain is solved)
+  // so the best-ranged slots do the shrinking. {slotKey: [targetSlot,...]}
+  const shrinkAssign = _wpAssignShrink(slots, targets, estGain);
 
   function applyHit(t, sl, type, gens, gensLeft, offLeft, extra) {
     const gain = type === 'TM' ? estGain(t, sl) : 0;
@@ -350,28 +516,44 @@ function generateWaveSeq(waveType) {
         !(reservedHits[c.t.slot] > 0) || inRange.length === 1 || slotHadReservation);
       const pool = nonReserved.length ? nonReserved : inRange;
 
-      let pick = null, type = 'TM', marginal = false, fallback = null;
+      let pick = null, type = 'TM', marginal = false, fallback = null, shrink = false;
 
       // Chain goal helpers: unmet chains come first; met chains ("done") drop
       // to overflow — they only soak dump hits / last-resort marginals.
       const chainNeeded = t => t.targetAcres > 0 && t.simLand > t.targetAcres;
       const chainDone   = t => t.targetAcres > 0 && t.simLand <= t.targetAcres;
+      // Shrink quota: hits still wanted on a shrink target. A shrink-ONLY
+      // target whose quota is filled drops out of the normal tiers (we do not
+      // want the wave drifting onto it once its acres are taken).
+      const shrinkNeeded = t => t.shrinkGoal > 0 && t.hits < t.shrinkGoal;
+      const shrinkSpent  = t => t.shrinkOnly && t.hits >= t.shrinkGoal;
+      const mine = shrinkAssign[sl.key] || [];
 
       // 1. Raze/Massacre still needed, in range preferred
       const rm = pool.filter(c => (c.t.needsRaze && !c.t.razeDone) || (c.t.needsMassacre && !c.t.massDone))
         .sort(_wpByBandPopGain);
-      // 2. Chain quota: unmet chain targets before everything else — the wave
+      // 2. Shrink work pre-matched to THIS slot — planned ahead of the chain so
+      //    shrink targets get optimal-range attackers
+      const shrinkMine = pool.filter(c => shrinkNeeded(c.t) && mine.includes(c.t.slot))
+        .sort(_wpByBandPopGain);
+      // 3. Chain quota: unmet chain targets before everything else — the wave
       //    is built around the chain
       const chain = pool.filter(c => chainNeeded(c.t) && !c.t.bloat).sort(_wpByBandPopGain);
-      // 3. Uncovered targets (0 hits): range band → enemy pop% → gain
-      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat && !chainDone(c.t)).sort(_wpByBandPopGain);
-      // 4. Any in-range flagged (met chains excluded): band → pop% → gain
-      const any = pool.filter(c => !c.t.bloat && !chainDone(c.t)).sort(_wpByBandPopGain);
+      // 4. Shrink quota nobody delivered on (its matched slot could not break
+      //    it, or was spent) — any in-range slot picks up the slack
+      const shrinkLeft = pool.filter(c => shrinkNeeded(c.t) && !c.t.bloat).sort(_wpByBandPopGain);
+      // 5. Uncovered targets (0 hits): range band → enemy pop% → gain
+      const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat && !chainDone(c.t) && !shrinkSpent(c.t))
+        .sort(_wpByBandPopGain);
+      // 6. Any in-range flagged (met chains/shrinks excluded): band → pop% → gain
+      const any = pool.filter(c => !c.t.bloat && !chainDone(c.t) && !shrinkSpent(c.t)).sort(_wpByBandPopGain);
 
-      if      (rm.length)    { pick = rm[0]; type = pick.t.needsRaze && !pick.t.razeDone ? 'RAZE' : 'MASS'; }
-      else if (chain.length) { pick = chain[0]; }
-      else if (uncov.length) { pick = uncov[0]; }
-      else if (any.length)   { pick = any[0]; }
+      if      (rm.length)         { pick = rm[0]; type = pick.t.needsRaze && !pick.t.razeDone ? 'RAZE' : 'MASS'; }
+      else if (shrinkMine.length) { pick = shrinkMine[0]; shrink = true; }
+      else if (chain.length)      { pick = chain[0]; }
+      else if (shrinkLeft.length) { pick = shrinkLeft[0]; shrink = true; }
+      else if (uncov.length)      { pick = uncov[0]; }
+      else if (any.length)        { pick = any[0]; }
       else {
         // Fallbacks — nothing flagged is in range for this slot
         // a) in-range breakable wall (non-target, non-bloat)
@@ -384,9 +566,12 @@ function generateWaveSeq(waveType) {
         }).filter(Boolean).sort(_wpByBandPopGain);
         if (wall.length) { pick = wall[0]; fallback = 'wall'; }
         else {
-          // b) least-bad flagged target by NW ratio, breakable, marked marginal
+          // b) least-bad flagged target by NW ratio, breakable, marked marginal.
+          //    Shrink targets that already got their hits go last — leftover
+          //    offense shouldn't pile onto one province the wave is done with.
           const lb = cands.filter(c => !c.t.bloat)
-            .sort((a, b) => Math.abs(Math.log(sl.nw / (a.t.simNW || 1))) -
+            .sort((a, b) => (Number(shrinkSpent(a.t)) - Number(shrinkSpent(b.t))) ||
+                            Math.abs(Math.log(sl.nw / (a.t.simNW || 1))) -
                             Math.abs(Math.log(sl.nw / (b.t.simNW || 1))));
           if (lb.length) { pick = lb[0]; marginal = true; }
         }
@@ -395,7 +580,7 @@ function generateWaveSeq(waveType) {
       if (!pick) break; // nothing breakable at all — slot done
 
       if (reservedHits[pick.t.slot] > 0 && slotHadReservation) reservedHits[pick.t.slot]--;
-      applyHit(pick.t, sl, type, pick.mg, gensLeft, offLeft, { marginal, fallback });
+      applyHit(pick.t, sl, type, pick.mg, gensLeft, offLeft, { marginal, fallback, shrink });
       gensLeft -= pick.mg;
       offLeft  -= _wpTroopsFor(pick.t.def, pick.mg); // gen bonus already saves troops here
       hitsThisSlot++;
@@ -435,8 +620,10 @@ function generateWaveSeq(waveType) {
   const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => pnum(t.slot, t.name));
   const totalGains = seq.reduce((s, h) => s + (h.estGain || 0), 0);
   return { seq, slots, targets, uncovered, idleSlots, ambushHolds,
-           chainStatus: _wpChainStatus(targets),
-           waveType: waveType || S.waveType || 'standard',
+           chainStatus:  _wpChainStatus(targets),
+           shrinkStatus: _wpShrinkStatus(targets),
+           shrinkGoals,
+           waveType: wt,
            totalGains };
 }
 
@@ -447,10 +634,14 @@ function generateWaveSeq(waveType) {
  * Returns a new seq array; hits whose attacker can no longer break are kept
  * but marked result:'risky'.
  */
-function resimulateWaveSeq(seq) {
+function resimulateWaveSeq(seq, waveType) {
+  const wt      = waveType || S.waveType || 'standard';
   const slots   = buildWaveSlots();
-  const targets = buildWaveTargets();
-  const walls   = _wpWallPool();
+  // Same goals as generation: leader flags are stored on the plan, and the AI
+  // pick is deterministic for the same intel, so the target pool matches.
+  const shrinkGoals = _wpShrinkGoals(wt, slots);
+  const targets = buildWaveTargets(shrinkGoals);
+  const walls   = _wpWallPool(shrinkGoals);
   const bySlotKey  = Object.fromEntries(slots.map(s => [s.key, { ...s, gensLeft: s.gens, offLeft: s.off }]));
   const byTarget   = {};
   targets.concat(walls).forEach(t => { byTarget[t.slot] = t; });
@@ -479,10 +670,12 @@ function resimulateWaveSeq(seq) {
       sentOff: _wpTroopsFor(t.def, mg || 1),
       popWarn: _wpPopWarn(sl.popPct, h.type),
       projNW: Math.round(t.simNW),
+      projLand: Math.round(t.simLand),
       range: _wpRange(sl.nw, t.simNW),
       estGain: Math.round(gain),
       risky: mg === 0,
     });
+    t.hits++;   // keeps chain/shrink status accurate after manual edits
     if (mg) { sl.gensLeft -= mg; sl.offLeft -= _wpTroopsFor(t.def, mg); }
     if (gain > 0) {
       const nwPerAcre = t.simLand > 0 ? t.simNW / t.simLand : 0;
@@ -503,7 +696,9 @@ function resimulateWaveSeq(seq) {
       attacker: sl.attacker, provSlot: sl.provSlot, slotKey: key, leftover: Math.round(fin.leftover),
     });
   }
-  return { seq: out, ambushHolds, chainStatus: _wpChainStatus(targets) };
+  return { seq: out, ambushHolds,
+           chainStatus:  _wpChainStatus(targets),
+           shrinkStatus: _wpShrinkStatus(targets) };
 }
 
 // ── Discord hitlist ──────────────────────────────────────────────────────────
@@ -515,6 +710,7 @@ async function postWaveSeqToDiscord(seq) {
     `**#${h.n}** ${pnum(h.provSlot, h.attacker)} → **${pnum(h.targetSlot, h.target)}** · ${h.type} · ${h.gens} gen${h.gens > 1 ? 's' : ''}` +
     ` · ${fK(h.sentOff)} off · ${fmtT(h.availableAt)}` +
     (h.estGain ? ` · ~${fK(h.estGain)} ac` : '') +
+    (h.shrink ? ' · ⇩ shrink' : '') +
     (h.marginal ? ' · ⚠ marginal' : '') + (h.isWall ? ' · wall' : '') +
     (h.dump ? ' · dump' : ''));
 

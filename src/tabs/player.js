@@ -706,7 +706,8 @@ function _buildWaveSlice(prov) {
     const typeBadge = hit.type === 'RAZE' ? '<span class="watk-type watk-type-rz">Raze</span>'
                     : hit.type === 'MASS' ? '<span class="watk-type watk-type-ms">Mass</span>'
                     : '<span class="watk-type watk-type-tm">TM</span>';
-    const flags = (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
+    const flags = (hit.shrink   ? ' <span style="color:#40a0c0;font-size:15px" title="Shrink hit — take acres to cut this province\'s living space">⇩ shrink</span>' : '')
+                + (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
                 + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
                 + (hit.dump     ? ' <span style="color:#617070;font-size:15px">♻ dump</span>'       : '');

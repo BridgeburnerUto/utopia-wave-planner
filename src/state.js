@@ -15,7 +15,8 @@ const S = {
   // War plan
   // wpId removed — war plan now stored directly in Firestore (warplan/{kdId})
   cols: [],         // LEGACY kanban columns (kept for migration only)
-  provinces: {},    // war plan per province: {[slot]: {wave, needsRaze, needsMassacre, requiredOps, notes}}
+  provinces: {},    // war plan per province: {[slot]: {wave, needsRaze, needsMassacre, requiredOps,
+                    //   notes, bloat, targetAcres (chain goal), shrink (0-3 shrink-wave hits)}}
                     // wave: null | 'current' | 'preplan'
   eLoc: '5:3',      // current enemy location string
   thresholds: {
@@ -82,7 +83,8 @@ const S = {
   waveSeq: null,     // PUBLISHED wave sequence (array of hit objects) — persisted in war plan JSON
   waveDraft: null,   // generated-but-unpublished sequence (leader's working copy, session only)
   waveGenAt: 0,      // Unix ms when the draft/published seq was generated
-  waveType: 'standard', // wave type selector — only 'standard' so far, more types planned
+  waveType: 'standard', // wave type: 'standard' | 'shrink' (leader-picked shrink targets)
+                        // | 'shrinkai' (solver picks them) — see waveplan.js header
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
