@@ -1,10 +1,26 @@
-# Utopia Strategy Reference (Age 115)
+# Utopia Strategy Reference (Age 116)
 
 This document is sent to Claude alongside kingdom intel for the "AI Strategy"
 tab. It contains static game-mechanics context (races, personalities, and —
 once available — wiki strategy notes on province management, internal
 management, and external actions). Update this file when a new age starts
 (numbers can change between ages).
+
+*Updated 2026-08-10 from "AGE 116 FINAL CHANGES". Age 116 runs Fri 7/24/26
+18:00 → Sat 10/3/26 00:00.*
+
+## Age 116 — Key Changes Summary
+
+- **War Doctrines (new mechanic)**: each race grants a kingdom-wide bonus while at war. 1st province of a race: +2.0% doctrine strength; each additional: +1% (Elf, Faery, Halfling: +2% per additional); max 12.5%. Rewards stacking races — factor into KD-setup and wartime strength estimates.
+- **Races**: Dryad added (defensive race: +12.5% DME, -40% def losses, +20% birth rate, no Forts). Most race kits reworked — see Races table.
+- **Personalities**: Paladin removed; **Cleric** and **Sage** added. Kits reworked — see Personalities table.
+- **Buildings**: Watchtower catch chance 2.0% → **2.2%**.
+- **Science**: Shielding multiplier 0.0314 → **0.0350**; Valor 0.0582 → **0.0620**.
+- **Spells**: Fireball peasant damage 4–7% → **5–7%**; Storms **1.75%**/tick (was 1.5%); Droughts food -25% → **-30%**, draft rate -15% → **-20%**; Chastity, Sloth, Magic Ward base duration 6 → **4 days** avg; Lightning Strike now race/personality-unique (Necromancer), no longer global.
+- **Thievery**: Incite Riots income -15% → **-20%**; Bribe Thieves TPA -10% → **-12.5%**; Free Prisoners damage 17% → **25%**; Rob the Vaults war cap → **16%**; Kidnap war cap → **5%**; Destabilize Guilds duration cut -20% → **-25%**; Arson damage **+5%**.
+- **Attacking**: Massacre peasant damage in war **+5%** (additive; thief/wizard damage unchanged). Out-of-war attack gain penalty raised 10% → **15%**.
+- **Hostile meter**: decay reverts to pre-Age-111 behavior — decays on the 1st of each month by 20% or 3 points (whichever is greater); meter **no longer resets when entering war**. New FCF (forced ceasefire) rules for defenders — see Relations section.
+- **Dragons**: reworked effects and per-6-tick damage ticks — see Dragons section. Dragons started outside war cost **+15%** gold/food.
 
 ## Strategy — Our Approach to War Planning (vocabulary & priorities)
 
@@ -63,19 +79,20 @@ without this reasoning, and do not silently pick one without noting the tradeoff
 ## Strategy — Spell/Thievery Combos (Playbook)
 
 **Hollow-out combo (province-econ kill)** — *Highly effective, high commitment*
-- Sequence: **Mind Vortex** (remove Night's Blessing) → **Meteor Showers** → **Chastity** → **Storms** on a growing/econ province. Finish with **Fireball (FB)** until the target reaches ~2 ppa.
-- Why it works: Storms alone only kills ~1.5% of peasants, which Love & Peace would offset (raises birth rate to ~2.85%) — Chastity nullifies L&P's effect, and Meteor Showers pushes ppa down further. Once near 2 ppa, just maintaining Storms (occasionally MS) keeps it down.
+- Sequence: **Mind Vortex** (remove Night's Blessing) → **Meteor Showers** → **Chastity** → **Storms** on a growing/econ province. Finish with **Fireball (FB)** until the target reaches ~2 ppa. (Age 116: FB peasant damage is now 5–7% per cast; Storms kills 1.75%/tick — both slightly stronger.)
+- Why it works: Storms alone only kills ~1.75% of peasants per tick, which Love & Peace would offset (raises birth rate to ~2.85%) — Chastity nullifies L&P's effect, and Meteor Showers pushes ppa down further. Once near 2 ppa, just maintaining Storms (occasionally MS) keeps it down. **Age 116: Chastity base duration dropped from 6 to 4 days avg — recast more often to hold the lock. Elf-cast Chastity is far stronger (-70% birth rate via Arcane Mastery) — prefer Elf casters for this combo.**
 - Once hollowed: layer in non-mystic ops — **Explosions**, **Greed**, **Riots** — for max damage.
 - Monitor target's ppa via SoT/snatched SoT; if it creeps back up, hit with FB again.
 - Caveat: moderately effective against Rogues — may push them toward Kidnap ops instead of their normally more damaging ops.
 
 **Anti-attacker combo (Droughts + Sloth)** — *Low effectiveness, low commitment*
 - **Blanket Droughts + Sloth** on enemy attackers, best timed with an active dragon.
-- Stacking: dragon kills ~20% of draftees, Sloth -50% draft, Droughts -15% draft rate → combined ~66% draft reduction. Also reduces/kills horses.
+- Stacking: dragon kills ~20% of draftees, Sloth -50% draft, Droughts -20% draft rate (Age 116, was -15%) → combined ~68% draft reduction. Also reduces/kills horses, and Droughts now cuts food -30%.
+- Age 116 caveat: Sloth base duration dropped from 6 to 4 days avg — needs more frequent recasting to keep the blanket up.
 - Cheap to cast (Droughts especially) — chained provinces and Heretics can pile on. Goal: deny the target the troops needed to replenish after a dragon kill.
 
 **Kingdom-wide econ blanket (Riots + Blizzard + Greed)** — *High effectiveness, low commitment*
-- Blanket **Riots**, **Blizzard**, **Greed** across the enemy kingdom. Cumulative/persistent economic damage — pays off if sustained over time.
+- Blanket **Riots**, **Blizzard**, **Greed** across the enemy kingdom. Cumulative/persistent economic damage — pays off if sustained over time. (Age 116: Incite Riots now cuts income -20%, up from -15% — this blanket got stronger.)
 
 **Pre-chain softening combo (classic T/M)** — *High effectiveness, medium commitment*
 - Before chaining a target: **Gluttony**, **Rob the Granaries / Rob the Vermin**, **Droughts**, **Pitfalls**, **Greed**, **Bribe Generals**, **Riots**.
@@ -96,11 +113,11 @@ without this reasoning, and do not silently pick one without noting the tradeoff
 Intel ops (cheap, ~5% stealth each): Infiltrate, Snatch News, SoM, SoT, SoS, Survey — send **5%** of your thieves.
 
 Sabotage ops:
-- Arson — **100%** (also doubles as a way to estimate % barren land in target).
+- Arson — **100%** (also doubles as a way to estimate % barren land in target). (Age 116: damage +5%.)
 - Bribe Generals — **10 thieves**.
-- Bribe Thieves — **10 thieves**.
-- Free Prisoners — **2 per prisoner** you want freed.
-- Incite Riots, Kidnap, Rob the Granaries, Rob the Towers, Rob the Vault — **use the rob calculator** before each op.
+- Bribe Thieves — **10 thieves** (Age 116: now -12.5% target TPA, up from -10%).
+- Free Prisoners — **2 per prisoner** you want freed (Age 116: damage raised 17% → 25%).
+- Incite Riots, Kidnap, Rob the Granaries, Rob the Towers, Rob the Vault — **use the rob calculator** before each op. (Age 116 war caps lifted: Rob the Vaults to 16%, Kidnap to 5% — both ops hit harder in war.)
 - Nightstrike — **20% of your thieves**, sized against the target's largest single troop stack (see NS mechanics below).
 - Sabotage Wizards — set up via the rob-calc for Incite Riots, then switch the op to Sabotage Wizards before sending.
 
@@ -159,7 +176,7 @@ Overpopulation = Total Population > Max Population (`pop% > 100`, see `_enemyPop
 - **Level 1 — >100% (Peasant Desertion)**: peasants leave at `min(10% of peasants, overpop amount)`, minimum 10/tick; no new peasant births.
 - **Level 2 — >115% (Military Desertion)**: all of Level 1, plus **army refuses to attack**, and troops (home AND away) desert at up to ~5.8%/tick (scales up to that cap). Soldiers absorb desertion first (up to 100% of it); off-specs/def-specs/elites desert at roughly equal % to each other. Deserters fill dungeons first if space allows, otherwise lost entirely.
 - **Level 3 — >130% (Rioting)**: all of Level 1+2, plus **income -50%**.
-- **Level 4 — >140% (Thieves on Strike)**: all of Level 1-3, plus **no thievery operations possible**.
+- **Level 4 — >140% (Thieves on Strike)**: all of Level 1-3, plus **no thievery operations possible**. (Age 116 exception: **Rogue** provinces keep thieving while overpopulated via Shadow Persistence — the Level-4 thief-shutdown payoff does NOT apply vs Rogues; vs a Rogue chain victim, Level 3 (130%) is the practical ceiling of what a chain denies them.)
 - **Separate "Military on Strike" effect**: whenever *military population alone* exceeds max population, the army refuses to attack — this can trigger independently of the overall pop% levels above (e.g. a province with low peasant/wizard count but a huge military could hit this without being in Level 1-3).
 
 **Chaining implication**: a target with **low incoming reinforcements/acres** (i.e. we keep taking land faster than they can recover) is the one most likely to get pushed to Level 4 — at that point their thieves stop working *and* their army can't attack, which is the ideal state for an offense-suppression chain (Chaining type 1). When picking chain targets, prefer ones where our combined wave can realistically sustain >140% pop, not just tip them over 100%.
@@ -203,36 +220,57 @@ Nightmare puts ~1.5% of a province's home troops (including thieves) into 8h tra
 - NM **immediately lowers the target's NW** — watch that it stays in RPNW range for the attackers planned in the chain wave (out-of-range NW kills gains, per the RPNW table above).
 - Troops in training return after 8h, so NM chains must be timed to land **no more than 1-2 ticks before your actual attack wave hits**.
 
-## Races (10)
+## Races (10) — Age 116
 
-| Race | Key Bonuses | Key Penalties |
-|------|-------------|---------------|
-| Avian | -20% Attack Travel Time, -25% Military Wages, -25% Military Training Time | -5% Building Efficiency; no Stables/War Horses |
-| Dark Elf | +35% Combat Instant Spell Damage, -35% Rune Cost | -15% Birth Rate |
-| Dwarf | +30% Building Efficiency, -50% Building Construction Time | +10% Attack Travel Time; no Acceleration |
-| Elf | +40% Wizards Per Acre, +1% Extra Mana Per Tick (war), +40% Land Effect Towers | -20% Thievery Per Acre |
-| Faery | +25% Offensive Spell Duration, +20% WPA, +25% Self-Spell Duration, +1% Extra Mana | -5% Max Population |
-| Halfling | +10% Max Population, +20% Thievery Per Acre, +1% Extra Stealth Per Tick | +10% Own Casualties (attack/defend) |
-| Human | +2 Prisoner Capacity Per Acre, -30% Learn Attack Losses, +10% Science Effectiveness | +40% Rune Cost; reduced wage efficiency |
-| Orc | +5% Battle Gains, +15% Battle Gains (War Only), -50% Draft Cost | -15% Defensive Military Efficiency |
-| Undead | -100% Food Consumption, -45% Own Casualties (attack/defend), Plague Immunity | -10% Science Effectiveness |
+War Doctrine = kingdom-wide bonus while at war, scaling with # of provinces of that race (1st: +2%, each additional: +1% — Elf/Faery/Halfling +2% per additional — max 12.5%).
 
-## Personalities (12, 10 listed by source)
+| Race | Key Bonuses | Key Penalties | War Doctrine (in war, KD-wide, up to) | Unique Passive |
+|------|-------------|---------------|----------------------------------------|----------------|
+| Avian | -25% Attack Time, -25% Training Time, -25% Military Wages | No Stables/War Horses; +30% Rune Cost | -10% Attack Time, -12.5% Military Wages | Dive Bomb: off-specs +2 offense in war (no NW effect) |
+| Dark Elf | +30% Offensive WPA, +30% Instant Spell Damage, can train Thieves with Specialist Credits | -15% Birth Rate; +30% Sabotage Damage taken | +12.5% Instant Spell Damage, -12.5% Rune Cost | Mystic Enthusiasts: successful offensive instant spells refund 30% rune cost |
+| Dryad | +12.5% DME, -40% Defensive Military Losses, +20% Birth Rate | +10% Attack Time; +1 Rune Cost on Offensive Spells; cannot use Forts | +10% DME, -12.5% Defensive Casualties | Overgrowth: activatable +25% max pop for 3 days |
+| Dwarf | +30% Building Efficiency, -50% Construction Time, -50% Construction Cost | No Acceleration; +90% Food Consumption | -12.5% Construction Costs, +12.5% Building Efficiency | Architect's Revenge: incoming Raze -15%, own Raze damage +20% |
+| Elf | +40% WPA, +30% Offensive Spell Duration, +1 Mana/Tick (war) | +35% Draft Costs | -12.5% Enemy Sorcery Damage, +12.5% Spell Duration | Arcane Mastery: Elf Chastity = -70% birth rate; Elf offensive duration spells +2 ticks |
+| Faery | +30% Self-Spell Duration, +20% WPA & TPA, +1 Mana Recovery/Tick | -5% Max Population; +15% Military Casualties | +12.5% Defensive WPA, -12.5% Enemy Thievery Damage | Leyline Interference: enemy spells vs Faery 15% chance to fail |
+| Halfling | +12.5% Max Population, +30% TPA, +1 Stealth Regen/Tick | -25% Draft Speed | +12.5% Sabotage Damage, -12.5% Thief Losses | Silent Assault: sabotage ops suffer 50% fewer thief losses |
+| Human | +30% Income, -30% Training Costs, +20% Draft Speed | +25% Military Wages | +12.5% Specialist Credit Gains, -12.5% Training Costs | Civil Administration: prisoners +2.0gc/tick, mercenary costs -40% |
+| Orc | +10% Gains OOW / +15% Gains in War, +15% Enemy Military Casualties, -40% Draft Cost | +20% Instant Damage from Sabotage & Sorcery | +10% OME, +12.5% Raze Damage | Blood Spoils: successful attacks convert 25% of enemy casualties into Specialist Credits |
+| Undead | -45% Military Losses, Plague Immunity (always carries Plague + chance to spread), No Food Requirement | Cannot build Hospitals | -12.5% Enemy Battle Gains, +12.5% Plague spread chance | Death March: converts 25% of offensive losses into Soldiers instantly |
 
-| Personality | Primary Focus | Key Bonuses |
-|-------------|---------------|-------------|
-| Artisan | Production | +40% Flat Rate Capacity/Production, +15% Science (multiple fields) |
-| General | Military | -20% Training Cost/Time, +1 Army General, +15% Science (military fields) |
-| Heretic | Magic/Theft Hybrid | +75% Guild Land Effect, +20% Combat Spell Damage, -50% Thief Losses |
-| Mystic | Spellcasting | +25% Offensive Spell Duration, +125% Guild Land Effect, +1% Extra Mana |
-| Necromancer | Dark Magic | +35% Wizards Per Acre, -50% Rune Cost, +5% Offensive Military Efficiency |
-| Paladin | War Horses | +8 War Horse Capacity Per Acre, +7.5% Defensive Military Efficiency, Plague Immunity |
-| Rogue | Thievery | +20% Thievery Per Acre, +100% Thieves' Den Effectiveness, +1% Extra Stealth |
-| Tactician | Combat Strategy | -50% Ambush Losses, -15% Attack Travel Time, +25% Draft Rate |
-| War Hero | Battle Efficiency | +70% Honor Bonus, +15% Honor Gains, Offensive Specialist +2 Strength |
-| Warrior | Mercenaries | -50% Mercenary Cost, +15% Offensive Military Efficiency, +5 Prisoner/Mercenary Strength |
+**Race unit stats (off/def, nw; elite also gc cost)** — for offense/defense/NW estimates:
 
-<!-- TODO: add 2 missing personalities once confirmed -->
+| Race | Off Spec | Def Spec | Elite | War Horse |
+|------|----------|----------|-------|-----------|
+| Avian | 12/0, 4.8nw | 0/10, 5nw | 16/2, 750gc, 6.5nw | n/a |
+| Dark Elf | 14/0, 5.6nw | 0/12, 6nw | 16/2, 700gc, 6.5nw | 2/0, 0.6nw |
+| Dryad | 10/0, 4.0nw | 0/11, 5.5nw | 16/3, 800gc, 7.0nw | 2/0, 0.6nw |
+| Dwarf | 10/0, 4.0nw | 0/10, 5.0nw | 15/7, 900gc, 7.0nw | 2/0, 0.6nw |
+| Elf | 10/0, 4.0nw | 0/13, 6.5nw | 14/4, 700gc, 7.0nw | 2/0, 0.6nw |
+| Faery | 10/0, 4.0nw | 0/10, 5.0nw | 4/16, 1150gc, 8.5nw | 2/0, 0.6nw |
+| Halfling | 11/0, 4.4nw | 0/10, 5.0nw | 10/13, 900gc, 7.5nw | 2/0, 0.6nw |
+| Human | 15/0, 6.0nw | 0/12, 6.0nw | 15/5, 800gc, 7.0nw | 3/0, 0.9nw |
+| Orc | 13/0, 5.2nw | 0/10, 5nw | 18/3, 850gc, 7.0nw | 2/0, 0.6nw |
+| Undead | 11/0, 4.4nw | 0/10, 5.0nw | 16/4, 800gc, 7nw | 2/0, 0.6nw |
+
+All races: Soldier 3/0, 0.75nw; Mercenary 8/0, 0nw; Prisoner 8/0, 1.6nw.
+
+## Personalities (11) — Age 116
+
+Age 116: **Paladin removed**; **Cleric** and **Sage** added.
+
+| Personality | Primary Focus | Key Bonuses | Unique Passive |
+|-------------|---------------|-------------|----------------|
+| Artisan | Production | +25% Building Capacity (Homes/Stables/Dungeons), +25% Building Production (Banks/Farms/Stables/Towers/Homes), -25% Construction Costs (incl. Raze), immune to Greed/Incite Riots/Fool's Gold, +25% Economy Science; starts +600 Soldiers, +600 Spec Credits, +200 Building Credits | Masterful Craftsmanship: razing recovers 25% of buildings razed as Building Credits |
+| Cleric | Defense | +1 Elite Def Value & +1 Def Spec Strength (both affect NW), -40% Instant Spell Damage taken, +25% Military Science; Salvation/Revelation/Divine Shield/Illuminate Shadows/Hero's Inspiration; starts +800 Soldiers, +800 Spec Credits | Divine Favour: self-spells have 50% chance of double duration |
+| General | Military | +1 General, +2 Offensive Elite Strength (affects NW), -25% Training Cost & Speed, 1 Elite per 2 Spec Credits, +25% Military Science; Mist/Wrath; starts +800 Soldiers, +800 Spec Credits | General's Authority: attacks with 2+ generals inflict +15% enemy military casualties |
+| Heretic | Magic/Theft Hybrid | +35% Offensive TPA & WPA, -50% Thief Losses, immune to Expose Thieves, +50% Guild Effectiveness, +25% Arcane Science; Nightmares/Fool's Gold/Vermin/Magic Ward; starts +400 Wizards, +400 Thieves | Arcane Frenzy: each successful attack gives +1 Mana & +1 Stealth for 5 ticks (refreshes, no stacking) |
+| Mystic | Spellcasting | +100% Guild Effectiveness, +1 Mana Recovery/Tick, +25% WPA, +40% Channeling Science; Pitfalls/Meteor Showers/Chastity/Fool's Gold; starts +800 Wizards | Focused Channelling: above 40% mana, spells gain +20% WPA |
+| Necromancer | Dark Magic | +25% WPA, +7.5% ME, -40% Rune Cost (not Ritual), +40% Channeling Science; Animate Dead/Mind Focus/Soul Blight/Nightmare/Guile/Lightning Strike; starts +400 Wizards, +400 Spec Credits | Dark Pact: after successful attacks converts enemy killed units — 10% → Wizards, 20% → Soldiers, 10% → Peasants |
+| Rogue | Thievery | +100% Thieves' Den Effectiveness, +25% TPA, +1 Stealth Recovery/Tick, access to ALL thievery ops, +40% Crime Science; starts +800 Thieves | Shadow Persistence: **can perform thievery ops while overpopulated** (blunts our Level-4/140% "thieves on strike" chain goal vs Rogues) |
+| Sage | Science | +20% Book & Scientist Generation, +50% Learn Protection, +15% Science Efficiency; Revelation/Fountain of Knowledge; starts +2 Scientists, +800 Soldiers, +800 Spec Credits | Focused Resolve: in war, science effects +1%/tick up to +15%; resets at war end |
+| Tactician | Combat Strategy | -20% Attack Time, +40% Spec Credit Gains, +40% Draft Speed, no thieves lost on intel, +40% Siege Science; Clearsight; starts +800 Soldiers, +800 Spec Credits | Interdiction: successful war attacks destroy 15% of target's gold, runes, and food |
+| Warrior | Mercenaries | +15% OME, +5 Mercenary & Prisoner Strength, mercs/prisoners sendable at 1 per 4 normal troops, +35% Tactics Science; starts +800 Soldiers, +800 Spec Credits | Battle Cry: successful attacks destroy 1.5% of target's entire population |
+| War Hero | Battle Efficiency | +10% Battle Gains (war only), -25% Honor Loss, +100% Honor Effects, Off Spec +2 Strength (affects NW), +40% Valor Science; Quick Feet/Righteous Aggressor/Hero's Inspiration; starts +800 Soldiers, +800 Spec Credits | Hero's Culling: Massacres kill an additional 7% peasants and 2.5% thieves & wizards |
 
 ## Strategy — Combat Formulas (Attacking & Defending)
 
@@ -253,6 +291,7 @@ Nightmare puts ~1.5% of a province's home troops (including thieves) into 8h tra
 
 **Gains (Traditional March / Conquest / Plunder / Learn)**
 - `Gains = TargetResource * AttackType% * RPNW * RKNW * MAP * RaceMod * PersMod * CastlesProtection * RelationsMod * StanceMod * SiegeScience * EmeraldDragon * AttackTimeAdjFactor * RitualBonus * Anonymity * Mist`
+- Age 116: out-of-war attack gain penalty raised from 10% to **15%** (RelationsMod when not at war).
 - **RPNW** (rpnw = TargetNW/SelfNW): `rpnw<0.567→0`, `0.567–0.9→3*rpnw-1.7`, `0.9–1.1→1` (sweet spot), `1.1–1.6→-2*rpnw+3.2`, `>1.6→0`. → **best gains target NW within ±10% of your own.**
 - **RKNW** (rknw = enemy KD avg prov NW / own KD avg prov NW): `<0.5→0.8`, `0.5–0.9→rknw/2+0.55`, `>0.9→1`.
 - Attack Time Adjustment: arriving 1-4h late gives a gains bonus (+80%/+70%/+60%/+50% of `hours/baseTime`); arriving 1-2h early is a penalty.
@@ -261,7 +300,7 @@ Nightmare puts ~1.5% of a province's home troops (including thieves) into 8h tra
 - Plunder: base 50% gold / 60% food / 60% runes, max 1.75× base; defense casualties -50%.
 - Learn: steals ~2% allocated + ~2% unallocated books; in War, additionally strips ~30-35% of allocated books for 48 ticks; defense casualties -50%.
 - Raze: ~5% land destroyed (in war, ~30% of buildings instead); ignores all gains modifiers except Relations/MAP/AttackTimeAdj.
-- Massacre: kills population instead of taking land; ignores most modifiers except RPNW, RKNW, Relations, MAP, AttackTimeAdj, and has its own Massacre Damage mod.
+- Massacre: kills population instead of taking land; ignores most modifiers except RPNW, RKNW, Relations, MAP, AttackTimeAdj, and has its own Massacre Damage mod. (Age 116: +5% peasant damage in war, additive; thief/wizard damage unchanged. War Hero passive adds a further +7% peasants / +2.5% thieves & wizards.)
 - Military Casualties: base 6.5-8.5% on offense, 5-6.5% on defense; Hospitals reduce all casualties.
 
 ## Strategy — Mystics / Magic
@@ -280,23 +319,37 @@ Nightmare puts ~1.5% of a province's home troops (including thieves) into 8h tra
 - Guild strength = **Thieves Per Acre (TPA)**, modified by Thieves' Dens, Crime science, and race; operation success depends on relative TPA (yours vs target's).
 - Useful low-risk recon ops (very low difficulty, 0% meter movement, ~1% stealth cost): **Spy on Province** (resources/troop estimate), **Spy on Defense** (reveals Net Defensive Points at Home), **Spy on Exploration** (pool size & costs), **Snatch News** (target's Kingdom Paper — used by our `parseKdNews()` for enemy intel).
 - **Infiltrate**: estimates enemy guild (wizard) size.
-- Medium-difficulty offensive ops: **Sabotage Mana** (-5%/tick mana, requires Unfriendly+), **Destabilize Guilds** (Rogue only, -20% target self/offensive spell duration), **Rob the Granaries** (steal up to 31.5%/46% (war) of food at 95/135 bushels per thief), **Assassinate Troops** (kills troops + smaller elites/specialists, meter +0.24), **Incite Riots** (-15% income for several days, duration scales with thieves sent, meter +0.18, capped at 18 days), **Steal War Horses** (Rogue only, Unfriendly+, up to 20% of horses at 0.35/thief, attacker keeps only half).
+- Medium-difficulty offensive ops: **Sabotage Mana** (-5%/tick mana, requires Unfriendly+), **Destabilize Guilds** (Rogue only, -25% target self/offensive spell duration — Age 116, was -20%), **Rob the Granaries** (steal up to 31.5%/46% (war) of food at 95/135 bushels per thief), **Assassinate Troops** (kills troops + smaller elites/specialists, meter +0.24), **Incite Riots** (-20% income for several days — Age 116, was -15% — duration scales with thieves sent, meter +0.18, capped at 18 days), **Steal War Horses** (Age 116: listed in Human's kit; Rogues retain it via all-ops access; Unfriendly+, up to 20% of horses at 0.35/thief, attacker keeps only half).
 - **Takeaway**: Snatch News + Spy on Defense are our primary low-cost intel-gathering ops (no meter cost) and should be run routinely on enemy targets; offensive ops (Sabotage Mana, Assassinate, Incite Riots, Steal Horses) raise the hostile meter and should be timed with planned attacks, not run idly.
 
 ## Strategy — Growth / Science / Military (general)
 
-- **Growth**: building mix drives everything else — Homes (pop cap), Banks (income), Towers (runes), Guilds (wizards/spell duration), Forts/Training Grounds (def/off efficiency), Barracks (attack speed), Hospitals (casualty reduction), Thieves' Dens (TPA), Watchtowers (def). Percentage-based buildings have diminishing returns per additional building — diversify rather than maxing one type. Barren land lowers `ownPop`/living-space and is wasted NW; keep barren low except during deliberate land-grab phases.
-- **Science**: prioritize Housing (raises max pop, used directly in our `ownPop` calc), Production (runes/income), Military (OME/DME), and Channeling (spell success) based on current strategy (growth vs war footing). Science books captured via Learn attacks should be reallocated toward whichever category supports the current plan.
+- **Growth**: building mix drives everything else — Homes (pop cap), Banks (income), Towers (runes), Guilds (wizards/spell duration), Forts/Training Grounds (def/off efficiency), Barracks (attack speed), Hospitals (casualty reduction), Thieves' Dens (TPA), Watchtowers (def — Age 116: catch chance raised 2.0% → 2.2% per WT, so WTs are slightly better vs thievery). Percentage-based buildings have diminishing returns per additional building — diversify rather than maxing one type. Barren land lowers `ownPop`/living-space and is wasted NW; keep barren low except during deliberate land-grab phases.
+- **Science**: prioritize Housing (raises max pop, used directly in our `ownPop` calc), Production (runes/income), Military (OME/DME), and Channeling (spell success) based on current strategy (growth vs war footing). Science books captured via Learn attacks should be reallocated toward whichever category supports the current plan. (Age 116: Shielding multiplier raised 0.0314 → 0.0350; Valor 0.0582 → 0.0620 — both slightly more book-efficient.)
 - **Military composition**: balance offense (Soldiers/OffSpecs/Elites/Horses) vs defense (DefSpecs/Elites/TownWatch) based on role — front-line "off" provinces run pop% high with most troops sent out; "home" / def provinces hold high `tDef` to be unbreakable pool targets for enemies. Wage rate near 100% keeps Base Military Efficiency reasonable without overspending.
 
 ## Strategy — Relations, Hostile Meter, Overpopulation, MAP/GBP
 
 - **Relations** gate which spells/thievery ops are usable (some require Unfriendly+ or War) and modify attack Gains (RelationsMod) — declaring/escalating war is itself a strategic lever, not just flavor.
 - **Hostile Meter**: rises with offensive spells, ritual casts, thievery ops with nonzero meter movement, and attacks; high hostility can trigger relation downgrades toward war. Useful to track before planning a "soft" attack window vs an all-out war footing.
+- **Age 116 hostile-meter changes**: decay reverts to pre-Age-111 behavior — points decay on the **1st of each month** by 20% or 3 points, whichever is greater; and the meter **no longer resets when entering war** (meter built up pre-war persists through and after it — plan hostility spend accordingly).
+- **Age 116 FCF (forced ceasefire) rules** — a defender can FCF an aggressor when ALL hold: defender is 30 points (in-range) / 15 points (out-of-range) below the aggressor on the hostility meter; defender is not Hostile toward the aggressor KD; no attacks made against the aggressor for 3 ticks; defender is lower in BOTH land and NW than the aggressor. If within war range (15% NW or land) the FCF costs the defender 2% Honor and 2% Science; out of range it's free. Duration: 96h out-of-range / 72h in-range before either KD can cancel. **Implication**: when farming a smaller KD, watch the meter gap and tick timing — a well-timed FCF can shut the window; conversely FCF is our escape hatch if we're the smaller side being pressured.
 - **Overpopulation** (pop% > 100, see shared `_enemyPopPct`): provinces over 100% pop are vulnerable — they're "feeding" more mouths than their land supports, which is why our pool-expansion logic (`ownPop > 100` in `calcAttacks`) opens up *any* non-bloat enemy province as a target once our own province is overpopulated (use the excess off before it's wasted).
 - **Multi-Attack Protection (MAP) / Generals-Based Protection (GBP)**: repeatedly attacking the same target in a short window reduces further Gains and boosts the target's effective Military Efficiency (`Multi-Attack Protection Bonus` in the Base Military Efficiency formula) — spread wave hits across multiple targets rather than re-hitting one province back-to-back where possible.
 
 ## Strategy — Dragons & Rituals
 
 - **Dragons** are kingdom-wide buffs/debuffs that apply multiplicatively to combat formulas above (e.g. Ruby Dragon → Base Military Efficiency, Emerald Dragon → Gains). Check which dragon is active (own + enemy) before estimating TM gains or break feasibility — it's a global modifier our `_estimateTMGain`/`canBreak` calcs don't currently account for.
+
+**Age 116 dragon effects** (dragons started outside war cost +15% gold/food):
+
+| Dragon | Ongoing debuffs | Arrival + tick damage |
+|--------|----------------|------------------------|
+| Amethyst | -40% Spell Success, -40% Thievery Success (sabotage ops) | On arrival strips ALL active self-spells instantly; every 6 ticks kills 5% of wizards & thieves |
+| Emerald | +25% Military Casualties, -25% Combat Gains | Destroys 3.5% of at-home troops on arrival; every 6 ticks: 1.5% of at-home troops lost, Building & Specialist Credits -40% |
+| Ruby | -12.5% Military Effectiveness, +20% Military Wages | Destroys 3.5% of off+def specialists on arrival; every 6 ticks 2.5% of at-home troops desert |
+| Topaz | -25% Building Efficiency, -25% Income | Destroys 10% of buildings on arrival; every 6 ticks destroys 10% of buildings and 20% of current gold |
+| Sapphire | -35% WPA & TPA, -1 Mana Recovery, -1 Stealth Recovery, +12.5% instant spell/sabotage damage taken & -12.5% dealt | Destroys 30% of runes on arrival; every 3 ticks destroys 25% of current runes |
+
+- **Planning notes**: Ruby's specialist kill + desertion pairs with our Droughts+Sloth anti-attacker combo (deny replenishment after the kill). Sapphire's rune wipe + WPA/TPA cut is the anti-T/M dragon — expect our spell/thievery success to crater under an enemy Sapphire, and time Amnesia/hollow-out pushes to our own Sapphire/Havoc windows. Amethyst's self-spell strip re-opens targets for MV-dependent combos without spending MV casts.
 - **Rituals**: long-duration kingdom-wide spells (tracked via `ritual.js`/`getEnemyRitualCasting()`). An enemy ritual nearing completion (`ticksUntilLaunch` small) is a planning signal — either accelerate an attack before it lands, or expect a combat-modifier shift once it does. `ticksSinceStart` helps gauge how committed the enemy KD is to a ritual strategy.
