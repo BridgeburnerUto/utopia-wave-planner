@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-07-28.
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-10.
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -50,6 +50,60 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
 - IS SoT field names (verified from the IS bundle): `sot.soldiers`, `sot.food`, `sot.money`,
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
+
+## Recent work (2026-08-10) -- Shrink wave types + Age 116 strategy doc
+
+### Shrink waves (harness-verified 2026-08-10, NOT live-tested)
+Two new entries in the Wave Plan tab's wave-type dropdown, on top of 'standard':
+- **`shrink`** -- leader picks the shrink targets on the WAR BOARD's new
+  **"Shrink ⇩"** column (select --/1/2/3 = how many hits that province should
+  take). Stored as `S.provinces[slot].shrink` (persists in the plan JSON like
+  targetAcres; `_pp()` migrates old entries to 0). `setProvShrink()` in board.js,
+  exported via `__wpA`.
+- **`shrinkai`** -- solver picks them itself (`_wpAiShrinkPicks`): fattest by
+  ESTIMATED POPULATION (`_provCurrentPop`, falls back to land x 25 x pop%), must
+  be breakable by an in-range slot, must have real def intel, never a chain
+  victim (targetAcres > 0) or a bloat prov. Caps: `WP_SHRINK_AI_MAX_TARGETS = 6`
+  (user rule -- more = spread too thin), `WP_SHRINK_AI_HITS = 2` each,
+  `WP_SHRINK_AI_SLOT_SHARE = 0.35` of attack slots. Leader flags are honoured
+  first, AI only fills the remaining room.
+
+Solver mechanics (waveplan.js):
+- `_wpShrinkGoals(waveType, slots)` -> `{[slot]: {hits, ai}}`; passed into
+  `buildWaveTargets(shrinkGoals)` (pulls shrink-only provs into the target pool)
+  and `_wpWallPool(shrinkGoals)` (drops them, so no province has two sim states).
+  Standard wave passes `{}` -> byte-identical behaviour (verified: 77 hits both
+  before and after).
+- **`_wpAssignShrink()` runs BEFORE the chain is solved** (user requirement):
+  every (slot, shrink target) pair that is in range and breakable is scored
+  optimal-band -> fattest target -> gain, then greedily matched (max
+  `WP_SHRINK_MAX_PER_SLOT = 2` per slot). A slot that is the ONLY in-range
+  breaker of a chain victim is protected from shrink work.
+- Per-slot pick order is now: raze/mass -> **shrink assigned to this slot** ->
+  chain quota -> **unmet shrink quota (any slot)** -> uncovered -> any.
+  A shrink-ONLY target whose quota is filled drops out of the uncovered/any
+  tiers, and sorts last in the least-bad marginal fallback (stops leftover
+  offense piling 5 extra hits on one already-shrunk prov).
+- Hits carry `shrink: true` -> ⇩ badge in the Wave Plan table, My Orders, and
+  the Discord hitlist; `shrinkStatus` warnings ("Shrink done/short", exact acres
+  like the chain warnings -- fK hides 3050 vs 2600); new "Shrink Hits" card.
+- `resimulateWaveSeq(seq, waveType)` re-derives the same goals (AI pick is
+  deterministic for unchanged intel) and now also increments `t.hits` and
+  refreshes `projLand`, so chain/shrink status stays right after edits.
+- Harness-verified on the real dump: standard 77 hits unchanged; leader shrink
+  (Europa 3 + Kerberos 2) -> shrink hits land at seq #1/#13/#20/#36/#37 (before
+  the chain, all "good" band); AI mode picks 5 targets (Deimos 89% pop, Kerberos
+  78%, Europa 73%, Callisto 68%, Hyperion 4785 acres) x 2 hits; remove-hit
+  resimulate correctly flips a target to "Shrink short"; publish -> My Orders
+  shows "⇩ shrink" per hit; no console errors; minified build re-verified.
+
+### Age 116 strategy doc
+- `reference/strategy-context.md` replaced with the Age 116 version (was 115):
+  Age 116 key-changes summary, war doctrines, reworked race/personality tables
+  (Dryad, Cleric, Sage), Age 116 dragon table, updated op/spell numbers.
+- **NOT propagated to the backend**: `D:\Claude\utopia-intel-server\strategy-context.md`
+  is the copy `ai_strategy.php` actually sends to Claude and is still Age 115 --
+  needs copying + a Cloud Run redeploy.
 
 ## Recent work (2026-07-28) -- Popspace graph DONE (harness-verified, NOT committed); Economy tab designed
 
@@ -316,6 +370,7 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
   specified by the leader later). Dropdown on Wave Plan action bar (`setWaveType`),
   plumbed through `generateWaveSeq(waveType)` (no behavioral difference yet), persisted
   in plan JSON. New types = extend the dropdown + branch in the solver.
+  *(2026-08-10: 'shrink' and 'shrinkai' added -- see the Shrink waves section above.)*
 - **Bug fixed**: board.js `setProvWave` still called the renamed `renderSummary` â†’
   ReferenceError on every wave-assignment change since the stage-2 rename. Now
   `renderWavePlan`. (Found while adding the chain column; the harness path had never
@@ -325,7 +380,7 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
 - Economy v2: plague/dragon/riot/war-doctrine income-wage modifiers; honor pop bonus
   in _provLivingSpace; upgrade _enemyPopPct to surveys (changes solver sort!); net
   income graphed over time (user declined for v1).
-- Define the additional wave types (leader will specify).
+- Define further wave types beyond standard / shrink / shrink-AI (leader will specify).
 - Companion (war-companion.html): render waveSeq slice on mobile (data already synced).
 - Live re-check at send time: compare planned def vs latest intel before "SEND NOW".
 - Flag more targets in harness plan to demo a realistic war-start wave.
