@@ -34,7 +34,8 @@ function generateWavePlan() {
   S.waveGenAt = Date.now();
   S._waveGen  = { uncovered: r.uncovered, idleSlots: r.idleSlots,
                   ambushHolds: r.ambushHolds, chainStatus: r.chainStatus,
-                  shrinkStatus: r.shrinkStatus, waveType: r.waveType };
+                  shrinkStatus: r.shrinkStatus, shrinkNote: r.shrinkNote,
+                  waveType: r.waveType };
   renderWavePlan();
 }
 
@@ -176,14 +177,17 @@ function _buildWavePlan() {
     h += `<div style="margin-bottom:12px;padding:8px 14px;background:#0e2028;border:1px solid #2a6070;
       border-radius:3px;font-size:17px;color:#7fc8dd">
       ⇩ <b>Shrink wave</b> — the chain runs as usual, but shrink targets are matched to attackers
-      <b>first</b> so they get optimal-range hits: fat, high-pop enemy provinces lose acres, which
-      costs the enemy living space and peons they can't regrow.
+      <b>first</b> so they get optimal-range hits. Aim at <b>high-pop%</b> provinces: a captured acre
+      takes its population with it, so acres off a full province delete occupied housing (peons lost,
+      births stopped, pop% driven up), while acres off a big half-empty one only take empty space.
       ${S.waveType === 'shrinkai'
-        ? `Targets are picked by the solver (fattest breakable, in range, never a chain victim or bloat prov,
-           needs defense intel) — at most ${WP_SHRINK_AI_MAX_TARGETS}, ${WP_SHRINK_AI_HITS} hits each, capped at
+        ? `Targets are picked by the solver — <b>fullest first (pop% ≥ ${WP_SHRINK_AI_MIN_POP_PCT}%, never below)</b>,
+           breakable, in range, never a chain victim or bloat prov, defense intel required — at most
+           ${WP_SHRINK_AI_MAX_TARGETS}, ${WP_SHRINK_AI_HITS} hits each, capped at
            ~${Math.round(WP_SHRINK_AI_SLOT_SHARE * 100)}% of the wave's slots. Shrink flags you set on the board are kept.`
         : `Set <b>Shrink ⇩ 1-3</b> on the WAR BOARD for each province you want shrunk
-           (${shrinkFlagged} flagged now). Chain goals stay on the Chain ⌖ column.`}
+           (${shrinkFlagged} flagged now) — the Pop% column is the one to sort by.
+           Chain goals stay on the Chain ⌖ column.`}
     </div>`;
   }
 
@@ -212,6 +216,7 @@ function _buildWavePlan() {
   const dumpCount = seq ? seq.filter(x => x.dump).length : 0;
   if (dumpCount)
     warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
+  if (S._waveGen?.shrinkNote) warn.push(`⇩ <b>No shrink targets:</b> ${esc(S._waveGen.shrinkNote)}`);
   for (const ss of shrinkStatus) {
     // Exact acres — fK rounding hides the difference between e.g. 3050 and 2600
     const acres = `${ss.from} → ~${ss.to} acres`;

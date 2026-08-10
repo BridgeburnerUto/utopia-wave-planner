@@ -48,6 +48,7 @@ const WP_SHRINK_MAX_PER_SLOT   = 2;    // shrink hits pre-matched to one attacke
 const WP_SHRINK_AI_MAX_TARGETS = 6;    // AI never spreads wider than this (too thin)
 const WP_SHRINK_AI_HITS        = 2;    // hits the AI plans per auto-picked target
 const WP_SHRINK_AI_SLOT_SHARE  = 0.35; // max share of attack slots spent shrinking
+const WP_SHRINK_AI_MIN_POP_PCT = 90;   // hard floor — never auto-shrink an emptier province
 
 /** True for the wave types that run the shrink pass. */
 function _wpIsShrinkWave(waveType) {
@@ -308,14 +309,23 @@ function _wpLeaderShrinkGoals() {
 }
 
 /**
- * Auto-pick shrink targets ('shrinkai'): the fattest breakable enemy provinces
- * that are in range of at least one attacker slot. Excluded: chain victims
- * (already being pounded), bloat provinces (deliberately left to grow), and
- * anything without fresh defense intel — the solver must not order hits on a
- * province whose defense it does not know. Ranked by estimated POPULATION (not
- * acres): the goal is to remove peons, and acres full of pop are worth more
- * than empty ones. Capped by WP_SHRINK_AI_MAX_TARGETS and by the share of the
- * wave we are willing to spend shrinking.
+ * Auto-pick shrink targets ('shrinkai'): the FULLEST breakable enemy provinces
+ * that are in range of at least one attacker slot.
+ *
+ * Ranked by POP% (population density), never by acres or by total population —
+ * a captured acre carries population pro rata, so an acre taken off a 100%-pop
+ * province removes ~25 peons while the same acre off a 40%-pop province removes
+ * ~10 and leaves the rest of its peons comfortably housed. Shrinking a big but
+ * half-empty province just deletes empty living space (acre trading); shrinking
+ * a full one deletes occupied housing, kills births and pushes it toward the
+ * overpop thresholds. Provinces under WP_SHRINK_AI_MIN_POP_PCT are never picked
+ * at all, even if that leaves the roster short.
+ *
+ * Also excluded: chain victims (already being pounded), bloat provinces
+ * (deliberately left to grow), and anything without fresh defense intel — the
+ * solver must not order hits on a province whose defense it does not know.
+ * Capped by WP_SHRINK_AI_MAX_TARGETS and by the share of the wave we are
+ * willing to spend shrinking.
  */
 function _wpAiShrinkPicks(slots, leaderGoals) {
   const budget     = Math.max(WP_SHRINK_AI_HITS, Math.floor(slots.length * WP_SHRINK_AI_SLOT_SHARE));
@@ -338,9 +348,12 @@ function _wpAiShrinkPicks(slots, leaderGoals) {
       _wpRange(sl.nw, nw) !== 'out' && _wpMinGens(def, sl.off, sl.gens));
     if (!reachable) return null;
     const popPct = _enemyPopPct(tp);
-    const pop    = _provCurrentPop(tp) ?? (land * 25 * ((popPct ?? 0) / 100));
-    return { slot: ep.slot, pop };
-  }).filter(Boolean).sort((a, b) => b.pop - a.pop);
+    // No pop intel, or not full enough to be worth the acres — never auto-pick
+    if (popPct == null || popPct < WP_SHRINK_AI_MIN_POP_PCT) return null;
+    return { slot: ep.slot, popPct, land };
+    // Fullest first; between equally full provinces the bigger one holds more
+    // real peons and more living space worth removing.
+  }).filter(Boolean).sort((a, b) => b.popPct - a.popPct || b.land - a.land);
 
   const out = {};
   for (const c of cands.slice(0, room)) out[c.slot] = { hits: WP_SHRINK_AI_HITS, ai: true };
@@ -619,10 +632,17 @@ function generateWaveSeq(waveType) {
 
   const uncovered  = targets.filter(t => !t.bloat && t.hits === 0).map(t => pnum(t.slot, t.name));
   const totalGains = seq.reduce((s, h) => s + (h.estGain || 0), 0);
+  // The pop% floor can legitimately leave the AI with nothing to shrink — say so
+  // rather than letting the leader think the pass silently did nothing.
+  const shrinkNote = (wt === 'shrinkai' && !Object.values(shrinkGoals).some(g => g.ai))
+    ? `No enemy province qualifies for auto-shrink — none are at ${WP_SHRINK_AI_MIN_POP_PCT}%+ pop `
+      + `(and breakable, in range, not a chain victim or bloat prov). Shrinking an emptier province `
+      + `would only take empty living space, so the wave was planned as a normal chain.`
+    : null;
   return { seq, slots, targets, uncovered, idleSlots, ambushHolds,
            chainStatus:  _wpChainStatus(targets),
            shrinkStatus: _wpShrinkStatus(targets),
-           shrinkGoals,
+           shrinkGoals, shrinkNote,
            waveType: wt,
            totalGains };
 }

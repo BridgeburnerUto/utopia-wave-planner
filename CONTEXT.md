@@ -60,13 +60,23 @@ Two new entries in the Wave Plan tab's wave-type dropdown, on top of 'standard':
   take). Stored as `S.provinces[slot].shrink` (persists in the plan JSON like
   targetAcres; `_pp()` migrates old entries to 0). `setProvShrink()` in board.js,
   exported via `__wpA`.
-- **`shrinkai`** -- solver picks them itself (`_wpAiShrinkPicks`): fattest by
-  ESTIMATED POPULATION (`_provCurrentPop`, falls back to land x 25 x pop%), must
-  be breakable by an in-range slot, must have real def intel, never a chain
-  victim (targetAcres > 0) or a bloat prov. Caps: `WP_SHRINK_AI_MAX_TARGETS = 6`
-  (user rule -- more = spread too thin), `WP_SHRINK_AI_HITS = 2` each,
-  `WP_SHRINK_AI_SLOT_SHARE = 0.35` of attack slots. Leader flags are honoured
-  first, AI only fills the remaining room.
+- **`shrinkai`** -- solver picks them itself (`_wpAiShrinkPicks`): **FULLEST by
+  pop% (`_enemyPopPct`), tiebreak land** -- must be breakable by an in-range
+  slot, must have real def intel, never a chain victim (targetAcres > 0) or a
+  bloat prov. Caps: `WP_SHRINK_AI_MAX_TARGETS = 6` (user rule -- more = spread
+  too thin), `WP_SHRINK_AI_HITS = 2` each, `WP_SHRINK_AI_SLOT_SHARE = 0.35` of
+  attack slots, and a HARD FLOOR `WP_SHRINK_AI_MIN_POP_PCT = 90` (leader rule:
+  never auto-shrink below 90% pop, even if that leaves the roster short --
+  `shrinkNote` then explains the empty pass in the warnings). Leader flags are
+  honoured first, AI only fills the remaining room.
+- **Rank by DENSITY, never by acres or total pop** (leader-corrected 2026-08-10
+  after a live test; v1 ranked by absolute population and so kept picking the
+  biggest half-empty provinces). A captured acre carries its population pro
+  rata: an acre off a 100%-pop prov removes ~25 peons, off a 40%-pop prov ~10
+  and the rest still fit. Shrinking an empty prov only deletes unused living
+  space (acre trading); shrinking a full one deletes occupied housing, stops
+  births and drives pop% toward the overpop thresholds. `_wpByBandPopGain`
+  already had this right -- only the AI picker was wrong.
 
 Solver mechanics (waveplan.js):
 - `_wpShrinkGoals(waveType, slots)` -> `{[slot]: {hits, ai}}`; passed into
@@ -92,10 +102,16 @@ Solver mechanics (waveplan.js):
   refreshes `projLand`, so chain/shrink status stays right after edits.
 - Harness-verified on the real dump: standard 77 hits unchanged; leader shrink
   (Europa 3 + Kerberos 2) -> shrink hits land at seq #1/#13/#20/#36/#37 (before
-  the chain, all "good" band); AI mode picks 5 targets (Deimos 89% pop, Kerberos
-  78%, Europa 73%, Callisto 68%, Hyperion 4785 acres) x 2 hits; remove-hit
-  resimulate correctly flips a target to "Shrink short"; publish -> My Orders
-  shows "⇩ shrink" per hit; no console errors; minified build re-verified.
+  the chain, all "good" band); remove-hit resimulate correctly flips a target to
+  "Shrink short"; publish -> My Orders shows "⇩ shrink" per hit; no console
+  errors; minified build re-verified.
+- AI picker re-verified after the pop%-density fix: the end-of-age fixture tops
+  out at 89% pop, so with the 90% floor the AI correctly picks NOTHING and shows
+  the shrinkNote (wave falls back to a plain chain, 77 hits = standard). With
+  the floor temporarily dropped to 60 it picks the top 5 by pop% (Deimos 89,
+  Kerberos 78, Europa 73, Triton 71, Callisto 68) and Hyperion -- the KD's
+  biggest prov at 4785 acres but only 56% pop, the exact prov the old ranking
+  put first -- is correctly excluded.
 
 ### Age 116 strategy doc
 - `reference/strategy-context.md` replaced with the Age 116 version (was 115):
