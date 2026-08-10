@@ -212,7 +212,7 @@ function _buildWavePlan() {
       `${esc(pnum(a.provSlot, a.attacker))} (${fK(a.leftover)} off stays home)`).join(', ')} — 1 spare general kept back since substantial offense remains home.`);
   const popWarnCount = seq ? seq.filter(x => x.popWarn).length : 0;
   if (popWarnCount)
-    warn.push(`🏠 <b>${popWarnCount} hit${popWarnCount > 1 ? 's' : ''} against pop% strategy</b> — attacker pop suggests a different attack type (marked in the table).`);
+    warn.push(`🏠 <b>${popWarnCount} hit${popWarnCount > 1 ? 's' : ''} against pop% strategy</b> — the pop% shown is <b>your attacking province's</b>, not the target's: a province under 70% pop has no peons to fill new acres and should raze/massacre instead (marked in the Attacker column).`);
   const dumpCount = seq ? seq.filter(x => x.dump).length : 0;
   if (dumpCount)
     warn.push(`♻ <b>${dumpCount} dump hit${dumpCount > 1 ? 's' : ''}</b> — leftover offense spent on small/out-of-range enemies rather than staying home.`);
@@ -267,12 +267,15 @@ function _buildWavePlan() {
                 + (hit.marginal ? ' <span style="color:#e09040;font-weight:700">⚠ marginal</span>' : '')
                 + (hit.risky    ? ' <span style="color:#E05050;font-weight:700">⚠ risky</span>'    : '')
                 + (hit.isWall   ? ' <span style="color:#9060c0;font-size:15px">wall</span>'         : '')
-                + (hit.dump     ? ' <span style="color:#617070;font-size:15px" title="Leftover offense spent — low value, but nothing stays home">♻ dump</span>' : '')
-                + (hit.popWarn  ? ` <span style="color:#e09040;font-size:15px" title="${esc(hit.popWarn)}">🏠 ${esc(hit.popWarn)}</span>` : '');
+                + (hit.dump     ? ' <span style="color:#617070;font-size:15px" title="Leftover offense spent — low value, but nothing stays home">♻ dump</span>' : '');
+    // Pop warning is about OUR attacking province, not the target — it belongs
+    // in the Attacker column (it read as a property of the target before).
+    const atkWarn = hit.popWarn
+      ? `<div style="color:#e09040;font-size:15px" title="Your province — ${esc(hit.popWarn)}">🏠 ${esc(hit.popWarn)}</div>` : '';
     h += `<tr style="border-bottom:1px solid #617070${hit.marginal || hit.risky ? ';background:rgba(224,144,64,.06)' : ''}">
       <td style="padding:6px 8px;color:#7a9090;font-family:monospace">${hit.n}</td>
       <td style="padding:6px 8px;font-family:monospace">${_wpFmtTime(hit.availableAt)}</td>
-      <td style="padding:6px 8px;font-weight:600">${esc(pnum(hit.provSlot, hit.attacker))}</td>
+      <td style="padding:6px 8px;font-weight:600">${esc(pnum(hit.provSlot, hit.attacker))}${atkWarn}</td>
       <td style="padding:6px 8px">${esc(pnum(hit.targetSlot, hit.target))}${flags}</td>
       <td style="padding:6px 8px">${_wpRangeBadge(hit.range)}</td>
       <td style="padding:6px 8px">${typeBadge}</td>

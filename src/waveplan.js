@@ -50,6 +50,13 @@ const WP_SHRINK_AI_HITS        = 2;    // hits the AI plans per auto-picked targ
 const WP_SHRINK_AI_SLOT_SHARE  = 0.35; // max share of attack slots spent shrinking
 const WP_SHRINK_AI_MIN_POP_PCT = 90;   // hard floor — never auto-shrink an emptier province
 
+// Overflow cap: how many hits one province may soak from the low-priority tiers
+// (uncovered / any / wall / marginal / dump). CHAIN victims are exempt — piling
+// hits on one province is the whole point of a chain — as are raze/mass orders
+// and shrink quota. Without this, a single low-def province becomes the dumping
+// ground for every attacker that can't break anything else (14 hits, observed).
+const WP_MAX_OVERFLOW_HITS_PER_TARGET = 5;
+
 /** True for the wave types that run the shrink pass. */
 function _wpIsShrinkWave(waveType) {
   return waveType === 'shrink' || waveType === 'shrinkai';
@@ -196,6 +203,7 @@ function buildWaveSlots() {
       provSlot: p.slot,
       attacker: p.name,
       race:     p.race || '',
+      pers:     pers || '',      // race+pers feed the gain estimator's Race/Personality mods
       nw:       p.networth || 0,
       land:     p.land || 0,
       popPct,
@@ -312,20 +320,24 @@ function _wpLeaderShrinkGoals() {
  * Auto-pick shrink targets ('shrinkai'): the FULLEST breakable enemy provinces
  * that are in range of at least one attacker slot.
  *
- * Ranked by POP% (population density), never by acres or by total population —
- * a captured acre carries population pro rata, so an acre taken off a 100%-pop
- * province removes ~25 peons while the same acre off a 40%-pop province removes
- * ~10 and leaves the rest of its peons comfortably housed. Shrinking a big but
- * half-empty province just deletes empty living space (acre trading); shrinking
- * a full one deletes occupied housing, kills births and pushes it toward the
- * overpop thresholds. Provinces under WP_SHRINK_AI_MIN_POP_PCT are never picked
- * at all, even if that leaves the roster short.
+ * Two-step selection, and the order matters:
+ *  1. GATE on density — a province under WP_SHRINK_AI_MIN_POP_PCT is never
+ *     picked, full stop. A captured acre carries population pro rata, so an
+ *     acre off a 100%-pop province removes ~25 peons while the same acre off a
+ *     40%-pop one removes ~10 and the rest of its peons still fit. Shrinking an
+ *     emptier province only deletes unused living space (acre trading).
+ *  2. RANK the survivors by SIZE (estimated population, acres as the tiebreak).
+ *     Everything past the gate is already full, so the bigger province loses
+ *     more real housing per hit — 2 hits on a 550-acre prov beat 2 hits on a
+ *     200-acre one. (Ranking by size WITHOUT the gate was the original bug:
+ *     it just picked the biggest half-empty provinces.)
  *
- * Also excluded: chain victims (already being pounded), bloat provinces
- * (deliberately left to grow), and anything without fresh defense intel — the
- * solver must not order hits on a province whose defense it does not know.
- * Capped by WP_SHRINK_AI_MAX_TARGETS and by the share of the wave we are
- * willing to spend shrinking.
+ * Also excluded: chain victims and anything the leader flagged as a wave target
+ * (the leader already has plans for those — the AI must not spend its quota on
+ * them), bloat provinces (deliberately left to grow), and anything without
+ * fresh defense intel — the solver must not order hits on a province whose
+ * defense it does not know. Capped by WP_SHRINK_AI_MAX_TARGETS and by the share
+ * of the wave we are willing to spend shrinking.
  */
 function _wpAiShrinkPicks(slots, leaderGoals) {
   const budget     = Math.max(WP_SHRINK_AI_HITS, Math.floor(slots.length * WP_SHRINK_AI_SLOT_SHARE));
@@ -339,6 +351,7 @@ function _wpAiShrinkPicks(slots, leaderGoals) {
     const plan = S.provinces[ep.slot] || {};
     if (plan.bloat)           return null;   // bloat = let it grow, hit with thievery
     if (plan.targetAcres > 0) return null;   // chain victim — already the wave's focus
+    if (plan.wave)            return null;   // leader flagged it — their plan wins, not ours
     const tp   = pd('[' + ep.slot + ']') || ep;
     const def  = tp?.calcs?.defPointsSummary?.defPointsHome || 0;
     const nw   = tp.networth || ep.networth || 0;
@@ -348,12 +361,14 @@ function _wpAiShrinkPicks(slots, leaderGoals) {
       _wpRange(sl.nw, nw) !== 'out' && _wpMinGens(def, sl.off, sl.gens));
     if (!reachable) return null;
     const popPct = _enemyPopPct(tp);
-    // No pop intel, or not full enough to be worth the acres — never auto-pick
+    // STEP 1 — density gate. No pop intel, or not full enough for its acres to
+    // be worth taking: never auto-picked, however big it is.
     if (popPct == null || popPct < WP_SHRINK_AI_MIN_POP_PCT) return null;
-    return { slot: ep.slot, popPct, land };
-    // Fullest first; between equally full provinces the bigger one holds more
-    // real peons and more living space worth removing.
-  }).filter(Boolean).sort((a, b) => b.popPct - a.popPct || b.land - a.land);
+    const pop = _provCurrentPop(tp) ?? (land * 25 * (popPct / 100));
+    return { slot: ep.slot, popPct, land, pop };
+    // STEP 2 — rank the survivors by SIZE. They are all full already, so the
+    // bigger one loses more occupied housing per hit; acres break ties.
+  }).filter(Boolean).sort((a, b) => b.pop - a.pop || b.land - a.land);
 
   const out = {};
   for (const c of cands.slice(0, room)) out[c.slot] = { hits: WP_SHRINK_AI_HITS, ai: true };
@@ -469,7 +484,8 @@ function generateWaveSeq(waveType) {
   const ambushHolds = [];
 
   function estGain(t, sl) {
-    return _estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW) || 0;
+    return _estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW,
+                             { race: sl.race, personality: sl.pers }) || 0;
   }
 
   // Shrink hits are matched to attackers up front (before the chain is solved)
@@ -541,6 +557,9 @@ function generateWaveSeq(waveType) {
       const shrinkNeeded = t => t.shrinkGoal > 0 && t.hits < t.shrinkGoal;
       const shrinkSpent  = t => t.shrinkOnly && t.hits >= t.shrinkGoal;
       const mine = shrinkAssign[sl.key] || [];
+      // Overflow cap — applies to the low-priority tiers only; a chain victim is
+      // meant to be pounded, so it is never capped.
+      const overflowOk = t => t.targetAcres > 0 || t.hits < WP_MAX_OVERFLOW_HITS_PER_TARGET;
 
       // 1. Raze/Massacre still needed, in range preferred
       const rm = pool.filter(c => (c.t.needsRaze && !c.t.razeDone) || (c.t.needsMassacre && !c.t.massDone))
@@ -558,8 +577,9 @@ function generateWaveSeq(waveType) {
       // 5. Uncovered targets (0 hits): range band → enemy pop% → gain
       const uncov = pool.filter(c => c.t.hits === 0 && !c.t.bloat && !chainDone(c.t) && !shrinkSpent(c.t))
         .sort(_wpByBandPopGain);
-      // 6. Any in-range flagged (met chains/shrinks excluded): band → pop% → gain
-      const any = pool.filter(c => !c.t.bloat && !chainDone(c.t) && !shrinkSpent(c.t)).sort(_wpByBandPopGain);
+      // 6. Any in-range flagged (met chains/shrinks and over-hit provs excluded)
+      const any = pool.filter(c => !c.t.bloat && !chainDone(c.t) && !shrinkSpent(c.t) && overflowOk(c.t))
+        .sort(_wpByBandPopGain);
 
       if      (rm.length)         { pick = rm[0]; type = pick.t.needsRaze && !pick.t.razeDone ? 'RAZE' : 'MASS'; }
       else if (shrinkMine.length) { pick = shrinkMine[0]; shrink = true; }
@@ -571,6 +591,7 @@ function generateWaveSeq(waveType) {
         // Fallbacks — nothing flagged is in range for this slot
         // a) in-range breakable wall (non-target, non-bloat)
         const wall = walls.map(w => {
+          if (!overflowOk(w)) return null;
           const mg = _wpMinGens(w.def, offLeft, gensLeft);
           if (!mg) return null;
           const range = _wpRange(sl.nw, w.simNW);
@@ -582,7 +603,7 @@ function generateWaveSeq(waveType) {
           // b) least-bad flagged target by NW ratio, breakable, marked marginal.
           //    Shrink targets that already got their hits go last — leftover
           //    offense shouldn't pile onto one province the wave is done with.
-          const lb = cands.filter(c => !c.t.bloat)
+          const lb = cands.filter(c => !c.t.bloat && overflowOk(c.t))
             .sort((a, b) => (Number(shrinkSpent(a.t)) - Number(shrinkSpent(b.t))) ||
                             Math.abs(Math.log(sl.nw / (a.t.simNW || 1))) -
                             Math.abs(Math.log(sl.nw / (b.t.simNW || 1))));
@@ -604,10 +625,11 @@ function generateWaveSeq(waveType) {
     // what's left on the best still-breakable enemy (usually small and out of
     // range; range band → enemy pop% → gain). The ambush hold below can then
     // only trigger when the leftover genuinely can't break anything.
+    const overflowDumpOk = t => t.targetAcres > 0 || t.hits < WP_MAX_OVERFLOW_HITS_PER_TARGET;
     const dumpPool = targets.concat(walls);
     while (gensLeft > 0 && offLeft > 0 && hitsThisSlot < WP_MAX_HITS_PER_SLOT) {
       const dcands = dumpPool.map(t => {
-        if (t.bloat) return null;
+        if (t.bloat || !overflowDumpOk(t)) return null;
         const mg = _wpMinGens(t.def, offLeft, gensLeft);
         if (!mg) return null;
         return { t, mg, range: _wpRange(sl.nw, t.simNW), gain: estGain(t, sl) };
@@ -678,7 +700,8 @@ function resimulateWaveSeq(seq, waveType) {
     if (!sl || !t) continue; // attacker slot or target vanished — drop hit
     const mg = _wpMinGens(t.def, sl.offLeft, sl.gensLeft);
     const gain = h.type === 'TM'
-      ? (_estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW) || 0)
+      ? (_estimateTMGain(t.simNW, t.simLand, t.tp, sl.land, sl.nw, ownKdAvgNW, eneKdAvgNW,
+                             { race: sl.race, personality: sl.pers }) || 0)
       : 0;
     out.push({
       ...h,

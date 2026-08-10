@@ -3,7 +3,9 @@
 // ── Standalone TM gain estimator ────────────────────────────────────────────
 // Extracted so calcMaxGainAttacks() can also call it with simulated state.
 // S.enemy?.kdEffects is read from global state (stable within a session).
-function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
+// `atk` (optional) is the ATTACKING province — only its race/personality are
+// read, for the Race/Personality modifiers in the wiki gains formula.
+function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW, atk) {
   if (!tLand || !ownLand || !tNW || !aNW) return null;
 
   const G = TM_GAIN, P = G.RPNW, K = G.RKNW;
@@ -13,7 +15,9 @@ function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
   if      (rpnw >= P.FLOOR    && rpnw < P.LOW_MAX)   rpnwF = P.LOW_SLOPE * rpnw + P.LOW_INT;
   else if (rpnw >= P.LOW_MAX  && rpnw <= P.HIGH_MIN) rpnwF = 1;
   else if (rpnw >  P.HIGH_MIN && rpnw <= P.CEIL)     rpnwF = P.HIGH_SLOPE * rpnw + P.HIGH_INT;
-  if (rpnwF <= 0) return 0;
+  // rpnwF of 0 (out of range) does NOT mean an empty hit — the MIN_PCT floor
+  // below still applies, since a successful land attack always nets something.
+  if (rpnwF < 0) rpnwF = 0;
 
   const rknw  = ownKdAvgNW > 0 ? eneKdAvgNW / ownKdAvgNW : 1;
   const rknwF = rknw < K.LOW ? K.LOW_F : rknw < K.MID ? rknw * K.MID_SLOPE + K.MID_INT : 1;
@@ -26,7 +30,7 @@ function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
   const castlePct = tp?.survey?.buildings?.find(b => b.name === 'Castles')?.pctTot;
   const castleF   = castlePct != null ? Math.max(0, 1 - (castlePct / 100 * G.CASTLE_MULT)) : 1.0;
 
-  const relF = G.REL_F;
+  const relF = G.WAR_F;   // planner always assumes war (+10% gains)
 
   let enemyRitualF = 1.0;
   const eRitual = (S.enemy?.kdEffects?.ritual || '').toLowerCase();
@@ -35,9 +39,14 @@ function _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW) {
     enemyRitualF = Math.max(G.RITUAL_FLOOR, 1 - eff / 100);
   }
 
-  const raw = tLand * G.BASE_PCT * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF;
-  const cap = Math.min(ownLand, tLand) * G.CAP_PCT;
-  return Math.round(Math.min(raw, cap));
+  // Attacker race/personality gain modifiers (war values — see config)
+  const raceF = RACE_GAIN_MULT[(atk?.race || '').toLowerCase()] || 1;
+  const persF = PERS_GAIN_MULT[(atk?.sot?.personality || atk?.personality || '').toLowerCase()] || 1;
+
+  const raw   = tLand * G.BASE_PCT * rpnwF * rknwF * relF * mapF * castleF * enemyRitualF * raceF * persF;
+  const floor = tLand * G.MIN_PCT;   // never nets zero, even far out of range
+  const cap   = Math.min(ownLand, tLand) * G.CAP_PCT;
+  return Math.round(Math.min(Math.max(raw, floor), cap));
 }
 // "My Orders" tab — province picker + attack plan calculator.
 // calcAttacks() is pure business logic, separated from the render function.
@@ -230,7 +239,7 @@ function calcAttacks(prov) {
 
   // ── Estimated TM land gains — delegates to top-level _estimateTMGain ────────
   function estimateTMGains(tNW, tLand, tp) {
-    return _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW);
+    return _estimateTMGain(tNW, tLand, tp, ownLand, aNW, ownKdAvgNW, eneKdAvgNW, prov);
   }
 
   // ── Collect and classify wave targets ─────────────────────────────────────
@@ -567,7 +576,7 @@ function calcMaxGainAttacks(prov) {
       if (offLeft * ownOffMult <= c.tDef || offLeft < c.offCost) continue;
 
       const gain = _estimateTMGain(simNW[c.ep.slot], sl, c.tp,
-                                   ownLand, aNW, ownKdAvgNW, eneKdAvgNW);
+                                   ownLand, aNW, ownKdAvgNW, eneKdAvgNW, prov);
       if (!gain || gain <= 0) continue;
 
       const eff = gain / c.offCost;

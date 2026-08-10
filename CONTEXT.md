@@ -51,6 +51,61 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
 
+## Recent work (2026-08-10, later) -- post-live-test fixes
+
+First live wave (shrink-AI, early Age 116, ~200-600 acre provinces) exposed
+several things. What the leader saw: 54 hits, est gains only ~727 acres, the
+chain target got 3 hits while two provinces soaked 25, and 17 hits flagged
+"fat".
+
+**Root causes (diagnosed, not all of them bugs):**
+- **Chain target under-hit: the Chain ⌖ column was EMPTY.** The chain-quota tier
+  only fires on `targetAcres > 0`. With no acre goal set, the "chain target"
+  was just another flagged target and lost to the AI shrink quotas. Diagnostic:
+  no ⛓ lines in the warnings box and no ⛓ badges in the table = no chain goal
+  anywhere in the plan. WORKS AS DESIGNED -- leader must set Chain ⌖.
+- **25 of 54 hits on two provinces**: [11] had 6k def, so it was the only thing
+  most small slots could break; the least-bad fallback kept picking it. [24] was
+  leader-flagged AND AI-shrink-picked, and the "stop once quota met" guard only
+  covered shrink-ONLY targets.
+- **11 hits estimated ZERO gain** -- out of range → RPNW factor 0 → no acres.
+
+**Fixes shipped:**
+- `WP_MAX_OVERFLOW_HITS_PER_TARGET = 5` -- caps hits from the low-priority tiers
+  (uncovered/any/wall/marginal/dump). Chain victims are EXEMPT (pounding one
+  province is the point of a chain); raze/mass and shrink quota are unaffected.
+- AI shrink now also skips any province the leader FLAGGED as a wave target
+  (`plan.wave`), not just chain victims and bloat provs.
+- AI shrink ranking corrected AGAIN: density is the GATE (≥90% pop), then rank
+  the survivors by SIZE (estimated population, acres as tiebreak). Ranking by
+  pop% inside the band was wasting quota on tiny full provinces.
+- **Gains: `TM_GAIN.MIN_PCT = 0.005`** -- leader reports a successful land attack
+  NEVER nets 0, even out of range, though the published formula gives exactly 0
+  outside rpnw 0.567-1.6. Modelled as a floor of 0.5% of target land (still
+  subject to the 20% cap). VALUE IS UNVERIFIED -- tune from real OOR results.
+- **Gains: Race/Personality modifiers added** (they are in the wiki formula and
+  we had neither): `RACE_GAIN_MULT = {orc: 1.15}`, `PERS_GAIN_MULT = {'war hero':
+  1.10}` (Age 116 war values). `_estimateTMGain` takes an optional `atk`
+  province; slots now carry `pers` so the solver can pass race+pers.
+- **`REL_F` renamed `WAR_F`** (1.10, unchanged) and documented as what it is: the
+  +10% war stance/relations gains bonus. The planner ALWAYS assumes war. Added
+  `OOW_F = 0.85` for reference (Age 116 raised the OOW penalty to 15%).
+- Config now lists what the gains model does NOT cover: Stance, Siege Science,
+  Emerald Dragon, Attack Time Adjustment, Anonymity, Mist, and the enemy Undead
+  war doctrine (-12.5% enemy battle gains).
+- **Pop%/"fat" badge moved to the Attacker column** -- it is OUR province's pop%,
+  never the target's, and sitting in the Target column it read backwards.
+
+Harness: max hits per target 5 (was up to 14 live), out-of-range hits now show
+~13-15 acres instead of "—", the only remaining "—" is a Raze (correct, raze
+takes no land for us). AI picker re-verified with the floor temporarily at 60:
+flagged [2] Deimos correctly skipped, and Gunnlod (4k acres, 64% pop) loses to
+Kerberos (3.4k acres, 78% pop) -- more actual people despite fewer acres.
+
+**Still open / not done:** out-of-range hits are still TMs (Raze ignores RPNW and
+would do real damage there); fat attackers (<70% pop) still only get a warning
+rather than being switched to raze/mass. Both were offered and not selected.
+
 ## Recent work (2026-08-10) -- Shrink wave types + Age 116 strategy doc
 
 ### Shrink waves (harness-verified 2026-08-10, NOT live-tested)

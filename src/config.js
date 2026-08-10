@@ -145,10 +145,28 @@ const HONOR_INCOME_PCT = {
 
 // TM land-gain estimate (_estimateTMGain in tabs/player.js). Piecewise curves +
 // modifier factors, all game-tuned. rawGain = tLand × BASE_PCT × rpnwF × rknwF
-// × relF × mapF × castleF × ritualF, capped at min(ownLand,tLand) × CAP_PCT.
+// × relF × mapF × castleF × ritualF × raceF × persF, floored at tLand × MIN_PCT
+// and capped at min(ownLand,tLand) × CAP_PCT.
+//
+// Wiki gains formula (verified 2026-08-10):
+//   Gains = TargetResource × AttackType% × RPNW × RKNW × Multi-Attack Protection
+//         × Race × Personality × Castles × Relations × Stance × Siege Science
+//         × Emerald Dragon × Attack Time Adjustment × Ritual × Anonymity × Mist
+// MODELLED here: AttackType (BASE_PCT), RPNW, RKNW, MAP (MAP_F), Race, Personality,
+//   Castles, Relations/Stance at war (WAR_F), Ritual.
+// NOT modelled (estimates run low/high when these are in play): Stance, Siege
+//   Science, Emerald Dragon, Attack Time Adjustment (arriving late is a real
+//   gains bonus), Anonymity, Mist, and the enemy Undead war doctrine
+//   (-12.5% enemy battle gains, scales with their Undead province count).
 const TM_GAIN = {
   BASE_PCT: 0.12,          // base share of target land taken
   CAP_PCT:  0.20,          // hard cap vs the smaller of the two lands
+  // Out-of-range floor. The published formula makes the RPNW factor exactly 0
+  // outside 0.567-1.6, i.e. no acres at all — but in practice a successful land
+  // attack ALWAYS nets something (leader-reported, 2026-08-10). Modelled as a
+  // minimum share of the target's land, still subject to CAP_PCT.
+  // UNVERIFIED VALUE — tune this from real out-of-range hit results.
+  MIN_PCT:  0.005,
   // Relative province NW (target/attacker) → gain factor (piecewise linear):
   //   [FLOOR,LOW_MAX): LOW_SLOPE·r + LOW_INT · [LOW_MAX,HIGH_MIN]: flat 1
   //   (HIGH_MIN,CEIL]: HIGH_SLOPE·r + HIGH_INT · else 0
@@ -160,10 +178,22 @@ const TM_GAIN = {
   // Target map ("science")-based reduction: none/"Not much"=1.0.
   MAP_F: { LITTLE: 0.90, LOTS: 0.80 },
   CASTLE_MULT: 2.25,       // castleF = max(0, 1 − castlePct/100 × CASTLE_MULT)
-  REL_F: 1.10,             // relations/honor gain factor
+  // War stance/relations bonus: attacking at WAR gives +10% gains. The wave
+  // planner ALWAYS assumes war — it only ever plans war attacks. (For
+  // reference: out of war it is a penalty instead, raised to -15% in Age 116,
+  // i.e. OOW_F below — not used by the planner.)
+  WAR_F: 1.10,
+  OOW_F: 0.85,             // out-of-war gains penalty (Age 116) — reference only
   RITUAL_FLOOR: 0.5,       // floor for an enemy protection-ritual reduction
   RITUAL_DEFAULT_EFF: 15,  // assumed ritual effectiveness % when unknown
 };
+
+// Attacker race/personality battle-gain modifiers ("Race Modifier" and
+// "Personality Modifier" in the wiki gains formula). WAR values — the wave
+// planner only ever plans war attacks. UPDATE EVERY AGE.
+//   Age 116: Orc +10% gains OOW / +15% in war; War Hero +10% battle gains (war only).
+const RACE_GAIN_MULT = { 'orc': 1.15 };
+const PERS_GAIN_MULT = { 'war hero': 1.10 };
 
 // ── Age 116 unit stats: [offense, defense] per unit ──────────────────────────
 // Used to subtract withheld-elite offense from sot.offPoints and to compute
