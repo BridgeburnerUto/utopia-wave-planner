@@ -8,14 +8,68 @@
 //   gross       = raw × (1+banks%) × (1+Alchemy sci) × (1+honor) × race × pers
 //   wages       = (specs×0.5 + elites×0.75) × wageRate × (1−armoury%)
 //                 × (1−Bookkeeping sci) × race × pers
-//                 (wageRate = ma.wages% from Military Advisor intel — own always,
-//                  enemy when opped; else WAGE_RATE_ASSUMED)
+//                 (wageRate source order: Military Advisor (ma.wages) → derived
+//                  from the SoM's efficiency → old IS board → WAGE_RATE_ASSUMED)
 //   %-building effects use the x·(1−x) curve: rate × pct × (1−pct/100) × BE.
 // Provinces without a survey are estimated acres-only (banks/armouries/homes
 // treated as 0) and flagged ⚠ est. Plague is flagged 🦠 but its income effect
 // is NOT applied (multiplier unknown). Dragons/rituals/riots not modeled.
 
-function _provEconomy(prov) {
+/**
+ * Recover the wage rate from a SoM's military efficiency.
+ * The SoM text states the wage rate outright ("Our wage rate is 100.0% of
+ * normal levels"), but the IS API only exposes the efficiency it produces
+ * (`som.eff`), so we invert the published curve:
+ *   eff% = 33 + 67 × (wage%/100)^0.25   →   wage% = 100 × ((eff% − 33)/67)^4
+ * Returns null when there is no usable efficiency reading.
+ */
+function _wageRateFromEff(eff) {
+  if (!(eff > 0)) return null;
+  const effPct = eff * 100;
+  if (effPct <= MIL_EFF_BASE) return 0;
+  const w = 100 * Math.pow((effPct - MIL_EFF_BASE) / MIL_EFF_WAGE_COEF, 1 / MIL_EFF_WAGE_EXP);
+  return Math.min(WAGE_RATE_MAX, Math.round(w));
+}
+
+/** Wage% column styling per source: color, marker, tooltip. Order = precedence. */
+const WAGE_SRC = {
+  ma:      { c: '#b8c8c8', m: '',  t: 'Military Advisor intel — exact' },
+  som:     { c: '#8fa8a8', m: '~', t: 'Derived from the SoM military efficiency. This is the '
+             + 'EFFECTIVE wage rate, which trails the rate actually being paid by up to ~96h.' },
+  oldis:   { c: '#7fd0a0', m: '',  t: 'Old IS board — exact paid rate. Used when there is no '
+             + 'Military Advisor number and either no SoM or a SoM older than this reading '
+             + '(age measured from the last run of scripts/oldis-collector.js)' },
+  assumed: { c: '#617070', m: '*', t: 'Assumed — no Military Advisor intel, no SoM, no old IS data' },
+};
+
+/**
+ * Exact paid wage rate collected from the OLD IS board (intel.utopia-game.com),
+ * which parses it out of the SoM text — the number neither the new IS API nor
+ * the efficiency inversion can give us. Pushed to Firestore by
+ * scripts/oldis-collector.js, loaded into S.oldisEcon by _loadOldisEcon().
+ * Last of the real sources by leader's choice: it is exact but manually
+ * collected, so a live SoM of our own is preferred even though that one has to
+ * be estimated.
+ * `loc` is the kingdom the province belongs to; without it we cannot tell own
+ * slot 7 from enemy slot 7, so no loc means no lookup.
+ */
+function _oldisWage(prov, loc) {
+  if (!loc || prov?.slot == null) return null;
+  const kd = S.oldisEcon?.[loc];
+  const w  = kd?.provs?.[prov.slot]?.wagePct;
+  if (!(w > 0)) return null;
+  // Age is measured from when the collector RAN, which understates the true age
+  // of the figure — the old IS was already showing intel of some age when it
+  // was scraped. Its own per-province intel-age column is stored raw
+  // (`intelRaw`) but its four fields are not identified yet, so it is not used.
+  // The bias is acceptable here: this value is the EXACT paid rate, so letting
+  // it win close calls against an inverted estimate is the right way to be
+  // wrong.
+  const ageSec = kd.updatedAt > 0 ? Math.max(0, (Date.now() - kd.updatedAt) / 1000) : null;
+  return { pct: w, ageSec };
+}
+
+function _provEconomy(prov, loc) {
   const sot  = prov.sot || {};
   const land = prov.land || sot.land || 0;
   if (!(land > 0) || sot.peasants == null) return null;
@@ -64,10 +118,39 @@ function _provEconomy(prov) {
   const elites   = sot.elites || 0;
   const wageBase = specs * WAGE_PER_SPEC + elites * WAGE_PER_ELITE;
   const armCut   = curve(ARMOURY_WAGE_RATE, armPct);
-  // Wage rate from the Military Advisor when intel has it (own always, enemy
-  // when opped); otherwise WAGE_RATE_ASSUMED.
-  const maWages   = prov.ma?.wages;
-  const wageRate  = (maWages != null ? maWages : WAGE_RATE_ASSUMED) / 100;
+  // Wage rate, best source first (leader's order 2026-08-11 — the live IS
+  // sources outrank the old IS because ours are current, while the old-IS
+  // numbers are only as fresh as the last manual collection):
+  //   'ma'  — Military Advisor number (own always, enemy when opped). NOTE: the
+  //           IS ships a PLACEHOLDER ma block ({wages:0, draftTarget:0,
+  //           credits:0}) on provinces never opped, so "no intel" must be
+  //           tested as "not > 0", never as null — with a null test every
+  //           un-opped enemy province read as 0% wages and paid zero wages.
+  //   'som' — recovered from the SoM's military efficiency (_wageRateFromEff).
+  //   'oldis' — exact paid rate scraped off the old IS board (_oldisWage).
+  //   else  — WAGE_RATE_ASSUMED.
+  const maWages  = prov.ma?.wages > 0 ? prov.ma.wages : null;
+  const somWages = maWages == null ? _wageRateFromEff(prov.som?.eff) : null;
+  const somAge   = prov.som?.ageSeconds;
+  const oldIs    = maWages == null ? _oldisWage(prov, loc) : null;
+
+  // When BOTH estimates exist, take the fresher reading rather than a fixed
+  // winner: an exact old-IS figure from an hour ago beats an inverted estimate
+  // off a three-day-old SoM, and vice versa. An unknown age on either side
+  // counts as "older" — a reading we cannot date cannot be shown to be fresher.
+  const oldIsFresher = !!oldIs
+    && (somAge == null || (oldIs.ageSec != null && oldIs.ageSec < somAge));
+
+  let wagePct, wageSrc;
+  if (maWages != null)                    { wagePct = maWages;   wageSrc = 'ma'; }
+  else if (somWages != null && !oldIsFresher) { wagePct = somWages; wageSrc = 'som'; }
+  else if (oldIs)                         { wagePct = oldIs.pct; wageSrc = 'oldis'; }
+  else if (somWages != null)              { wagePct = somWages;  wageSrc = 'som'; }
+  else                                    { wagePct = WAGE_RATE_ASSUMED; wageSrc = 'assumed'; }
+
+  const wageAge = wageSrc === 'som'   ? somAge
+                : wageSrc === 'oldis' ? oldIs.ageSec : null;
+  const wageRate = wagePct / 100;
   const wages = wageBase * wageRate * (1 - armCut / 100) * (1 - book / 100)
               * (RACE_WAGE_MULT[race] || 1) * (PERS_WAGE_MULT[pers] || 1);
 
@@ -76,16 +159,15 @@ function _provEconomy(prov) {
     est, plague: !!sot.plague,
     emplPct: jobs > 0 ? Math.min(100, Math.round(peasants / jobs * 100)) : null,
     banksPct, armPct, bankPct, armCut, alch, book, honor,
-    wagePct: maWages != null ? maWages : WAGE_RATE_ASSUMED,
-    wageAssumed: maWages == null,
+    wagePct, wageSrc, wageAge, wageAssumed: wageSrc === 'assumed',
   };
 }
 
 /** KD totals — provinces without computable economy are skipped (nSkipped). */
-function _kdEconomy(provinces) {
+function _kdEconomy(provinces, loc) {
   const t = { gross: 0, wages: 0, net: 0, nEst: 0, n: 0, nSkipped: 0 };
   for (const p of provinces || []) {
-    const e = _provEconomy(p);
+    const e = _provEconomy(p, loc);
     if (!e) { t.nSkipped++; continue; }
     t.gross += e.gross; t.wages += e.wages; t.net += e.net;
     if (e.est) t.nEst++;
@@ -107,26 +189,36 @@ function renderEconBadges() {
       <div class="v" style="color:${color};font-family:monospace">${fK(tot.net)}/t${estMark}</div>
     </div>`;
   };
-  el.innerHTML = mk('Own Net', _kdEconomy(S.own?.provinces), '#60C040')
-               + mk('Eny Net', _kdEconomy(S.enemy?.provinces), '#ffd400');
+  el.innerHTML = mk('Own Net', _kdEconomy(S.own?.provinces, S.own?.location), '#60C040')
+               + mk('Eny Net', _kdEconomy(S.enemy?.provinces, S.eLoc), '#ffd400');
 }
 
 // ── Tab render ───────────────────────────────────────────────────────────────
 
-function _econSection(title, provinces, accent) {
+function _econSection(title, provinces, accent, loc) {
   if (!provinces?.length) {
     return `${sectionHead(title)}<div style="color:#7a9090;font-size:17px;font-style:italic;padding:6px 0 18px">No data loaded.</div>`;
   }
-  const tot  = _kdEconomy(provinces);
+  const tot  = _kdEconomy(provinces, loc);
   const rows = provinces
-    .map(p => ({ p, e: _provEconomy(p) }))
+    .map(p => ({ p, e: _provEconomy(p, loc) }))
     .filter(r => r.e)
     .sort((a, b) => b.e.net - a.e.net);
+
+  const nOld = rows.filter(r => r.e.wageSrc === 'oldis').length;
+  const nSom = rows.filter(r => r.e.wageSrc === 'som').length;
+  const nAsm = rows.filter(r => r.e.wageSrc === 'assumed').length;
+  const wageNote = [
+    nSom ? nSom + ' rate~ from SoM' : '',
+    nOld ? nOld + ' from old IS' : '',
+    nAsm ? nAsm + ' assumed*' : '',
+  ].filter(Boolean).join(' · ') || 'rates from Mil Advisor';
 
   const cards = `
     <div class="wsum" style="margin-bottom:10px">
       <div class="wscard"><div class="l">Gross / tick</div><div class="v">${fK(tot.gross)}</div><div class="s">${tot.n} provinces</div></div>
-      <div class="wscard"><div class="l">Wages / tick</div><div class="v" style="color:#E05050">−${fK(tot.wages)}</div><div class="s">specs ×0.5 · elites ×0.75</div></div>
+      <div class="wscard"><div class="l">Wages / tick</div><div class="v" style="color:#E05050">−${fK(tot.wages)}</div>
+        <div class="s">${wageNote}</div></div>
       <div class="wscard"><div class="l">Net / tick</div><div class="v" style="color:${accent}">${fK(tot.net)}</div><div class="s">${fK(tot.net * 24)} / real day (24t)</div></div>
       <div class="wscard"><div class="l">Precision</div><div class="v" style="font-size:21px">${tot.n - tot.nEst}/${tot.n} sv</div>
         <div class="s">${tot.nEst ? tot.nEst + ' est (no survey)' : 'all surveyed'}${tot.nSkipped ? ' · ' + tot.nSkipped + ' no SoT' : ''}</div></div>
@@ -143,7 +235,7 @@ function _econSection(title, provinces, accent) {
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.emplPct != null ? e.emplPct + '%' : '—'}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.est ? '—' : e.banksPct.toFixed(1) + '%'}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.est ? '—' : e.armPct.toFixed(1) + '%'}</td>
-      <td style="padding:6px 10px;text-align:right;color:${e.wageAssumed ? '#617070' : '#b8c8c8'}"${e.wageAssumed ? ' title="Assumed — no Military Advisor intel"' : ''}>${e.wagePct}%${e.wageAssumed ? '*' : ''}</td>
+      <td style="padding:6px 10px;text-align:right;color:${WAGE_SRC[e.wageSrc].c}" title="${WAGE_SRC[e.wageSrc].t}${e.wageAge != null ? ' — ' + fA(e.wageAge) + ' old' : ''}">${e.wagePct}%${WAGE_SRC[e.wageSrc].m}</td>
       <td style="padding:6px 10px;text-align:right;color:#7a9090">${e.alch ? '+' + e.alch.toFixed(1) + '%' : '—'}</td>
       <td style="padding:6px 10px;text-align:right">${fK(e.gross)}</td>
       <td style="padding:6px 10px;text-align:right;color:#E05050">−${fK(e.wages)}</td>
@@ -177,12 +269,14 @@ function renderEconomy() {
       <button class="wb${!isEnemy ? ' g' : ''}" style="font-size:17px;padding:3px 12px" onclick="__wpA.econView('own')">Own${S.own?.location ? ' (' + esc(S.own.location) + ')' : ''}</button>
     </div>
     <div style="font-size:15px;color:#7a9090;margin-bottom:12px">
-      Net = gross income − army wages, per tick. Wage rate from Military Advisor intel where
-      available, else ${WAGE_RATE_ASSUMED}%* assumed. Dragons, rituals, riots and plague income
+      Net = gross income − army wages, per tick. Wage rate: Military Advisor intel where
+      available, else ~ = recovered from the SoM's military efficiency (effective rate, trails
+      the paid rate by up to ~96h), else the old IS board's exact figure where it has been
+      collected, else ${WAGE_RATE_ASSUMED}%* assumed. Dragons, rituals, riots and plague income
       effects not modeled. ⚠ = no survey (banks/armouries as 0, est).
     </div>`
     + (isEnemy
-      ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400')
-      : _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040')));
+      ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400', S.eLoc)
+      : _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040', S.own?.location)));
   renderEconBadges();
 }

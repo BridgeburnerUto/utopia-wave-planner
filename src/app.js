@@ -37,6 +37,27 @@ function _refreshBackendStatus() {
 // If the loaded enemy location differs from the lock, warn with an override —
 // prevents a stale IS enemy from a previous war silently contaminating the plan.
 
+// ── Old IS economy (exact wage rates) ───────────────────────────────────────
+// The new IS never exposes the wage rate; the old IS (intel.utopia-game.com)
+// parses it out of the SoM and shows it on its board. scripts/oldis-collector.js
+// is run there by hand and writes meta/oldis_econ_{loc}; tabs/economy.js falls
+// back to these when it has neither a Military Advisor number nor a SoM (the
+// live sources win because these are only as fresh as the last manual run).
+// Missing docs are normal — the assumed rate stands in.
+async function _loadOldisEcon() {
+  for (const loc of new Set([S.own?.location, S.eLoc].filter(Boolean))) {
+    try {
+      const doc = await fbGet(`meta/oldis_econ_${loc.replace(':', '_')}`);
+      const f = doc?.fields;
+      if (!f?.provs) { delete S.oldisEcon[loc]; continue; }
+      S.oldisEcon[loc] = {
+        provs: _fromFB(f.provs) || {},
+        updatedAt: _fromFB(f.updatedAt) || 0,
+      };
+    } catch (e) { delete S.oldisEcon[loc]; }
+  }
+}
+
 async function _loadLocLock() {
   const kdId = S.own?.location?.replace(':', '_');
   if (!kdId) return;
@@ -204,6 +225,7 @@ window.__wpA = {
       // Kingdom location lock — warn (with override) if loaded enemy ≠ lock
       await _loadLocLock();
       _maybeWarnLocLock();
+      await _loadOldisEcon();
 
       // Shared attacker settings (elite %) for the Kingdom tab / wave solver
       loadAtkSettings();
@@ -294,6 +316,7 @@ window.__wpA = {
       await this.loadEnemy(S.eLoc);
       await _loadLocLock();
       _maybeWarnLocLock();
+      await _loadOldisEcon();
       loadAtkSettings();
       _refreshWarStatus();  // refresh war status cache after own + enemy are loaded
       this.meta();
@@ -428,6 +451,12 @@ window.__wpA = {
   lbView,
   lbSetFilter,
   lbOpFilter,
+  lbSection,
+  drgMetric,
+  drgSort,
+  dragonSave,
+  dragonRemind,
+  dragonPullAndRender,
   resyncOps,
   toggleMaxGain,
   setElitePct,
@@ -787,6 +816,13 @@ window.__wpA = {
       S.lastBackendError = 'Network error: ' + e.message;
       console.warn('[WavePlanner] Backend sync error:', e.message);
     }
+    // Same trip, opposite direction: pull any new dragon fund/slay events the
+    // backend has ingested from Discord. Quiet — failures must not disturb the
+    // sync status, and nothing re-renders unless the dragon board is open.
+    try {
+      const drg = await dragonPull(true);
+      if (drg?.added && S.tab === 'leaderboard' && S.lbSection === 'dragon') renderLeaderboard();
+    } catch(e) { console.warn('[WavePlanner] dragon pull error:', e.message); }
     _refreshBackendStatus();
   },
 

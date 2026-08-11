@@ -73,6 +73,12 @@ const S = {
   },
   lbOpFilter: 'all',   // 'all' | opType string e.g. 'ns', 'fb' — filters province table to one op type
 
+  lbSection: 'ops',    // Leaderboard tab section: 'ops' | 'dragon'
+  drgMetric: 'gc',     // Dragon board metric: 'gc' (fund gold) | 'food' | 'slay' (damage)
+  drgSort:   'total',  // Dragon board ranking: 'total' | 'acre' | 'nw'
+
+  oldisEcon: {},           // exact wage rates from the OLD IS board, {[loc]: {provs: {[slot]: {wagePct, ...}}, updatedAt}} — meta/oldis_econ_{loc}, written by scripts/oldis-collector.js
+
   locLock: null,           // kingdom location lock — allowed enemy location from meta/{kdId}_loc_lock (null = no lock)
   locLockOverride: false,  // user confirmed working past a lock mismatch (this session only)
   _locLockWarned: false,   // mismatch confirm dialog already shown this session

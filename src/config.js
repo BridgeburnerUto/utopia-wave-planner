@@ -117,8 +117,9 @@ const RACE_POP_MULT = { halfling: 1.125, faery: 0.95 };
 
 // ── Economy (income / wages) — base formulas from utopiawiki.com Economy +
 // Growth pages, age-specific modifiers from the AGE 116 doc. Used by
-// tabs/economy.js. Wage rate (20–200% setting) is invisible in intel and
-// assumed 100%; dragons/rituals/riots/plague income effects not modeled.
+// tabs/economy.js. Wage rate comes from the Military Advisor when we have it,
+// else it is recovered from the SoM's military efficiency (see MIL_EFF_* below);
+// dragons/rituals/riots/plague income effects not modeled.
 const INCOME_PER_EMPLOYED   = 3.0;   // gc per employed peasant per tick
 const INCOME_PER_UNEMPLOYED = 1.0;
 const INCOME_PER_PRISONER   = 0.75;
@@ -129,7 +130,19 @@ const BANK_INCOME_RATE      = 1.5;   // % income per % built (x·(1−x) curve, 
 const ARMOURY_WAGE_RATE     = 2.0;   // % wage cut per % built (x·(1−x) curve, max 50%)
 const WAGE_PER_SPEC         = 0.5;   // gc/tick per off+def spec (soldiers/mercs unpaid)
 const WAGE_PER_ELITE        = 0.75;  // gc/tick per elite
-const WAGE_RATE_ASSUMED     = 200;   // % assumed when ma.wages absent (most run 200%)
+const WAGE_RATE_ASSUMED     = 200;   // % assumed when nothing at all is known
+// Military efficiency ⇄ wage rate. The SoM reports efficiency, not the wage
+// rate, but the two are tied by the published curve (strategy-context.md):
+//   base eff% = MIL_EFF_BASE + MIL_EFF_WAGE_COEF × (effective wage%/100)^MIL_EFF_WAGE_EXP
+// economy.js inverts it (`_wageRateFromEff`) to recover the wage rate of any
+// province we have a SoM on. Caveats baked into the clamp: the recovered value
+// is the EFFECTIVE wage rate, which drifts toward the paid rate over ~96h, and
+// Ruby dragon (×0.875) / multi-attack protection (>1) scale eff without
+// touching wages — hence WAGE_RATE_MAX.
+const MIL_EFF_BASE      = 33;
+const MIL_EFF_WAGE_COEF = 67;
+const MIL_EFF_WAGE_EXP  = 0.25;
+const WAGE_RATE_MAX     = 200;   // % — game cap on the wage setting
 // Age 116 race/personality economy modifiers (1.0 fallback):
 const RACE_INCOME_MULT    = { human: 1.30 };
 const RACE_WAGE_MULT      = { human: 1.25, avian: 0.75 };

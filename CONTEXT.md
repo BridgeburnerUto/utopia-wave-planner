@@ -51,7 +51,258 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
 
-## Recent work (2026-08-10, latest) -- Popspace "current pop" fix
+## Recent work (2026-08-11) -- Economy wage rate: placeholder bug + SoM recovery
+
+Leader report: on a live IS every enemy province showed **Wage% 0%** and
+**Wages/t −0**, so enemy net income equalled gross (309k/t).
+
+**Root cause (real bug):** the IS ships a **placeholder `ma` block** --
+`{wages: 0, draftTarget: 0, credits: 0}` -- on provinces that were never opped,
+rather than omitting `ma`. `_provEconomy` tested `maWages != null`, true for 0,
+so the WAGE_RATE_ASSUMED fallback never fired. Fixed by testing `> 0`. Visible
+in the fixture too (Deimos/Gunnlod carry the zeroed block).
+
+**Wage rate is now RECOVERED from the SoM** (leader: "the information is on the
+SoM"). The SoM text states it outright ("Our wage rate is 100.0% of normal
+levels") but **the IS API does not expose it** -- `som` keys are exactly
+`ageSeconds, ome, dme, eff, nonPeon, offPointsHome, defPointsHome, training,
+standingArmy, armiesAway, armiesReturned, reliability, allDefenseHome, tickId`
+(union across all 45 provinces in the dump; "wages" appears nowhere but `ma`).
+What it DOES expose is `som.eff`, the efficiency the wage rate produces, so
+`_wageRateFromEff()` inverts the published curve
+(reference/strategy-context.md:278):
+`eff% = 33 + 67 × (wage%/100)^0.25` → `wage% = 100 × ((eff%−33)/67)^4`,
+clamped to `WAGE_RATE_MAX = 200`. Constants `MIL_EFF_BASE/COEF/EXP` +
+`WAGE_RATE_MAX` in config.js (age-varying, with the others).
+
+Source precedence per province (leader's order): `ma.wages > 0` → SoM-derived →
+old IS board → assumed 200%, with the SoM/old-IS pair resolved by FRESHNESS
+(see the collector section).
+Wage% column now has three states via the `WAGE_SRC` table: exact (bright,
+no marker) / `~` derived (mid grey) / `*` assumed (dim), each with its own
+tooltip; the Wages card counts them ("2 rate~ from SoM · 20 assumed*").
+
+**Two caveats, stated in the tooltip and the tab footnote, not hidden:**
+- The inversion yields the **EFFECTIVE** wage rate, which trails the rate
+  actually being paid by up to ~96h. A province that just slashed wages still
+  reads high.
+- Ruby dragon (×0.875) and multi-attack protection (>1) scale `eff` without
+  touching wages -- that is what the 200% clamp absorbs.
+
+Accuracy check against the 23 own provinces (the only ones with BOTH `ma.wages`
+and `som.eff`): 22/23 within 10%, 8 exact; `eff 0.78 → 20%` vs paid 20% ✓,
+`eff 1.13 → 200%` ✓. The single outlier is Ghetto Siesta (derived 157 vs paid
+20) -- a province that had just cut wages 200→20, i.e. the documented lag, not
+a formula error. Derived values never apply to own provinces anyway (`ma` is
+always populated there).
+
+Harness: own side unchanged (0 derived, 0 assumed; 20%/178%/200% all exact);
+enemy side 2 derived + 20 assumed, KD wages −730k where it was 0, Gunnlod
+correctly negative net. All 11 tabs render, no console errors. Minified build
+done. NOT COMMITTED, NOT live-tested.
+
+**Old IS (intel.utopia-game.com) -- investigated, NOT built.** Leader asked
+about hooking it up alongside the new IS since it captures the wage rate.
+Blocker: it answers `You can only login from in-game`, so the session can only
+be established by clicking through from the game -- no server-side fetch from
+Cloud Run is possible, and a cross-origin fetch from intel.utopia.site would
+need CORS headers it does not send. Only viable shapes: (a) a second collector
+bookmarklet run in the old-IS origin that pushes to Firestore/backend, or
+(b) a paste box in the planner (backend parse.php:814 already has the
+`/wage rate is ([\d.]+)%/i` regex). **Leader chose (a), the collector
+bookmarklet -- BUILT, see below.** `scripts/oldis-probe.js` (the recon step) is
+kept for re-probing other old-IS pages.
+
+### Old IS wage collector -- BUILT (harness-verified, NOT run live)
+
+**What the old IS actually is** (from the probe, run by the leader 2026-08-11):
+classic PHP + jQuery + tablesorter, `?p=` routes, **no JSON API** -- the data
+only exists as rendered HTML. Its board (`?p=intel`, `div#board >
+table.tablesorter`) already computes the whole economy per province:
+`Slot | Prov | Race | Pers | Acres | NW | Income | Wages | Wages # | Netto gc |
+Food eaten | ... | popspace | Intel`, where **`Wages` is the paid rate %** and
+`Wages #` is the gold. Confirmed against the leader's SoM screenshot: `[7]
+Jabba the Pizza Hutt` reads `Wages 100`, and its SoM text says "Our wage rate
+is 100.0% of normal levels". Province cells are `[13]Name (4:6)`, so every row
+carries its own kingdom -- own and enemy boards can be collected in any order.
+Its `Income` also cross-checks our model: 17.9k for Jabba vs the 18k gross our
+Economy tab computes for the same province.
+
+- **`scripts/oldis-collector.js`** -- pasted into the console on the old IS
+  board. Parses the table, groups rows by the location in each Prov cell, shows
+  a preview and **asks before sending**, then writes one Firestore doc per
+  kingdom: `meta/oldis_econ_{loc}` (`:` -> `_`) with
+  `{loc, n, updatedAt, source, provs: {[slot]: {name, wagePct, wagesGc,
+  incomeGc, nettoGc}}}`. Columns are matched by header TEXT, not index -- the
+  board is drag-reorderable (jquery.dragtables) and `Wages #`'s id contains a
+  space so it is not a usable CSS selector. Abbreviated values ("17.9k") are
+  decoded; the totals row is skipped.
+- **Staleness rule -- BUILT.** `ma` still wins outright, but the SoM/old-IS
+  pair is resolved by age rather than a fixed winner: old IS wins when it is
+  newer than the SoM being inverted (`som.ageSeconds` vs now − doc
+  `updatedAt`). An unknown age on either side counts as older -- a reading we
+  cannot date cannot be shown to be fresher. The chosen source's age is
+  appended to the Wage% tooltip ("… — 22d old") so the leader can see WHY a
+  source won.
+- **Known bias**: the old-IS age is measured from when the collector RAN, which
+  understates the true age -- the old IS was already showing intel of some age
+  when it was scraped. Accepted deliberately: that value is the exact paid
+  rate, so letting it win close calls against an inverted estimate is the right
+  way to be wrong. The board's own per-province intel-age column
+  ("2.5h|7.2h|5.9h|95.5h") is now stored raw as `intelRaw`, but its four fields
+  are not identified yet -- identify them and the rule can use the real age of
+  the wage figure.
+- Verified both directions: with the doc collected 2h ago, Deimos (SoM 22.5d
+  old) switches to the exact 100% and the card reads "4 from old IS · 18
+  assumed*"; with it collected 40d ago, Deimos falls back to "200%~ · 22d old"
+  and the card reads "2 rate~ from SoM · 2 from old IS · 18 assumed*". Iapetus,
+  which has no SoM at all, keeps the old-IS value in both.
+- **Planner side**: `S.oldisEcon` (state.js), `_loadOldisEcon()` (app.js, next
+  to `_loadLocLock()` in both init and refresh, own + enemy loc), and
+  `_oldisWage(prov, loc)` in economy.js. Source precedence is
+  **ma -> som -> oldis -> assumed** (leader's call 2026-08-11: the live IS
+  sources outrank the old IS because ours are current, while the old-IS numbers
+  are only as fresh as the last manual collection -- so a province we have a
+  SoM on uses the estimate even though the old IS has the exact figure).
+  `loc` had to be threaded through `_provEconomy`/`_kdEconomy`/`_econSection`
+  because a bare slot number cannot tell own [7] from enemy [7]. Green,
+  unmarked Wage% for old-IS values; the Wages card counts each source
+  ("2 rate~ from SoM · 2 from old IS · 18 assumed*"). A missing doc is normal
+  and silent -- the assumed rate stands in.
+- Verified in the harness: the real board markup (probe headers + rows) parses
+  to the right 5 provinces across 2 kingdoms with Jabba at 100%, negatives and
+  k-suffixes decoded, totals row dropped; **re-verified with the columns
+  dragged into a different order** -- still correct. End-to-end with a mocked
+  Firestore doc: 4 enemy provinces flip to exact green rates, the two that had
+  been SoM-derived are correctly overridden (Deimos 200%~ -> 100%), KD wages
+  -730k -> -647k, net 259k -> 342k, Gunnlod's net goes from -5.6k to +26k on
+  its real 50% rate. Without the doc everything falls back unchanged. All 11
+  tabs render, no console errors.
+- **Not done**: the collector is manual (paste per board). `incomeGc`/`nettoGc`
+  are stored but not yet surfaced as a cross-check against our own income
+  model, which is the obvious next use for them.
+
+Also added a `mockup-alt` config (port 7789) to .claude/launch.json -- another
+session held 7788.
+
+## Recent work (2026-08-10, latest) -- Dragon contributions top list (NEW)
+
+Leader ask: track how much each player sends to slay a dragon and how much they
+fund, as a top list, also normalised per acre and per NW.
+
+**Where the data is NOT (checked, so nobody re-checks):**
+- **IS API has nothing per-province.** Endpoint list pulled from the live IS
+  bundle (`intel.utopia.site/static/js/main.*.js`): `Kingdom/v1/{OwnKingdom,
+  EnemyKingdom,KingdomOps,EnemyKingdomOps,Recent,Ticks,Search}`,
+  `News/v1/{kdnews,provinceNews}`, `Province/v1/SotArchive`, `WarPlan/v1/*`,
+  `Data/v1/*`. Province objects carry sot/survey/sos/som/ma/calcs only.
+  `kdEffects` has just `dragon` (type name) + `dragonDuration` (ticks left).
+  The News endpoints are PASTE-PARSERS (POST `parseString`); their dragon output
+  is kingdom-level counts (dragonsStarted/Completed/Killed/Received/
+  enemyDragonsStarted) with no province breakdown.
+- **Game page** `/wol/game/fund_dragon` (nav item "Dragons") has the donate form
+  and "N gold coins and M bushels are still needed", never a contributor list.
+- **Backend** parse.php had no dragon regexes at all.
+- The in-game bot's `dragon` command DOES print cumulative per-RULER totals
+  (`bassma# 386.0k |bridg# 173.5k |...  Total: 1.3m`) but rounds to 3 digits.
+
+**The source we use: the utopiabot DRAGON feed in Discord**, one message per
+event, exact amounts, gold and food separated, and slay events included:
+```
+DRAGON Ankylosaurus Rex [bridg#] donated 62,093 gold coins to fund dragon!
+DRAGON Indominus rex [indominus re#] donated 28,000 bushels to fund dragon!
+DRAGON Dilophosaurus [borwhack] sent 350 troops and weakened dragon by 3723 points!
+```
+Leading name is the FULL PROVINCE name (exact roster match); the bracketed one
+is the ruler, usually truncated by a character, stored for reference only.
+Leader's caveat: utopiabot does not see players acting from the mobile app, so
+every total is a floor — stated in the UI, not hidden.
+
+**Built (`src/dragon.js`, new; harness-verified, minified build done, NOT
+committed, NOT live-tested):**
+- `parseDragonDiscord()` — matches events across the whole paste, not line by
+  line (one Discord line can carry two events, and copy/paste wraps freely).
+  Each event gets a djb2 content hash id including an occurrence index, so
+  re-pasting an overlapping range is idempotent while two genuinely identical
+  donations in the same minute stay distinct.
+- `parseDragonBotList()` — the in-game bot's cumulative list, kept as a
+  CROSS-CHECK only: "Feed Gap" card = bot listSum − feed gc sum, i.e. what the
+  Discord feed missed. `parseDragonFundPage()` — dragon type, target KD, still
+  needed.
+- Storage: one doc per event in `dragon_events` keyed by hash (dedupe is the
+  doc id), aggregated client-side — same pattern as the ops leaderboard.
+  Cross-check docs go to `dragon_check`.
+- UI: LEADERBOARD tab now has a section switch (`S.lbSection` = 'ops'|'dragon').
+  Dragon board = metric switch (💰 gc / 🌾 food / 🗡 slay) × sort (Total / /Acre
+  / /kNW), medals, share%, troops + dmg/troop on the slay view, and a paste box.
+- **Per 1,000 NW, not per NW** — provinces run ~1M networth, so a raw ratio
+  collapses everyone into 0.0x and the column stops discriminating.
+- Land/NW: CURRENT roster values when the province is still there, else the
+  snapshot taken when the event was recorded (greyed) — a departed or chained
+  province keeps a sensible per-acre figure instead of dropping to "—".
+- **"Hasn't funded/slayed yet" chase list** (leader request) — roster minus
+  contributors, ranked by ACRES (a 3k-acre province sitting out costs more than
+  a 300-acre one), showing each province's Discord handle (`prov.discord`, a
+  username string — cannot @mention, no id) and what they DID do ("funded but
+  never slayed" is a different conversation from "nothing at all"). Renders even
+  with zero events, which is exactly the "nobody has slayed" case.
+  `dragonRemind()` posts it via the existing `sendDiscordEmbed` webhook,
+  4096-char embed limit respected.
+- Wired: state.js (lbSection/drgMetric/drgSort), build.js (dragon.js before
+  tabs/), leaderboard.js (branch + section switch on the ops view), app.js
+  (`__wpA.lbSection/drgMetric/drgSort/dragonSave/dragonRemind`).
+- Verified: node parse test on the real 28-line paste → 29 events (line 9
+  carries two), 20 gc / 4 food / 5 slay, re-parse ids identical, duplicate lines
+  stay distinct; bot list 18 rulers, listSum 1,312,197 vs its own rounded
+  "Total: 1.3m". Harness: empty state shows 23/23 chase list; injected events
+  render both metrics with correct /acre and /kNW, unmatched province greyed
+  with "—", chase list drops to 18/23; no console errors.
+
+**Backend ingest -- BUILT (api.php, NOT deployed, NOT live-tested).** Two new
+endpoints in `D:\Claude\utopia-intel-server\api.php`:
+- `?dragon_poll` -- pulls new messages from the DRAGON Discord channel
+  (`GET /channels/{id}/messages?after={lastId}`, `Authorization: Bot <token>`),
+  parses them with the same regex as the client, stores to
+  `/mnt/data/dragon/events.json` keyed `{messageId}_{n}` (exact dedupe, better
+  than the client's content hash), tracks `last_id` in `state.json`, paginates
+  up to 10 pages, prunes above 20k events. Reads embeds as well as content.
+- `?dragon` -- serves stored events newest-first (`&since=ISO`).
+- **Needs two Cloud Run env vars**: `DISCORD_BOT_TOKEN` (a BOT token -- a user
+  token is self-botting and gets accounts banned, which is what
+  `scripts/fetch_discord.js` does and why it must not be the model here) and
+  `DISCORD_DRAGON_CHANNEL`. Bot needs View Channel + Read Message History.
+- NOT lint-checked: no PHP or Docker on this machine. Verify with `php -l` or
+  the first deploy.
+
+**Client side of the ingest:** `dragonPull()` in dragon.js calls `?dragon_poll`
+then `?dragon` and mirrors new events into Firestore (one `dragon_events` query
+first, so only genuinely new ids are written). Firestore stays the single read
+model, so the board still works when the backend is down. Wired into
+`syncBackend()` (the existing 2-min timer, quiet mode, re-renders only when the
+dragon board is open) plus a manual "⟳ Pull from Discord" button.
+
+**Auto-reminders -- BUILT.** `discord.js` alert cycle gained a slay chase-up:
+while `kdEffects.dragon` is set, posts the "not slayed yet" list at most every
+`WP_DRAGON_REMIND_HOURS` (6, in dragon.js), throttle stored as
+`dragon_slay_remind_at` in `meta/{kdId}_alert_state`. The clock RESETS when the
+dragon changes, so a new dragon gets an immediate first call, and clears to 0
+when no dragon is present. `_drgSlayLaggards()` is shared by the button and the
+auto-post; it returns **null** on a failed Firestore query and the caller then
+stays silent -- never accuse the whole kingdom off a broken read. Fund-only and
+zero-value slay rows do not count as having slayed. Added
+`DISCORD.COLORS.orange`.
+
+Verified (node): laggard logic across 6 cases incl. query failure and
+case-insensitive names; `dragonPull` skips already-mirrored ids, resolves slots,
+derives tsLabel, and no-ops cleanly without an endpoint. Harness: all 11 tabs
+render, ops section unaffected, Pull button correctly disabled with no endpoint,
+no console errors.
+
+**Still open:** api.php not deployed and never run; the Discord bot does not
+exist yet. Probe scripts kept for reference: `scripts/dragon-probe.js`,
+`scripts/bot-net-probe.js`. Nothing in this session is committed.
+
+## Recent work (2026-08-10) -- Popspace "current pop" fix
 
 Leader report: the NW Graph tab's Popspace view never showed current pop live,
 even though the SoT data is on the IS and refreshes every tick.
