@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave Planner — Privacy Policy</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0c10;color:#c8d8e8;font-family:'Rajdhani',sans-serif;min-height:100vh;padding:40px 20px;line-height:1.7}
+.box{background:#0f1218;border:1px solid #1e2d3d;border-radius:6px;padding:40px;max-width:760px;margin:0 auto}
+h1{font-family:'Share Tech Mono',monospace;font-size:22px;color:#00d4ff;letter-spacing:3px;margin-bottom:8px}
+h2{font-family:'Share Tech Mono',monospace;font-size:15px;color:#00d4ff;letter-spacing:2px;margin:28px 0 10px;text-transform:uppercase}
+.sub{color:#4a6a88;font-size:14px;margin-bottom:8px}
+p{font-size:15px;color:#7a9ab8;margin-bottom:12px}
+b{color:#c8d8e8}
+ul{margin:0 0 12px 20px}
+li{font-size:15px;color:#7a9ab8;margin-bottom:6px}
+a{color:#00d4ff}
+code{font-family:'Share Tech Mono',monospace;font-size:13px;color:#9ab8d0;background:#151a22;
+    border:1px solid #1e2d3d;border-radius:3px;padding:1px 5px;overflow-wrap:anywhere}
+.divider{border:none;border-top:1px solid #1e2d3d;margin:28px 0}
+.note{background:#151a22;border:1px solid #1e2d3d;border-left:2px solid #00d4ff;border-radius:3px;padding:14px 16px;font-size:14px;color:#4a6a88;margin-top:24px}
+.foot{color:#3a5570;font-size:13px;margin-top:28px;text-align:center}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>PRIVACY POLICY</h1>
+  <div class="sub">Wave Planner &amp; its Discord bot &nbsp;·&nbsp; Last updated 10 August 2026</div>
+
+  <p>Wave Planner is a hobby tool for coordinating a single kingdom in the online game
+  <b>Utopia</b>. It has no commercial purpose, no advertising and no user accounts. This page
+  describes what the tool and its Discord bot store, where that data lives, and how to have it
+  removed.</p>
+
+  <h2>What the Discord bot reads</h2>
+  <p>The bot is invited to one Discord server and reads <b>one channel</b>, the one carrying the
+  game's automated <code>DRAGON</code> event messages. From that channel it keeps only the lines
+  matching that format, for example:</p>
+  <ul>
+    <li><code>DRAGON Ankylosaurus Rex [bridg#] donated 62,093 gold coins to fund dragon!</code></li>
+    <li><code>DRAGON Dilophosaurus [borwhack] sent 350 troops and weakened dragon by 3723 points!</code></li>
+  </ul>
+  <p>For each such line it stores the Discord message ID and timestamp, plus the values parsed out
+  of it: the in-game province name, the in-game ruler name, the type of contribution, and the
+  amount.</p>
+
+  <h2>What it does not read or store</h2>
+  <ul>
+    <li>Discord usernames, user IDs, display names or avatars</li>
+    <li>Direct messages, and messages in any channel other than the configured one</li>
+    <li>Messages that do not match the <code>DRAGON</code> event format — these are discarded, not stored</li>
+    <li>Attachments, images, voice, or presence information</li>
+  </ul>
+  <p>The names it does keep are <b>in-game identifiers</b> chosen by players for a game world, not
+  real names or contact details.</p>
+
+  <h2>What the planner itself stores</h2>
+  <p>Separately from the bot, the Wave Planner browser tool stores game data for the kingdom using
+  it: province statistics pulled from the official Utopia Intel Site, war plans written by the
+  kingdom's leader, notes, and the dragon contribution totals described above. This is game
+  information about provinces, not personal information about people. One optional field, a
+  player's Discord handle, may be entered by the kingdom's leader so orders can be addressed to the
+  right person.</p>
+
+  <h2>Why</h2>
+  <p>To rank which provinces have contributed to a dragon, and to remind those who have not yet
+  taken part. That is the whole purpose.</p>
+
+  <h2>Where the data lives</h2>
+  <ul>
+    <li><b>Google Cloud Run</b> and its attached storage, region <code>europe-west1</code> (Belgium) — raw ingested events</li>
+    <li><b>Google Cloud Firestore</b>, project <code>utopia-leaderboard</code> — the aggregated data the tool reads</li>
+  </ul>
+  <p>Both are operated by Google Cloud on the operator's behalf. Nothing is sent anywhere else.</p>
+
+  <h2>How long it is kept</h2>
+  <p>Event storage is capped and rolls over, keeping only the most recent records. Game data is
+  cleared between Utopia ages, which happens every few months. Anything may be deleted sooner on
+  request.</p>
+
+  <h2>Sharing</h2>
+  <p>Nothing is sold, rented, or shared with third parties. The data is visible to members of the
+  kingdom running the tool, which is the point of it. No analytics or tracking services are
+  embedded in the tool or this site.</p>
+
+  <h2>Removing your data</h2>
+  <p>Ask, and it will be deleted. Contact details are below. Because the stored records are keyed by
+  in-game province name, please say which province you mean. Removing the bot from the server stops
+  all collection immediately.</p>
+
+  <h2>Children</h2>
+  <p>The tool is not directed at children and stores no information that would identify a person's
+  age. Discord requires its users to be at least 13, or older where local law says so.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top changes with it. There is no mailing list to
+  notify; the current version is always the one on this page.</p>
+
+  <h2>Contact</h2>
+  <p>Joakim Lindius — <a href="mailto:lindius@gmail.com">lindius@gmail.com</a></p>
+
+  <div class="note">
+    Wave Planner is an unofficial, fan-made tool. It is not affiliated with, endorsed by, or
+    connected to Utopia, MUGA Gaming LLC, or Discord Inc.
+  </div>
+
+  <div class="foot"><a href="./">← Wave Planner</a> &nbsp;·&nbsp; <a href="terms.html">Terms of Service</a></div>
+</div>
+</body>
+</html>

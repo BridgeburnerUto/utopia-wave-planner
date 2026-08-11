@@ -8,6 +8,7 @@ const DISCORD = {
   ATTACKER_ROLE:  '1503879181291753593',
   COLORS: {
     red:    16711680,  // #FF0000
+    orange: 16755200,  // #FFAA00
     yellow: 16776960,  // #FFFF00
     green:  65280,     // #00FF00
   },
@@ -84,6 +85,48 @@ async function checkAndSendDiscordAlerts() {
         footer: { text: 'Wave Planner · War Planning Tool' },
       }],
     });
+  }
+
+  // ── 1b. Slay chase-up while a dragon sits on us ────────────────────────
+  // Every tick the dragon lives costs the whole kingdom, so provinces that have
+  // not sent a single troop get named. Throttled to WP_DRAGON_REMIND_HOURS so a
+  // long dragon does not turn into spam, and the clock resets when the dragon
+  // changes — a new dragon deserves an immediate first call.
+  if (ownDragon) {
+    const lastAt = ownDragon === (prev.dragon_own || '') ? (prev.dragon_slay_remind_at || 0) : 0;
+    const dueAt  = lastAt + WP_DRAGON_REMIND_HOURS * 3600e3;
+    next.dragon_slay_remind_at = lastAt;
+
+    if (Date.now() >= dueAt) {
+      const missing = await _drgSlayLaggards();
+      if (missing === null) {
+        // Could not read the event store — say nothing rather than accuse
+        // everyone of slacking off the back of a failed query.
+      } else if (missing.length) {
+        const lines = [];
+        let shown = 0;
+        for (const m of missing) {
+          const line = `· ${pnum(m.slot, m.name)}${m.discord ? ` (${m.discord})` : ''} — ${fK(m.land)} acres`;
+          if (lines.join('\n').length + line.length > 3700) break;
+          lines.push(line); shown++;
+        }
+        const more = missing.length - shown;
+        next.dragon_slay_remind_at = Date.now();
+        toSend.push({
+          _key: 'dragon_slay_remind_at',
+          content: '',
+          embeds: [{
+            title: `🗡 Not slayed yet — ${missing.length} province${missing.length > 1 ? 's' : ''}`,
+            description: lines.join('\n') + (more > 0 ? `\n_…and ${more} more._` : ''),
+            color: DISCORD.COLORS.orange,
+            footer: { text: `${ownDragon} is still on our lands — send troops from the Dragons page` },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      }
+    }
+  } else {
+    next.dragon_slay_remind_at = 0; // no dragon — clean slate for the next one
   }
 
   // ── Own food low — does not need enemy data ────────────────────────────

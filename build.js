@@ -28,6 +28,7 @@ const ORDER = [
   'ritual.js',
   'discord.js',
   'waveplan.js',
+  'dragon.js',
   'tabs/board.js',
   'tabs/player.js',
   'tabs/kingdom.js',

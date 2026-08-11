@@ -124,17 +124,22 @@ function _filterOps(ops) {
 
 async function renderLeaderboard() {
   const el = $id('__wpc_leaderboard');
+  // The tab holds two independent top lists: ops (Firestore `ops`, written by
+  // the tool itself) and dragon contributions (`dragon_events`, pasted from the
+  // utopiabot Discord feed — see dragon.js).
+  if (S.lbSection === 'dragon') return renderDragonBoard(el);
+
   el.innerHTML = loadingHTML('LOADING LEADERBOARD...');
   try {
     const kdId = S.own?.location.replace(':', '_');
     const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
     if (!allOps.length) {
-      el.innerHTML = `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
+      el.innerHTML = _drgSectionSwitch() + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
         // No op data yet — data accumulates automatically as players use the tool during war.
       </div>`;
       return;
     }
-    el.innerHTML = _buildLeaderboard(allOps);
+    el.innerHTML = _drgSectionSwitch() + _buildLeaderboard(allOps);
   } catch (e) {
     el.innerHTML = `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">
       Error loading leaderboard: ${esc(e.message)}
