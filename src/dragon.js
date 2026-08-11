@@ -339,26 +339,33 @@ async function dragonPull(quiet) {
     const have = new Set((await fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]))
       .map(d => d.evId).filter(Boolean));
 
+    const missing = events.filter(e => e.id && !have.has(e.id));
+
+    // Written in parallel batches: a backfill of a whole age is hundreds of
+    // events, and one-at-a-time would stall the sync timer for minutes.
+    const BATCH = 10;
     let added = 0;
-    for (const e of events) {
-      if (!e.id || have.has(e.id)) continue;
-      const prov = _drgProv(e.prov);
-      await fbWrite(`dragon_events/${kdId}_${e.id.replace(/[^A-Za-z0-9_]/g, '')}`, {
-        kdId,
-        evId:    e.id,
-        prov:    e.prov  || '',
-        ruler:   e.ruler || '',
-        slot:    prov ? prov.slot : -1,
-        type:    e.type   || 'gc',
-        amount:  e.amount || 0,
-        troops:  e.troops || 0,
-        tsLabel: (e.ts || '').slice(11, 16),
-        ts:      e.ts || '',
-        land:    prov ? (prov.land || 0) : 0,
-        nw:      prov ? (prov.networth || 0) : 0,
-        storedAt: Date.now(),
-      });
-      added++;
+    for (let i = 0; i < missing.length; i += BATCH) {
+      await Promise.all(missing.slice(i, i + BATCH).map(e => {
+        const prov = _drgProv(e.prov);
+        return fbWrite(`dragon_events/${kdId}_${e.id.replace(/[^A-Za-z0-9_]/g, '')}`, {
+          kdId,
+          evId:    e.id,
+          prov:    e.prov  || '',
+          ruler:   e.ruler || '',
+          slot:    prov ? prov.slot : -1,
+          type:    e.type   || 'gc',
+          amount:  e.amount || 0,
+          troops:  e.troops || 0,
+          tsLabel: (e.ts || '').slice(11, 16),
+          ts:      e.ts || '',
+          land:    prov ? (prov.land || 0) : 0,
+          nw:      prov ? (prov.networth || 0) : 0,
+          storedAt: Date.now(),
+        });
+      }));
+      added += Math.min(BATCH, missing.length - i);
+      if (!quiet) say(`Mirroring ${added}/${missing.length}…`);
     }
     say(added ? `Pulled ${added} new event${added === 1 ? '' : 's'}.` : 'Up to date.', '#00ff88');
     return { ok: true, added, total: events.length };

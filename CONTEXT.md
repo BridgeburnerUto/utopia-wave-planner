@@ -94,6 +94,34 @@ found bugs 3 and 4 -- keep them.
 message id, so an event arriving BOTH ways is stored twice. The paste box is now
 only for history the backend cannot reach; warning added to its hint text.
 
+### Backfill (added same session, deployed rev 00068) -- 765 events, whole age
+Leader asked whether the war's whole history could be pasted. It should not be:
+pasted events double-count against backend-pulled ones, a Discord copy carries
+only HH:MM with no date (so identical events on different days collapse into
+one), and the client wrote to Firestore one event at a time.
+
+`?dragon_poll=1&backfill=1&since=YYYY-MM-DD[&days=N][&pages=N]` walks BACKWARD
+through the channel with Discord's `before` cursor, resuming from `oldest_id` in
+state.json. **`since` is REQUIRED** -- the channel spans several ages and an
+unbounded walk would mix old dragons into this age's totals. The natural cutoff
+is the plan's `ageStartDate` (Firestore `warplan/{kdId}` -> json.ageStartDate,
+2026-07-26 this age). Backfill is exempt from the 60s forward-poll throttle.
+
+Three bugs found while running it, all fixed:
+- **429 discarded everything.** The error path exited before writing, throwing
+  away 664 already-parsed events. Error paths now save progress and report
+  `progress_saved`, so a rate limit costs a retry rather than the work.
+- **No rate-limit handling.** `discordFetchMessages` now retries on 429 honouring
+  `retry_after` (max 5 tries), with 0.3s between pages. HTTP is split out into
+  `discordRequest()`.
+- **The throttle blocked backfill**, since it is checked before the branch.
+
+Result: 765 events, 2026-07-28 -> 2026-08-11 (nothing before the cutoff), 8.09M
+gc, 989k bushels, 615,845 slay damage over 348 slay events, 24 provinces, in one
+pass. Client `dragonPull()` now mirrors into Firestore in **parallel batches of
+10** with progress in the status line -- 664 sequential writes would have stalled
+the sync timer for minutes.
+
 **Diagnostics that paid off:** `gcloud storage cat gs://utopia-intel-bot-data/dragon/state.json`
 reads the poller's cursor directly; a Firestore `:runQuery` via curl confirms
 what the board will actually see.
