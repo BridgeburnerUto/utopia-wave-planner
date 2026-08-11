@@ -76,6 +76,9 @@ const S = {
   lbSection: 'ops',    // Leaderboard tab section: 'ops' | 'dragon'
   drgMetric: 'gc',     // Dragon board metric: 'gc' (fund gold) | 'food' | 'slay' (damage)
   drgSort:   'total',  // Dragon board ranking: 'total' | 'acre' | 'nw'
+  drgRange:  'all',    // Dragon board time filter: 'all' | 'c<N>' (campaign index) | 'custom'
+  drgFrom:   '',       // custom range start, YYYY-MM-DD ('' = open-ended)
+  drgTo:     '',       // custom range end,   YYYY-MM-DD ('' = open-ended)
 
   oldisEcon: {},           // exact wage rates from the OLD IS board, {[loc]: {provs: {[slot]: {wagePct, ...}}, updatedAt}} — meta/oldis_econ_{loc}, written by scripts/oldis-collector.js
 

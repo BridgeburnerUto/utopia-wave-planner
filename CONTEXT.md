@@ -122,6 +122,24 @@ pass. Client `dragonPull()` now mirrors into Firestore in **parallel batches of
 10** with progress in the status line -- 664 sequential writes would have stalled
 the sync timer for minutes.
 
+### Per-dragon + custom date filter (same session)
+With a whole age in the store, the board was totalling several dragons together.
+New range bar: **Whole age | one button per dragon | Custom (from/to dates)**.
+- **Campaigns are INFERRED from gaps in activity** (`WP_DRAGON_CAMPAIGN_GAP_H =
+  36`), because the bot never names the project -- there is no id to group on.
+  A dragon lives at most 48 ticks and funding runs a day or two ahead, so a
+  36h+ quiet stretch means the next event is a different dragon. Verified on the
+  real 765: exactly 2 campaigns (Aug 7-11 = 489 events / 5.79M gc, Jul 28-30 =
+  276 / 2.30M gc), and the counts sum back to 765 with nothing dropped.
+  Raise the constant if two campaigns ever get split, lower it if two merge.
+- `S.drgRange` = 'all' | 'c<N>' | 'custom', `S.drgFrom`/`S.drgTo` (YYYY-MM-DD,
+  blank = open-ended). `_drgTs()` reads `ts` and falls back to `storedAt` so
+  pasted events (which have no date, only HH:MM) still sort somewhere sane.
+- **Bug this exposed and fixed:** `_drgSlayLaggards()` counted ANY slay event
+  ever, so after the backfill everyone who slayed in July counted as done for a
+  dragon arriving today -- they would have silently dropped off the chase list
+  and out of the auto-reminder. It now scopes to the LATEST campaign only.
+
 **Diagnostics that paid off:** `gcloud storage cat gs://utopia-intel-bot-data/dragon/state.json`
 reads the poller's cursor directly; a Firestore `:runQuery` via curl confirms
 what the board will actually see.

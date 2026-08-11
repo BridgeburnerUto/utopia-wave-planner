@@ -269,6 +269,14 @@ async function dragonSave() {
 const WP_DRAGON_REMIND_HOURS = 6;
 
 /**
+ * Quiet stretch that separates one dragon from the next, in hours.
+ * A dragon lives at most 48 ticks and funding runs a day or two ahead of it, so
+ * a gap this long means the next event belongs to a different dragon. Raise it
+ * if two campaigns ever get split apart; lower it if two get merged.
+ */
+const WP_DRAGON_CAMPAIGN_GAP_H = 36;
+
+/**
  * Provinces that have not slayed at all, biggest first.
  * Returns null when the event store cannot be read — the caller must stay
  * quiet rather than accuse the whole kingdom off a failed query.
@@ -286,8 +294,17 @@ async function _drgSlayLaggards() {
     return null;
   }
 
+  // Only the CURRENT dragon counts. The store holds the whole age, and someone
+  // who slayed a dragon three weeks ago has done nothing about the one on us
+  // now — counting them as done would silently drop them from the chase list.
+  const camps  = _drgCampaigns(events);
+  const latest = camps[0];
+  const recent = latest
+    ? events.filter(e => { const t = _drgTs(e); return t >= latest.from - 60e3 && t <= latest.to + 60e3; })
+    : events;
+
   const slayed = new Set();
-  events.forEach(ev => {
+  recent.forEach(ev => {
     if (ev.type === 'slay' && (ev.amount > 0 || ev.troops > 0) && ev.prov) {
       slayed.add(String(ev.prov).toLowerCase());
     }
@@ -381,11 +398,75 @@ async function dragonPullAndRender() {
   if (res.added) renderLeaderboard();
 }
 
+// ── Time filtering: per dragon, or an explicit range ───────────────────────
+// The store holds the whole age, and a leader usually wants one dragon at a
+// time. Events are not tagged with a project id — the bot never says which
+// dragon a line belongs to — so campaigns are inferred from gaps in activity.
+// A dragon lives at most 48 ticks, and funding runs for a day or two before
+// that, so a quiet stretch this long means the next event is a new dragon.
+
+/** Event timestamp in ms. Backend events carry ts; pasted ones only storedAt. */
+function _drgTs(ev) {
+  const t = ev.ts ? Date.parse(ev.ts) : NaN;
+  return isFinite(t) ? t : (ev.storedAt || 0);
+}
+
+/**
+ * Split events into campaigns, newest first.
+ * Returns [{from, to, label, n}] — the label is what the picker shows.
+ */
+function _drgCampaigns(events) {
+  const ts = events.map(_drgTs).filter(Boolean).sort((a, b) => a - b);
+  if (!ts.length) return [];
+
+  const gapMs = WP_DRAGON_CAMPAIGN_GAP_H * 3600e3;
+  const runs  = [];
+  let start = ts[0], prev = ts[0], n = 1;
+  for (let i = 1; i < ts.length; i++) {
+    if (ts[i] - prev > gapMs) { runs.push({ from: start, to: prev, n }); start = ts[i]; n = 0; }
+    prev = ts[i]; n++;
+  }
+  runs.push({ from: start, to: prev, n });
+
+  const fmt = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return runs.reverse().map(r => ({
+    ...r,
+    label: fmt(r.from) === fmt(r.to) ? fmt(r.from) : `${fmt(r.from)} – ${fmt(r.to)}`,
+  }));
+}
+
+/** Apply the active range filter to the event list */
+function _drgInRange(events, camps) {
+  const r = S.drgRange || 'all';
+  if (r === 'all') return events;
+
+  if (r === 'custom') {
+    const from = S.drgFrom ? Date.parse(S.drgFrom + 'T00:00:00') : 0;
+    const to   = S.drgTo   ? Date.parse(S.drgTo   + 'T23:59:59') : Infinity;
+    return events.filter(e => { const t = _drgTs(e); return t >= from && t <= to; });
+  }
+
+  const c = camps[parseInt(String(r).replace('c', ''), 10)];
+  if (!c) return events;
+  // Pad the bounds by a minute so the first and last event are never clipped.
+  return events.filter(e => { const t = _drgTs(e); return t >= c.from - 60e3 && t <= c.to + 60e3; });
+}
+
 // ── View state ─────────────────────────────────────────────────────────────
 
 function lbSection(v) { S.lbSection = v; renderLeaderboard(); }
 function drgMetric(v) { S.drgMetric = v; renderLeaderboard(); }
 function drgSort(v)   { S.drgSort   = v; renderLeaderboard(); }
+function drgRange(v)  { S.drgRange  = v; renderLeaderboard(); }
+
+/** Read both date inputs, switch to custom mode, re-render */
+function drgDates() {
+  const f = $id('__wpdrg_from'), t = $id('__wpdrg_to');
+  if (f) S.drgFrom = f.value || '';
+  if (t) S.drgTo   = t.value || '';
+  S.drgRange = 'custom';
+  renderLeaderboard();
+}
 
 // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -413,6 +494,46 @@ async function renderDragonBoard(el) {
   el.innerHTML = _drgSectionSwitch() + _buildDragonBoard(events, checks) + _drgPasteBox();
 }
 
+/** Range picker: whole age, one dragon, or an explicit from/to */
+function _drgRangeBar(camps, totalN, shownN) {
+  const r = S.drgRange || 'all';
+  const btn = (val, label, title) =>
+    `<button class="wb${r === val ? ' g' : ''}" onclick="__wpA.drgRange('${val}')"
+      style="font-size:17px;padding:3px 9px"${title ? ` title="${title}"` : ''}>${label}</button>`;
+
+  const campBtns = camps.map((c, i) =>
+    btn('c' + i, `🐉 ${esc(c.label)}`, `${c.n} events`)).join('');
+
+  const dateInputs = r === 'custom' ? `
+    <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+      <span style="font-size:17px;color:#7a9090;text-transform:uppercase;letter-spacing:1px">From</span>
+      <input type="date" id="__wpdrg_from" value="${esc(S.drgFrom || '')}" onchange="__wpA.drgDates()"
+        style="background:#1a2020;border:1px solid #617070;border-radius:3px;color:#b8c8c8;font-family:monospace;font-size:17px;padding:2px 6px">
+      <span style="font-size:17px;color:#7a9090;text-transform:uppercase;letter-spacing:1px">To</span>
+      <input type="date" id="__wpdrg_to" value="${esc(S.drgTo || '')}" onchange="__wpA.drgDates()"
+        style="background:#1a2020;border:1px solid #617070;border-radius:3px;color:#b8c8c8;font-family:monospace;font-size:17px;padding:2px 6px">
+      <span style="font-family:monospace;font-size:15px;color:#617070">// blank = open-ended</span>
+    </div>` : '';
+
+  const counter = shownN < totalN
+    ? `<span style="font-family:monospace;font-size:15px;color:#7a9090">${shownN} of ${totalN} events</span>`
+    : `<span style="font-family:monospace;font-size:15px;color:#617070">${totalN} events</span>`;
+
+  return `
+    <div style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        ${btn('all', 'Whole age')}
+        ${campBtns}
+        ${btn('custom', '📅 Custom')}
+        ${counter}
+      </div>
+      ${dateInputs}
+      ${camps.length > 1 ? `<div style="font-family:monospace;font-size:15px;color:#617070;margin-top:4px">
+        // dragons are inferred from gaps in activity (${WP_DRAGON_CAMPAIGN_GAP_H}h+), since the bot never names the project
+      </div>` : ''}
+    </div>`;
+}
+
 function _drgSectionSwitch() {
   const on = S.lbSection === 'dragon';
   return `<div style="display:flex;gap:6px;margin-bottom:14px">
@@ -421,9 +542,14 @@ function _drgSectionSwitch() {
   </div>`;
 }
 
-function _buildDragonBoard(events, checks) {
+function _buildDragonBoard(allEvents, checks) {
   const metric = S.drgMetric || 'gc';
   const M      = DRG_METRICS[metric];
+
+  // Campaigns are derived from the FULL set, so the picker does not change
+  // shape as you move between dragons.
+  const camps  = _drgCampaigns(allEvents);
+  const events = _drgInRange(allEvents, camps);
 
   const metricSwitch = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -439,11 +565,16 @@ function _buildDragonBoard(events, checks) {
       </div>
     </div>`;
 
+  const rangeBar = _drgRangeBar(camps, allEvents.length, events.length);
+
   if (!events.length) {
     // Still show the chase list — "nobody has slayed at all" is exactly the
     // case the leader needs to see, and it needs no events to compute.
-    return metricSwitch + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
-      // No dragon events stored yet — paste the utopiabot DRAGON messages from Discord below.
+    const msg = allEvents.length
+      ? `// No dragon events in the selected range (${allEvents.length} stored in total).`
+      : '// No dragon events stored yet — the backend pulls them from Discord automatically.';
+    return metricSwitch + rangeBar + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
+      ${msg}
     </div>` + _drgNotYetSection({}, metric);
   }
 
@@ -483,8 +614,8 @@ function _buildDragonBoard(events, checks) {
   }).filter(r => r.val > 0);
 
   if (!rows.length) {
-    return metricSwitch + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
-      // ${events.length} dragon events stored, but none of type "${esc(M.col)}".
+    return metricSwitch + rangeBar + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
+      // ${events.length} dragon events in range, but none of type "${esc(M.col)}".
     </div>` + _drgNotYetSection(byProv, metric);
   }
 
@@ -574,7 +705,7 @@ function _buildDragonBoard(events, checks) {
       // utopiabot does not report players acting from the mobile app — treat every total as a floor.
     </div>`;
 
-  return metricSwitch + cards + table + _drgNotYetSection(byProv, metric);
+  return metricSwitch + rangeBar + cards + table + _drgNotYetSection(byProv, metric);
 }
 
 // ── "Hasn't contributed yet" chase list ────────────────────────────────────

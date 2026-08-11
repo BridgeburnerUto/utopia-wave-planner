@@ -454,6 +454,8 @@ window.__wpA = {
   lbSection,
   drgMetric,
   drgSort,
+  drgRange,
+  drgDates,
   dragonSave,
   dragonRemind,
   dragonPullAndRender,
