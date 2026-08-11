@@ -54,7 +54,15 @@ function _drgHash(s) {
  *   type: 'gc' | 'food' | 'slay'
  */
 function parseDragonDiscord(text) {
-  const raw = String(text || '');
+  // Raw Discord text is not what the client renders. utopiabot actually sends
+  // ":dragon_face: __DRAGON__ Spinosaurus [royc#] donated __5,000 gold coins__ ..."
+  // and those emphasis markers sit exactly where the pattern expects spaces, so
+  // strip Discord markup first. Newlines are preserved — the timestamp headers
+  // are matched line by line.
+  const raw = String(text || '')
+    .replace(/:[a-z0-9_+\-]+:/gi, ' ')   // :emoji_shortcodes:
+    .replace(/[*_`~]+/g, '')             // bold / italic / underline / strike / code
+    .replace(/[ \t]+/g, ' ');
   if (!raw.trim()) return { ok: false, error: 'Nothing pasted.' };
 
   // Index every "— <time>" header so each event can inherit the latest one.
@@ -706,6 +714,8 @@ function _drgPasteBox() {
     <div style="font-family:monospace;font-size:17px;color:#7a9090;margin-bottom:8px">
       // Copy the utopiabot <b style="color:#ffd400">DRAGON</b> messages from Discord and paste them here —
       // re-pasting an overlapping range is safe, events de-duplicate on content.
+      // <b style="color:#ffaa00">Only for history the backend cannot reach</b>: pasted events are keyed by
+      // content, backend-pulled ones by Discord message id, so an event that arrives both ways counts twice.
       // Optional extras in the same paste: the in-game bot's <b style="color:#ffd400">dragon</b> list
       // (cumulative totals, used as a cross-check) and the fund_dragon page text (dragon type,
       // target kingdom, what is still needed).

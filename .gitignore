@@ -16,3 +16,9 @@ dist/app.js.bak
 ops.txt
 results.txt
 results.csv
+
+# Secrets — this repo is published to GitHub Pages, so anything here goes public
+bot token discord.txt
+*token*.txt
+*secret*
+.env

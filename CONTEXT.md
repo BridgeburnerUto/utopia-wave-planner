@@ -51,6 +51,56 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
 
+## Recent work (2026-08-11, latest) -- Dragon ingest LIVE (deployed, working)
+
+The Discord->backend->Firestore->board chain is now running in production.
+101 real events from #dragon are in Firestore, slots and land/NW resolved.
+
+**Deployed:** Cloud Run `utopia-intel` rev 00065 (project **utopia-intel-bot**,
+NOT utopia-leaderboard -- that is Firestore only). Env vars now:
+`ANTHROPIC_API_KEY`, `WP_API_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_DRAGON_CHANNEL`
+(= 1397235793206050903, the #dragon channel). Bot is "War planner"
+(id 1536403597020110889) in guild 1397235789980631164.
+
+**Four things went wrong; all four are worth remembering:**
+1. **`--update-env-vars` placeholders got replaced wholesale**, creating one env
+   var whose NAME was the bot token. That token was also pasted into chat, so it
+   was rotated. Cleaned up by finding the unexpected name programmatically and
+   passing it to `--remove-env-vars` (never printed).
+2. **A 403 from Discord that Administrator could not fix** was not permissions at
+   all -- it was **Cloudflare rejecting PowerShell's default User-Agent**. Any
+   direct Discord API call from a script MUST send a real
+   `User-Agent: DiscordBot (<url>, <version>)`. The backend already did, which is
+   why it got 200 while local probes got 403.
+3. **Message Content Intent was off.** Messages came back with `content`, embeds
+   and attachments blanked -- `scanned: 100, added: 0` with no samples. It is a
+   privileged intent and gates REST reads too, not just the gateway. Portal ->
+   Bot -> Privileged Gateway Intents -> Message Content.
+4. **Raw Discord text is not the rendered text.** utopiabot actually sends
+   `:dragon_face: __DRAGON__ Spinosaurus [royc#] donated __5,000 gold coins__ to
+   fund dragon!` -- the emphasis markers sit exactly where the pattern expected
+   spaces. Both parsers now strip Discord markup first (`dragonCleanText()` in
+   api.php, inline in `parseDragonDiscord()`); the client keeps newlines because
+   its timestamp headers are matched per line. After the fix: **101 events from
+   100 messages** (one message carried two, as expected).
+
+**Also added to api.php this session:** `&reset=1` (forget the cursor, re-read
+the newest 100 -- safe to repeat, ids are message-derived), `&force=1` (bypass
+the 60s throttle), `discord_code` in every poll response, and up to 3 `samples`
+whenever messages were scanned but nothing matched. Those samples are what
+found bugs 3 and 4 -- keep them.
+
+**Known gap:** the paste box keys events by content hash, the backend by Discord
+message id, so an event arriving BOTH ways is stored twice. The paste box is now
+only for history the backend cannot reach; warning added to its hint text.
+
+**Diagnostics that paid off:** `gcloud storage cat gs://utopia-intel-bot-data/dragon/state.json`
+reads the poller's cursor directly; a Firestore `:runQuery` via curl confirms
+what the board will actually see.
+
+Uncommitted at session end: `.gitignore` (secret patterns -- this repo publishes
+to GitHub Pages), `src/dragon.js` (markdown fix), `dist/app.js` (rebuild).
+
 ## Recent work (2026-08-11) -- Economy wage rate: placeholder bug + SoM recovery
 
 Leader report: on a live IS every enemy province showed **Wage% 0%** and
