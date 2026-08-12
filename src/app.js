@@ -456,6 +456,8 @@ window.__wpA = {
   drgSort,
   drgRange,
   drgDates,
+  drgRefresh,
+  lbRefresh,
   dragonSave,
   dragonRemind,
   dragonPullAndRender,
@@ -492,7 +494,10 @@ window.__wpA = {
   closeOps,
   togOp,
   setNote(slot, v) { if (slot != null) _pp(slot).notes = v; },
-  nwView(v) { S.nwView = v; renderNwGraph(); },
+  // Switching between Total NW / War NW / Popspace re-draws the same rows —
+  // it must not re-read the history (see the quota rules in firebase.js).
+  nwView(v) { S.nwView = v; renderNwGraph({ cached: true }); },
+  nwRefresh,
   econView(v) { S.econView = v; renderEconomy(); },
 
   /** Read current location inputs + reload graph */
@@ -831,7 +836,10 @@ window.__wpA = {
     // sync status, and nothing re-renders unless the dragon board is open.
     try {
       const drg = await dragonPull(true);
-      if (drg?.added && S.tab === 'leaderboard' && S.lbSection === 'dragon') renderLeaderboard();
+      // Re-render on anything new in the list, not only on what was mirrored —
+      // and from the cache the pull just topped up, so the 2-minute timer never
+      // costs a Firestore read.
+      if ((drg?.fresh || drg?.added) && S.tab === 'leaderboard' && S.lbSection === 'dragon') renderLeaderboard({ cached: true });
     } catch(e) { console.warn('[WavePlanner] dragon pull error:', e.message); }
     _refreshBackendStatus();
   },

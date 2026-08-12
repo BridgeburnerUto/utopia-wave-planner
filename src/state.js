@@ -81,8 +81,24 @@ const S = {
   drgTo:     '',       // custom range end,   YYYY-MM-DD ('' = open-ended)
   drgHave:   null,     // Set of event ids known to be mirrored into Firestore — session cache so the 2-min sync does not re-read the whole collection (quota)
   drgHaveKd: '',       // kingdom the drgHave cache belongs to
+  drgHaveComplete: false, // true when drgHave was built from a COMPLETE read of the collection (so it can be trusted to decide what needs mirroring)
+  drgMirrorMark: null, // {minTs, maxTs, n} from meta/{kdId}_dragon_mirror — what has already been mirrored, so a fresh session costs 1 read instead of the whole collection
+  drgMirrorKd:   '',   // kingdom the mirror mark belongs to
+  drgMarkWroteAt: 0,   // last time the mark DOC was persisted — throttled, the in-memory window advances every pull
+  _nwCleanedAt:  0,    // last nw_snapshots cleanup sweep (runs from init; without this it re-read the collection every load)
 
   fbLastError: '',         // last Firestore read failure, e.g. quota exhausted — surfaced by the tabs that read it
+
+  // ── Firestore quota accounting (firebase.js) ───────────────────────────────
+  // Free tier is a DAILY bucket (50k reads / 20k writes). Nothing warned when
+  // reads ran hot before, so a runaway took a day to spot — these counters feed
+  // the header meter and name the heaviest source in its tooltip.
+  fbReads:   0,            // documents read this session
+  fbWrites:  0,            // documents written this session
+  fbReadLog: {},           // source → documents read, for the meter tooltip
+  fbReadWarned: false,     // console warning already emitted for this session
+  fbMissingIndex: '',      // console URL from the last "needs a composite index" 400
+  fbNoIndex: {},           // 'collection|orderBy' → true once the bounded form is known to lack an index
 
   oldisEcon: {},           // exact wage rates from the OLD IS board, {[loc]: {provs: {[slot]: {wagePct, ...}}, updatedAt}} — meta/oldis_econ_{loc}, written by scripts/oldis-collector.js
 

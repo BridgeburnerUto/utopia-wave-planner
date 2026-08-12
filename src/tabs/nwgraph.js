@@ -102,12 +102,56 @@ async function snapshotNW() {
   });
 }
 
+// ── Reads (all cached — see the quota rules in firebase.js) ─────────────────
+// Both of this tab's collections used to be re-read in full on every open and
+// on every lookback change. They now go through session caches; only a wider
+// window or an explicit refresh spends quota.
+
+/**
+ * Own war-tick snapshots, read at most once per session.
+ * Returns rows, or null when the read failed (never [] for a failure).
+ */
+async function _nwSnapshots(opts = {}) {
+  const kdId = S.own?.location?.replace(':', '_') || '';
+  if (!kdId) return [];
+  if (opts.force) fbCacheDrop('nw_snapshots');
+  const hit = fbCacheGet('nw_snapshots', kdId, opts.cached ? null : FB_QUOTA.CACHE_TTL_MS);
+  if (hit) return hit.rows;
+  const docs = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
+  if (!docs) return null;
+  return fbCachePut('nw_snapshots', kdId, docs).rows;
+}
+
+/**
+ * World NW history for one location.
+ * Cached per location together with the window it covers: a NARROWER lookback
+ * is served by slicing what is already loaded, and only widening the window
+ * costs a read. Freshness comes from the cache TTL, which is far shorter than
+ * the 3-hour sampling interval, so nothing visible is ever missed.
+ */
+async function _nwHistory(loc, fromTs, toTs, opts = {}) {
+  const key = 'nwhist:' + loc;
+  if (opts.force) fbCacheDrop(key);
+  const hit = fbCacheGet(key, loc, FB_QUOTA.CACHE_TTL_MS);
+  if (hit && hit.from <= fromTs) {
+    return hit.rows.filter(r => r.storedAt >= fromTs && r.storedAt <= toTs);
+  }
+  const rows = await fbQueryNWHistory(loc, fromTs, toTs);
+  if (!rows) return null;
+  fbCachePut(key, loc, rows, { from: fromTs, to: toTs });
+  return rows;
+}
+
 async function cleanOldSnapshots() {
   const kdId = S.own?.location.replace(':', '_');
   if (!kdId) return;
+  // Runs from init on every load; without this it would re-read the whole
+  // collection each time just to discover there is nothing to delete.
+  if (S._nwCleanedAt && Date.now() - S._nwCleanedAt < 12 * 3600e3) return;
+  S._nwCleanedAt = Date.now();
   try {
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const docs   = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
+    const docs   = await _nwSnapshots({ cached: true });
     if (!docs?.length) return;
     let deleted = 0;
     for (const doc of docs) {
@@ -254,6 +298,8 @@ function _buildNwControls() {
         <button class="wb${view === 'total' ? ' g' : ''}" style="font-size:17px;padding:3px 9px" onclick="__wpA.nwView('total')">Total NW</button>
         <button class="wb${view === 'war' ? ' g' : ''}" style="font-size:17px;padding:3px 9px" onclick="__wpA.nwView('war')">War NW</button>
         <button class="wb${view === 'pop' ? ' g' : ''}" style="font-size:17px;padding:3px 9px" onclick="__wpA.nwView('pop')">Popspace</button>
+        <button class="wb" style="font-size:15px;padding:2px 8px;margin-left:6px" onclick="__wpA.nwRefresh()"
+          title="Re-read the NW history from Firestore. Switching view re-uses what is already loaded, so it costs no quota.">⟳ Refresh</button>
         ${viewHints[view] ? `<span style="font-size:17px;color:#7a9090;margin-left:6px">${viewHints[view]}</span>` : ''}
       </div>
     </div>`;
@@ -261,7 +307,11 @@ function _buildNwControls() {
 
 // ── Render entry point ────────────────────────────────────────────────────────
 
-async function renderNwGraph() {
+/**
+ * opts.cached — re-render from what is loaded (view switches: Total/War/Popspace)
+ * opts.force  — re-read (the ⟳ Refresh button)
+ */
+async function renderNwGraph(opts = {}) {
   const el = $id('__wpc_nwgraph');
   if (!el) return;
 
@@ -273,10 +323,18 @@ async function renderNwGraph() {
   // Render controls immediately, then async-fill the graph area
   el.innerHTML = _buildNwControls() + `<div id="__wpnwgraph_area">${loadingHTML('LOADING NW DATA...')}</div>`;
 
-  await _loadAndRenderNwGraph();
+  await _loadAndRenderNwGraph(opts);
 }
 
-async function _loadAndRenderNwGraph() {
+/** Explicit re-read of the NW history — the only control here that spends quota */
+function nwRefresh() {
+  fbCacheDrop('nwhist:' + S.nwLocA);
+  fbCacheDrop('nwhist:' + S.nwLocB);
+  fbCacheDrop('nw_snapshots');
+  renderNwGraph({ force: true });
+}
+
+async function _loadAndRenderNwGraph(opts = {}) {
   const area = $id('__wpnwgraph_area');
   if (!area) return;
 
@@ -313,8 +371,8 @@ async function _loadAndRenderNwGraph() {
 
   try {
     const [resA, resB] = await Promise.all([
-      fbQueryNWHistory(S.nwLocA, fromTs, toTs),
-      fbQueryNWHistory(S.nwLocB, fromTs, toTs),
+      _nwHistory(S.nwLocA, fromTs, toTs, opts),
+      _nwHistory(S.nwLocB, fromTs, toTs, opts),
     ]);
 
     // null means the READ failed (quota, network, missing index) — not that the
@@ -337,9 +395,8 @@ async function _loadAndRenderNwGraph() {
     if (S.nwView === 'pop' && S.own?.location
         && ([S.nwLocA, S.nwLocB].includes(S.own.location)
             || (S.eLoc && [S.nwLocA, S.nwLocB].includes(S.eLoc)))) {
-      const kdId = S.own.location.replace(':', '_');
       try {
-        const all = await fbQuery('nw_snapshots', [{ field: 'kdId', value: kdId }]);
+        const all = await _nwSnapshots(opts);
         snaps = (all || [])
           .filter(d => d.ownCap != null && d.storedAt >= fromTs && d.storedAt <= toTs)
           .sort((a, b) => a.storedAt - b.storedAt);

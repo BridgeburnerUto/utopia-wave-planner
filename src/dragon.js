@@ -182,6 +182,21 @@ function parseDragonFundPage(text) {
 // Events are individual docs in `dragon_events`, keyed by their content hash,
 // so re-pasting an overlapping range is idempotent — same event, same doc id.
 // This mirrors how the ops leaderboard stores and aggregates client-side.
+//
+// QUOTA — read this before adding another fbQuery to this file.
+// `dragon_events` holds a whole age (765+ docs and growing), and Firestore bills
+// one read PER DOCUMENT. Reading it on every render cost ~765 reads per button
+// click on a 50k/DAY free tier. There are now exactly two rules:
+//   1. The collection is read AT MOST ONCE per session, through _drgLoadEvents.
+//      Everything else — metric, sort, range, section switches — re-aggregates
+//      the cached rows and costs nothing.
+//   2. The list is kept CURRENT from the backend `?dragon` feed, which costs no
+//      quota at all and is already being fetched by the 2-minute sync timer.
+// Firestore stays the superset (it holds pasted history the backend never saw),
+// so it is the thing we read once; the backend is what keeps it fresh.
+
+const DRG_CACHE  = 'dragon_events';
+const DRG_CHECKS = 'dragon_check';
 
 function _drgKdId() { return (S.own?.location || '').replace(':', '_'); }
 
@@ -189,6 +204,120 @@ function _drgKdId() { return (S.own?.location || '').replace(':', '_'); }
 function _drgProv(name) {
   const key = String(name || '').toLowerCase().trim();
   return (S.own?.provinces || []).find(p => (p.name || '').toLowerCase() === key) || null;
+}
+
+/**
+ * One event in the shape the board consumes, from either source.
+ * Firestore docs carry slot/land/nw snapshotted at mirror time; raw backend
+ * events do not, so they are resolved against the current roster instead —
+ * which is what the board prefers for live provinces anyway.
+ */
+function _drgEventRow(e) {
+  const prov = (e.slot == null || e.slot < 0) ? _drgProv(e.prov) : null;
+  return {
+    // Every row needs a stable identity so the two sources can be merged.
+    // Pasted docs predate `evId`, so fall back to their content.
+    id:       e.evId || e.id || `c_${_drgHash([e.prov, e.type, e.amount, e.troops, e.tsLabel, e.storedAt].join('|'))}`,
+    prov:     e.prov  || '',
+    ruler:    e.ruler || '',
+    slot:     (e.slot != null && e.slot >= 0) ? e.slot : (prov ? prov.slot : -1),
+    type:     e.type   || 'gc',
+    amount:   e.amount || 0,
+    troops:   e.troops || 0,
+    ts:       e.ts || '',
+    tsLabel:  e.tsLabel || (e.ts || '').slice(11, 16),
+    land:     e.land || (prov ? prov.land     || 0 : 0),
+    nw:       e.nw   || (prov ? prov.networth || 0 : 0),
+    storedAt: e.storedAt || 0,
+  };
+}
+
+/**
+ * Lower bound for the event query: the start of this age.
+ * `dragon_events` is never pruned, so without a bound the read gets more
+ * expensive every age until it silently hits the query limit and starts
+ * returning an arbitrary slice. `storedAt` is used rather than `ts` because
+ * every doc has it — pasted events carry no `ts`, and a range filter on a field
+ * a document does not have EXCLUDES that document.
+ * Returns 0 when the age start is unknown, which means "no bound".
+ */
+function _drgAgeFloor() {
+  return S.ageStartDate > 0 ? S.ageStartDate : 0;
+}
+
+/** Fetch the backend's stored dragon events. Costs no Firestore quota. */
+async function _drgFetchBackend() {
+  if (!S.apiEndpoint) return null;
+  const base = S.apiEndpoint.replace(/\/$/, '') + '/api.php';
+  const hdrs = S.apiKey ? { 'X-WP-Key': S.apiKey } : {};
+  const r = await fetch(`${base}?dragon=1`, { headers: hdrs }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const data = await r.json().catch(() => null);
+  return Array.isArray(data?.events) ? data.events : null;
+}
+
+/**
+ * The board's event list — the ONLY place `dragon_events` is read.
+ *
+ * opts.cached — reuse whatever is cached regardless of age (view switches).
+ * opts.force  — throw the cache away and re-read (the ⟳ Refresh button).
+ *
+ * Returns {rows, at, readAt, src, partial, error, warn}. `rows` is [] with an
+ * `error` set when nothing could be loaded — never silently empty, because
+ * "nobody contributed" and "we could not look" must not render the same way.
+ */
+async function _drgLoadEvents(opts = {}) {
+  const kdId = _drgKdId();
+  if (!kdId) return { rows: [], at: 0, error: 'Own kingdom not loaded yet.' };
+
+  if (opts.force) fbCacheDrop(DRG_CACHE);
+  const hit = fbCacheGet(DRG_CACHE, kdId, opts.cached ? null : FB_QUOTA.CACHE_TTL_MS);
+  if (hit) return { rows: hit.rows, at: hit.at, readAt: hit.readAt, src: hit.src, partial: hit.partial };
+
+  const filters = [{ field: 'kdId', value: kdId }];
+  const floor   = _drgAgeFloor();
+  if (floor) filters.push({ field: 'storedAt', op: 'GREATER_THAN_OR_EQUAL', value: floor, type: 'integer' });
+
+  const docs = await fbQueryOrdered('dragon_events', filters, {
+    orderBy: 'storedAt', dir: 'DESCENDING', limit: FB_QUOTA.DRAGON_LIMIT, what: 'dragon_events',
+  });
+
+  // null = the read FAILED (quota, network) — never "no events". The backend
+  // holds the same events and costs nothing, so the board still works through a
+  // blown quota; it just loses any history that only ever arrived by paste.
+  if (!docs) {
+    const be = await _drgFetchBackend();
+    if (be?.length) {
+      const c = fbCachePut(DRG_CACHE, kdId, be.map(_drgEventRow), { src: 'backend', partial: true });
+      return { rows: c.rows, at: c.at, readAt: c.readAt, src: 'backend', partial: true,
+               warn: `${S.fbLastError || 'Firestore read failed'} — showing the backend's copy instead (pasted history is not in it).` };
+    }
+    return { rows: [], at: 0, error: S.fbLastError || 'Firestore read failed' };
+  }
+
+  const rows    = docs.map(_drgEventRow);
+  const partial = docs.length >= FB_QUOTA.DRAGON_LIMIT;
+  const c = fbCachePut(DRG_CACHE, kdId, rows, { partial });
+
+  // This read covered the same collection dragonPull mirrors into, so hand it
+  // the precise id set rather than making it read the collection a second time.
+  S.drgHave         = new Set(rows.map(r => r.id).filter(Boolean));
+  S.drgHaveKd       = kdId;
+  S.drgHaveComplete = !partial;
+
+  return { rows: c.rows, at: c.at, readAt: c.readAt, src: 'firestore', partial };
+}
+
+/** Cross-check docs (bot list, fund page) — a handful of docs, cached the same way */
+async function _drgLoadChecks(opts = {}) {
+  const kdId = _drgKdId();
+  if (!kdId) return [];
+  if (opts.force) fbCacheDrop(DRG_CHECKS);
+  const hit = fbCacheGet(DRG_CHECKS, kdId, opts.cached ? null : FB_QUOTA.CACHE_TTL_MS);
+  if (hit) return hit.rows;
+  const docs = await fbQuery('dragon_check', [{ field: 'kdId', value: kdId }], { limit: 50 });
+  if (!docs) return fbCacheGet(DRG_CHECKS, kdId, null)?.rows || [];
+  return fbCachePut(DRG_CHECKS, kdId, docs).rows;
 }
 
 /** Parse the pasted text and write every new event; returns a status string */
@@ -214,11 +343,16 @@ async function dragonSave() {
   if (feed.ok) {
     say(`Saving ${feed.events.length} events…`);
     let matched = 0;
+    const saved = [];
     for (const e of feed.events) {
       const prov = _drgProv(e.prov);
       if (prov) matched++;
-      await fbWrite(`dragon_events/${kdId}_${e.id}`, {
+      const doc = {
         kdId,
+        // Pasted events have no Discord message id, so they get their content
+        // hash with a `p_` prefix — it cannot collide with a message id, and it
+        // gives every row a stable identity for the session cache.
+        evId:    'p_' + e.id,
         prov:    e.prov,
         ruler:   e.ruler,
         slot:    prov ? prov.slot : -1,
@@ -229,8 +363,13 @@ async function dragonSave() {
         land:    prov ? (prov.land || 0) : 0,
         nw:      prov ? (prov.networth || 0) : 0,
         storedAt: Date.now(),
-      });
+      };
+      const res = await fbWrite(`dragon_events/${kdId}_${e.id}`, doc);
+      if (res && !res.error) saved.push(doc);
     }
+    // Fold them straight into the cached list — we already have the rows, so
+    // the board must not pay for a re-read to show what we just wrote.
+    fbCacheMerge(DRG_CACHE, kdId, saved.map(_drgEventRow), r => r.id);
     done.push(`${feed.events.length} events (${matched} matched)`);
   }
 
@@ -258,9 +397,10 @@ async function dragonSave() {
     done.push('fund page status');
   }
 
+  if (list.ok || page) fbCacheDrop(DRG_CHECKS); // small collection, re-read is cheap
   say(`Saved: ${done.join(' · ')}.`, '#00ff88');
   if (ta) ta.value = '';
-  renderLeaderboard();
+  renderLeaderboard({ cached: true }); // the cache already has what we just wrote
 }
 
 // ── Slay chase-up (shared by the board button and the Discord auto-reminder) ─
@@ -286,16 +426,20 @@ async function _drgSlayLaggards() {
   const roster = S.own?.provinces || [];
   if (!kdId || !roster.length) return null;
 
-  let events;
+  let res;
   try {
-    events = await fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]);
+    // Shares the board's session cache — the reminder fires every 6h at most,
+    // but it must never be the thing that pays for a second full read.
+    res = await _drgLoadEvents({ cached: true });
   } catch (e) {
-    console.warn('[WavePlanner] dragon laggard query failed:', e.message);
+    console.warn('[WavePlanner] dragon laggard load failed:', e.message);
     return null;
   }
-  // A failed read returns null, not []. Treating [] as "nobody slayed" would
-  // post the ENTIRE roster to Discord as slackers off a quota error.
-  if (!events) { console.warn('[WavePlanner] dragon laggard query failed:', S.fbLastError); return null; }
+  // A failed read yields an error, never an empty list. Treating "empty" as
+  // "nobody slayed" would post the ENTIRE roster to Discord as slackers off a
+  // quota error.
+  if (res.error) { console.warn('[WavePlanner] dragon laggard load failed:', res.error); return null; }
+  const events = res.rows;
 
   // Only the CURRENT dragon counts. The store holds the whole age, and someone
   // who slayed a dragon three weeks ago has done nothing about the one on us
@@ -326,6 +470,86 @@ async function _drgSlayLaggards() {
 // backend is down. Event ids are "{messageId}_{n}", so mirroring repeatedly is
 // idempotent — the same event always lands on the same doc.
 
+// ── What has already been mirrored ─────────────────────────────────────────
+// Deciding what to write used to mean reading the whole collection back. That
+// is 765+ reads to learn something that fits in one document, so the answer now
+// lives in `meta/{kdId}_dragon_mirror` as the timestamp window that has been
+// mirrored: anything inside it is already in Firestore, anything outside needs
+// writing. One read per session instead of the whole age.
+
+/** True when this event falls inside the window already mirrored */
+function _drgInMark(mark, e) {
+  return !!(mark && mark.maxTs && e.ts && e.ts >= mark.minTs && e.ts <= mark.maxTs);
+}
+
+/**
+ * The mirror window for this kingdom, or null when it could not be established
+ * (in which case mirroring must be skipped rather than guessed at).
+ */
+async function _drgMirrorMark(kdId) {
+  if (S.drgMirrorKd === kdId && S.drgMirrorMark) return S.drgMirrorMark;
+
+  // The board may already have read the collection this session — that is
+  // strictly better information than the mark, and it is already paid for.
+  if (S.drgHaveComplete && S.drgHaveKd === kdId) {
+    S.drgMirrorMark = S.drgMirrorMark || { minTs: '', maxTs: '', n: 0 };
+    S.drgMirrorKd   = kdId;
+    return S.drgMirrorMark;
+  }
+
+  const doc = await fbGet(`meta/${kdId}_dragon_mirror`);   // 1 read
+  if (doc?.fields?.maxTs) {
+    S.drgMirrorMark = {
+      minTs: doc.fields.minTs?.stringValue || '',
+      maxTs: doc.fields.maxTs?.stringValue || '',
+      n:     parseInt(doc.fields.n?.integerValue || 0, 10),
+    };
+    S.drgMirrorKd = kdId;
+    return S.drgMirrorMark;
+  }
+
+  // No mark yet — the first run since this was introduced. Build it from one
+  // read of the collection; this is the last time that read ever happens for
+  // this kingdom. Without it every already-mirrored event would look missing
+  // and get re-written, which is exactly the runaway this replaces.
+  const res = await _drgLoadEvents({ cached: true });
+  if (res.error) return null;
+  const ts = res.rows.map(r => r.ts).filter(Boolean).sort();
+  S.drgMirrorMark = { minTs: ts[0] || '', maxTs: ts[ts.length - 1] || '', n: res.rows.length };
+  S.drgMirrorKd   = kdId;
+  if (ts.length) await fbWrite(`meta/${kdId}_dragon_mirror`, { ...S.drgMirrorMark, kdId, updatedAt: Date.now() });
+  return S.drgMirrorMark;
+}
+
+/**
+ * Extend the mirror window to cover the events just written.
+ *
+ * The in-memory window always advances; the DOCUMENT is only rewritten every
+ * WP_DRAGON_MARK_WRITE_MIN. During an active dragon events land on most 2-minute
+ * cycles, and persisting the mark each time would spend ~700 writes a day for
+ * information that is only ever read once per session. Falling behind costs
+ * nothing worse than re-writing a handful of already-mirrored events after a
+ * reload, and those writes are idempotent.
+ */
+const WP_DRAGON_MARK_WRITE_MIN = 30;
+
+async function _drgExtendMark(kdId, written) {
+  const ts = written.map(e => e.ts).filter(Boolean).sort();
+  if (!ts.length) return;
+  const m = S.drgMirrorMark || { minTs: '', maxTs: '', n: 0 };
+  const next = {
+    minTs: m.minTs && m.minTs < ts[0] ? m.minTs : ts[0],
+    maxTs: m.maxTs && m.maxTs > ts[ts.length - 1] ? m.maxTs : ts[ts.length - 1],
+    n:     (m.n || 0) + written.length,
+  };
+  S.drgMirrorMark = next;
+  S.drgMirrorKd   = kdId;
+
+  if (Date.now() - (S.drgMarkWroteAt || 0) < WP_DRAGON_MARK_WRITE_MIN * 60e3) return;
+  S.drgMarkWroteAt = Date.now();
+  await fbWrite(`meta/${kdId}_dragon_mirror`, { ...next, kdId, updatedAt: Date.now() });
+}
+
 /**
  * Pull dragon events from the backend and mirror new ones into Firestore.
  * Returns {ok, added, total, error}. Silent no-op when no endpoint configured.
@@ -349,34 +573,31 @@ async function dragonPull(quiet) {
     const poll    = pollRes && pollRes.ok ? await pollRes.json().catch(() => null) : null;
     if (poll?.error) console.warn('[WavePlanner] dragon_poll:', poll.error, poll.message || '');
 
-    const r = await fetch(`${base}?dragon=1`, { headers: hdrs });
-    if (!r.ok) { say(`Backend returned ${r.status}.`, '#ff4455'); return { ok: false, error: 'HTTP ' + r.status }; }
-    const data = await r.json();
-    const events = data?.events || [];
+    const events = await _drgFetchBackend();
+    if (!events) { say('Backend did not answer.', '#ff4455'); return { ok: false, error: 'backend read failed' }; }
     if (!events.length) { say('Backend has no dragon events yet.', '#ffaa00'); return { ok: true, added: 0, total: 0 }; }
 
-    // Only write what Firestore does not already have. The id set is cached for
-    // the session: this runs on the 2-minute sync timer, and re-reading a whole
-    // age of events (765+ docs) every cycle is ~23k document reads an hour —
-    // the free tier allows 50k a DAY. With the cache a quiet cycle costs zero
-    // reads, and Firestore is only consulted when the backend has ids we have
-    // not seen yet.
-    let have = S.drgHaveKd === kdId ? S.drgHave : null;
-    if (!have || events.some(e => e.id && !have.has(e.id))) {
-      const docs = await fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]);
-      // null = the read FAILED (quota, network). Mirroring against a failed read
-      // would treat every event as missing and re-write the entire collection.
-      if (!docs) { say('Could not read the event store — skipped mirroring.', '#ffaa00'); return { ok: false, error: 'firestore read failed' }; }
-      have = new Set(docs.map(d => d.evId).filter(Boolean));
-      S.drgHave = have; S.drgHaveKd = kdId;
-    }
+    // Free top-up: this list is fresher than anything Firestore can tell us and
+    // it cost no quota, so the board takes it straight away — whether or not
+    // any of it needs mirroring.
+    const fresh = fbCacheMerge(DRG_CACHE, kdId, events.map(_drgEventRow), r => r.id);
 
-    const missing = events.filter(e => e.id && !have.has(e.id));
+    // What still needs writing. `have` is exact for this session; the mark
+    // covers everything mirrored in previous ones. Neither costs a collection
+    // read, and a stale answer here is worth at most one redundant write —
+    // doc ids are deterministic, so re-writing an event is idempotent. That is
+    // a far better trade than the 765 reads the old re-query cost.
+    const mark = await _drgMirrorMark(kdId);
+    if (!mark) { say('Could not establish what is already mirrored — skipped.', '#ffaa00'); return { ok: false, error: 'firestore read failed' }; }
+    const have = (S.drgHaveKd === kdId && S.drgHave) || new Set();
+
+    const missing = events.filter(e => e.id && !have.has(e.id) && !_drgInMark(mark, e));
 
     // Written in parallel batches: a backfill of a whole age is hundreds of
     // events, and one-at-a-time would stall the sync timer for minutes.
     const BATCH = 10;
     let added = 0, failed = 0;
+    const written = [];
     for (let i = 0; i < missing.length; i += BATCH) {
       const slice = missing.slice(i, i + BATCH);
       const res = await Promise.all(slice.map(e => {
@@ -397,16 +618,22 @@ async function dragonPull(quiet) {
           storedAt: Date.now(),
         });
       }));
-      // Only a written event goes into the cache — caching a failed write would
-      // hide it until the next reload, and caching nothing would re-write it
-      // every two minutes.
-      slice.forEach((e, k) => { if (res[k] && !res[k].error) { have.add(e.id); added++; } else failed++; });
+      // Only a written event goes into the id set — recording a failed write
+      // would hide it until the next reload, and recording nothing would
+      // re-write it every two minutes.
+      slice.forEach((e, k) => { if (res[k] && !res[k].error) { have.add(e.id); written.push(e); added++; } else failed++; });
       if (!quiet) say(`Mirroring ${added}/${missing.length}…`);
       if (failed) break; // writes are failing (quota?) — stop hammering
     }
-    if (failed) { say(`Mirrored ${added}, then writes failed — stopped.`, '#ffaa00'); return { ok: false, added, error: 'write failed' }; }
+    S.drgHave = have; S.drgHaveKd = kdId;
+
+    // Only a clean run may extend the window. A partial run leaves it alone so
+    // the next pull retries the gap instead of declaring it mirrored.
+    if (!failed && written.length) await _drgExtendMark(kdId, written);
+
+    if (failed) { say(`Mirrored ${added}, then writes failed — stopped.`, '#ffaa00'); return { ok: false, added, fresh, error: 'write failed' }; }
     say(added ? `Pulled ${added} new event${added === 1 ? '' : 's'}.` : 'Up to date.', '#00ff88');
-    return { ok: true, added, total: events.length };
+    return { ok: true, added, fresh, total: events.length };
   } catch (e) {
     say('Pull failed: ' + e.message, '#ff4455');
     return { ok: false, error: e.message };
@@ -416,7 +643,9 @@ async function dragonPull(quiet) {
 /** Pull, then re-render — the button on the dragon board */
 async function dragonPullAndRender() {
   const res = await dragonPull(false);
-  if (res.added) renderLeaderboard();
+  // Re-render on anything NEW IN THE LIST, not just on what was mirrored: an
+  // event the backend already had is worth showing even if Firestore had it too.
+  if (res.fresh || res.added) renderLeaderboard({ cached: true });
 }
 
 // ── Time filtering: per dragon, or an explicit range ───────────────────────
@@ -475,10 +704,13 @@ function _drgInRange(events, camps) {
 
 // ── View state ─────────────────────────────────────────────────────────────
 
-function lbSection(v) { S.lbSection = v; renderLeaderboard(); }
-function drgMetric(v) { S.drgMetric = v; renderLeaderboard(); }
-function drgSort(v)   { S.drgSort   = v; renderLeaderboard(); }
-function drgRange(v)  { S.drgRange  = v; renderLeaderboard(); }
+// Every one of these re-aggregates rows that are already in memory, so they all
+// pass {cached:true}: a metric or sort switch must never cost a Firestore read.
+// This is what used to charge ~765 document reads per click.
+function lbSection(v) { S.lbSection = v; renderLeaderboard({ cached: true }); }
+function drgMetric(v) { S.drgMetric = v; renderLeaderboard({ cached: true }); }
+function drgSort(v)   { S.drgSort   = v; renderLeaderboard({ cached: true }); }
+function drgRange(v)  { S.drgRange  = v; renderLeaderboard({ cached: true }); }
 
 /** Read both date inputs, switch to custom mode, re-render */
 function drgDates() {
@@ -486,8 +718,11 @@ function drgDates() {
   if (f) S.drgFrom = f.value || '';
   if (t) S.drgTo   = t.value || '';
   S.drgRange = 'custom';
-  renderLeaderboard();
+  renderLeaderboard({ cached: true });
 }
+
+/** Explicit re-read — the only thing on this board that spends quota on purpose */
+function drgRefresh() { renderLeaderboard({ force: true }); }
 
 // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -497,26 +732,60 @@ const DRG_METRICS = {
   slay: { label: '🗡 Slay',        col: 'Damage',      unit: 'dmg', bar: '#ff8844' },
 };
 
-async function renderDragonBoard(el) {
-  el.innerHTML = loadingHTML('LOADING DRAGON CONTRIBUTIONS...');
-  let events = [], checks = [];
+async function renderDragonBoard(el, opts = {}) {
+  // Only show the loading state when there is genuinely nothing to show —
+  // re-rendering cached rows is instant and blanking the board would just flicker.
+  if (!fbCacheGet(DRG_CACHE, _drgKdId(), null)) el.innerHTML = loadingHTML('LOADING DRAGON CONTRIBUTIONS...');
+
+  let info, checks;
   try {
-    const kdId = _drgKdId();
-    const [ev, ch] = await Promise.all([
-      fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]),
-      fbQuery('dragon_check',  [{ field: 'kdId', value: kdId }]),
-    ]);
-    // null = read failed. An empty board would read as "nobody contributed",
-    // which is a very different message from "we could not look".
-    if (!ev) throw new Error(S.fbLastError || 'Firestore read failed');
-    events = ev; checks = ch || [];
+    info   = await _drgLoadEvents(opts);
+    checks = await _drgLoadChecks(opts);
   } catch (e) {
+    info = { rows: [], error: e.message };
+    checks = [];
+  }
+
+  // An empty board would read as "nobody contributed", which is a very
+  // different message from "we could not look".
+  if (info.error && !info.rows.length) {
     el.innerHTML = _drgSectionSwitch()
-      + `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">Error loading dragon data: ${esc(e.message)}</div>`
+      + `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">
+           Error loading dragon data: ${esc(info.error)}
+           <div style="font-size:15px;color:#7a9090;margin-top:6px">
+             // The stored events are untouched — this is a read failure, not missing data.
+           </div>
+         </div>`
+      + `<div style="margin-bottom:12px"><button class="wb" onclick="__wpA.drgRefresh()" style="font-size:17px;padding:3px 12px">⟳ Try again</button></div>`
       + _drgPasteBox();
     return;
   }
-  el.innerHTML = _drgSectionSwitch() + _buildDragonBoard(events, checks) + _drgPasteBox();
+  el.innerHTML = _drgSectionSwitch() + _drgDataStrip(info) + _buildDragonBoard(info.rows, checks) + _drgPasteBox();
+}
+
+/**
+ * Provenance line: where the rows came from, how old they are, and the only
+ * button on the board that spends Firestore quota.
+ * Without this a cached board is indistinguishable from a live one, and the
+ * leader has no way to tell a stale list from an empty dragon.
+ */
+function _drgDataStrip(info) {
+  const when = info.at ? new Date(info.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—';
+  const src  = info.src === 'backend' ? 'from the backend feed' : 'from the event store';
+  const warn = info.warn
+    ? `<div style="font-family:monospace;font-size:15px;color:#ffaa00;margin-top:4px">// ${esc(info.warn)}</div>` : '';
+  const trunc = info.partial && info.src !== 'backend'
+    ? `<div style="font-family:monospace;font-size:15px;color:#ffaa00;margin-top:4px">
+         // Hit the ${FB_QUOTA.DRAGON_LIMIT}-document read limit — older events in this age are not shown.
+       </div>` : '';
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-family:monospace;font-size:15px;color:#617070">
+        // data as of ${esc(when)} ${esc(src)} — kept current from Discord by the 2-minute sync
+      </span>
+      <button class="wb" onclick="__wpA.drgRefresh()" style="font-size:15px;padding:2px 8px"
+        title="Re-read the event store from Firestore. Everything else on this board re-uses what is already loaded, so it costs no quota.">⟳ Refresh</button>
+    </div>${warn}${trunc}`;
 }
 
 /** Range picker: whole age, one dragon, or an explicit from/to */

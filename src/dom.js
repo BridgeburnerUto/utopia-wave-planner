@@ -48,6 +48,7 @@ function buildOverlay() {
   <div class="wkb"><div class="l">War</div><div class="v" id="__wpwar">—</div></div>
   <div id="__wprit" style="display:contents"></div>
   <div id="__wpecon" style="display:contents"></div>
+  <div class="wkb" id="__wpfbq" style="display:none"><div class="l">Firestore</div><div class="v" id="__wpfbv">—</div></div>
   <span class="wsav" id="__wpsav"></span>
 </div>
 

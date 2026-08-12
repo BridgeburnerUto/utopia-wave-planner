@@ -446,11 +446,13 @@ async function _postWarSummary(webhookUrl) {
     // War period from kingdomNews (gives in-game date range)
     const period = _getWarPeriod();
 
-    // Fetch all ops for this KD from Firebase
-    const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
-    // null = failed read. Posting a war summary built from it would report the
-    // whole war as zero ops for everyone.
-    if (!allOps) { console.warn('[WavePlanner] war summary skipped —', S.fbLastError); return; }
+    // Ops for this KD, through the leaderboard's session cache — a war summary
+    // is not worth a second full read of the collection.
+    const opsInfo = await _lbLoadOps({ cached: true });
+    // An error means the read FAILED. Posting a summary built from that would
+    // report the whole war as zero ops for everyone.
+    if (opsInfo.error) { console.warn('[WavePlanner] war summary skipped —', opsInfo.error); return; }
+    const allOps = opsInfo.rows;
 
     // Filter to the war period if we could detect one
     let warOps = allOps;

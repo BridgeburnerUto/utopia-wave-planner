@@ -1,12 +1,19 @@
 name: Utopia NW Snapshot
 
-# Runs 5 minutes past every hour to collect world dump data.
-# Writes one Firestore document per KD to kd_nw_history/{loc}_{hourId}.
+# Collects world dump data every 3 hours.
+# Writes one Firestore document per ISLAND to kd_nw_chunks/{island}_{sampleId},
+# covering the kingdoms at war; the 00:05 UTC run additionally sweeps every
+# kingdom so peaceful ones keep a daily point.
+#
+# The cadence is a WRITE BUDGET decision, not a preference: the old hourly
+# per-kingdom scheme cost ~18,400 writes a day against a 20,000/day free tier.
+# See the header of scripts/snapshot.js before changing it back.
+#
 # Also cleans up documents older than the age start date set in the tool.
 
 on:
   schedule:
-    - cron: '5 * * * *'   # :05 past every hour, every day
+    - cron: '5 */3 * * *'   # :05 past every 3rd hour (00,03,06,09,12,15,18,21 UTC)
   workflow_dispatch:        # allow manual run from GitHub Actions UI
 
 jobs:

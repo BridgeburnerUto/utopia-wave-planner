@@ -249,7 +249,14 @@ async function _kddbOpenTagView() {
   const age = _kddbGetAge();
   if (!age) { alert('Set the current age first (e.g. a114)'); return; }
   $id('__wpc_kddb').innerHTML = loadingHTML('LOADING UNTAGGED...');
-  const docs = await fbQuery('kd_snapshots', [{ field: 'age', value: age }]);
+  // Cached per age for the session: re-opening the tag view is a common way to
+  // work through the untagged list, and this collection grows all age (see the
+  // quota rules in firebase.js). `kd_identities` is already read once, guarded
+  // by _kddbLoaded.
+  const cached = fbCacheGet('kd_snapshots', age, FB_QUOTA.CACHE_TTL_MS);
+  const docs = cached ? cached.rows
+    : await fbQuery('kd_snapshots', [{ field: 'age', value: age }], { limit: FB_QUOTA.LIMIT });
+  if (docs && !cached) fbCachePut('kd_snapshots', age, docs);
   if (!docs) {
     $id('__wpc_kddb').innerHTML = `<div style="color:#e09040;font-family:monospace;font-size:19px;padding:20px 0">
       Could not load snapshots: ${esc(S.fbLastError || 'Firestore read failed')}</div>`;

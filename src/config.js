@@ -11,6 +11,39 @@ const CFG = {
   API_BASE: 'https://api.intel.utopia.site',
 };
 
+// ── FIRESTORE QUOTA BUDGET ─────────────────────────────────────────────────
+// The project runs on the Firestore Spark FREE tier: 50k document reads, 20k
+// writes and 20k deletes per DAY, resetting at midnight US Pacific.
+//
+// A structured query is billed one read PER DOCUMENT RETURNED, so an unbounded
+// read of an 800-document collection costs 800 units — and re-running it on
+// every button click is what exhausted a whole day of quota on 2026-08-11.
+// Two rules follow, and both are enforced in firebase.js:
+//   1. A whole-collection read happens at most ONCE per session (fbCache*).
+//   2. Every query is bounded — by the age window and by a hard limit — so the
+//      cost cannot grow silently as the collections accumulate across ages.
+const FB_QUOTA = {
+  READS_PER_DAY:  50000,
+  WRITES_PER_DAY: 20000,
+
+  // Session read levels for the header meter. Amber says "something is reading
+  // more than it should"; red says "at this rate the day's bucket is at risk".
+  READ_AMBER: 5000,
+  READ_RED:  15000,
+
+  // How long a cached collection read is reused before a tab re-open refetches.
+  // View switches (metric, sort, filter) NEVER refetch regardless of this —
+  // they re-render the same rows. Only re-opening the tab consults the age.
+  CACHE_TTL_MS: 15 * 60e3,
+
+  // Hard caps on a single query. Hitting one means the age window is holding
+  // more documents than expected; the UI says so rather than silently
+  // truncating (the old blanket `limit: 2000` did exactly that).
+  DRAGON_LIMIT: 1500,
+  OPS_LIMIT:    3000,
+  LIMIT:        2000,   // default for any other collection
+};
+
 // Duration ops (toggle on/off a province card)
 const DOPS = [
   {c:'BLI',l:'Blizzard'},{c:'CHA',l:'Chaos'},{c:'DG',l:'Dragon'},

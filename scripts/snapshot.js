@@ -1,10 +1,31 @@
 #!/usr/bin/env node
 // ── Utopia NW Snapshot ─────────────────────────────────────────────────────
-// Fetches the world kingdom dump and writes one Firestore document per KD.
-// Collection: kd_nw_history / Document ID: {loc_underscored}_{hourId}
+// Fetches the world kingdom dump and stores NW/land/stance history.
 //
-// Also reads meta/nw_cleanup.ageStartDate and batch-deletes old documents
-// (runs until all docs before that date are gone, 500 at a time).
+// WRITE BUDGET — why this looks the way it does.
+// The project is on the Firestore Spark free tier: 20,000 writes per DAY. The
+// original design wrote ONE DOCUMENT PER KINGDOM PER HOUR, which at ~765
+// kingdoms is ~18,400 writes a day — 92% of the entire daily budget before the
+// planner itself wrote a single row. That is why a modest write spike elsewhere
+// killed this job with `batchWrite: 429` on 2026-08-11.
+//
+// Two changes bring it to a few hundred a day:
+//   1. CHUNKED DOCUMENTS. One document per ISLAND per sample, holding every
+//      kingdom on that island in a `kds` map, instead of one document each.
+//      ~30 islands means ~30 writes per sample rather than ~765.
+//   2. SAMPLE ONLY AS OFTEN AS THE DATA IS USED. Kingdoms AT WAR are sampled
+//      every 3 hours (the NW graph's resolution); everyone else once a day.
+//      A peaceful kingdom's networth curve does not need 24 points a day.
+//
+// Collections:
+//   kd_nw_chunks/{island}_{sampleId}  — current, chunked (sampleId = YYYYMMDDHH)
+//   kd_nw_history/{loc}_{hourId}      — LEGACY, no longer written. The client
+//     still reads it and merges, so existing history is not lost; it drains
+//     away through the same age cleanup below and the read path can be dropped
+//     once it is empty.
+//
+// Also reads meta/nw_cleanup.ageStartDate and batch-deletes old documents from
+// BOTH collections (runs until all docs before that date are gone, 500 at a time).
 //
 // Required env vars:
 //   FIREBASE_SA_KEY — full JSON content of a Firebase service account key
@@ -38,6 +59,31 @@ try {
 const now      = Date.now();
 const hourId   = Math.floor(now / 3_600_000);
 const storedAt = now;
+
+// ── Sampling policy ────────────────────────────────────────────────────────
+// The Action is scheduled every 3 hours (.github/workflows/snapshot.yml), so
+// every run is a war sample. The run at UTC hour 0 additionally sweeps every
+// kingdom, giving peaceful ones one point a day.
+const SAMPLE_HOURS   = 3;
+const FULL_SWEEP_UTC = 0;
+
+const _d        = new Date(now);
+const utcHour   = _d.getUTCHours();
+const isFullSweep = utcHour < SAMPLE_HOURS;   // the first run of the UTC day
+// YYYYMMDDHH, floored to the sampling grid so a late-firing cron still lands on
+// the same sample id as an on-time one.
+const sampleId = [
+  _d.getUTCFullYear(),
+  String(_d.getUTCMonth() + 1).padStart(2, '0'),
+  String(_d.getUTCDate()).padStart(2, '0'),
+  String(Math.floor(utcHour / SAMPLE_HOURS) * SAMPLE_HOURS).padStart(2, '0'),
+].join('');
+
+/** Island number from a "5:2" location — the chunk key */
+function islandOf(loc) {
+  const n = parseInt(String(loc).split(':')[0], 10);
+  return Number.isFinite(n) ? n : 0;
+}
 
 // ── Service account JWT auth ──────────────────────────────────────────────────
 
@@ -96,6 +142,10 @@ function _toFB(v) {
   if (typeof v === 'boolean') return { booleanValue: v };
   if (typeof v === 'number')  return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
   if (typeof v === 'string')  return { stringValue: v };
+  // Maps carry the per-kingdom payload inside a chunk document (see below).
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, val]) => [k, _toFB(val)])) } };
+  }
   return { stringValue: String(v) };
 }
 
@@ -131,11 +181,11 @@ async function fbBatchWrite(writes) {
   return r.json();
 }
 
-async function fbQueryOldDocs(cutoffTs) {
+async function fbQueryOldDocs(cutoffTs, collection) {
   const headers = await _authHeaders();
   const body = {
     structuredQuery: {
-      from:  [{ collectionId: 'kd_nw_history' }],
+      from:  [{ collectionId: collection }],
       where: {
         fieldFilter: {
           field: { fieldPath: 'storedAt' },
@@ -174,47 +224,64 @@ async function main() {
   if (!kds.length) throw new Error('No KD data in dump response');
   console.log(`[snapshot] Fetched ${kds.length} kingdoms`);
 
-  // ── 2. Build and send Firestore batch writes ───────────────────────────────
+  // ── 2. Select what this sample covers ──────────────────────────────────────
+  // Every run samples the kingdoms AT WAR — those are the ones the NW graph and
+  // Find War are actually used on, and the ones whose numbers move. The first
+  // run of each UTC day additionally sweeps everyone, so a peaceful kingdom
+  // still has a continuous (daily) curve.
+  const atWar = kd => Array.isArray(kd.stance) && kd.stance[0] === 'war';
+  const pool  = kds.filter(kd => kd.loc && (isFullSweep || atWar(kd)));
+
+  console.log(`[snapshot] Sample ${sampleId} — ${isFullSweep ? 'FULL SWEEP' : 'war only'}: ` +
+              `${pool.length} of ${kds.length} kingdoms`);
+
+  if (!pool.length) {
+    console.log('[snapshot] Nothing to sample this run (no kingdoms at war)');
+  }
+
+  // ── 3. Group by island and write one document per island ───────────────────
+  // The whole point: ~30 island documents instead of ~765 kingdom documents.
+  const byIsland = new Map();
+  pool.forEach(kd => {
+    const isl = islandOf(kd.loc);
+    if (!byIsland.has(isl)) byIsland.set(isl, {});
+    // stance is either the string "Normal" or the array ["war", "X:Y"].
+    // stanceLoc is the enemy location at war, empty string at peace.
+    const stanceLoc = atWar(kd) ? (kd.stance[1] || '') : '';
+    // Short keys — this map carries every kingdom on the island, and the
+    // document is fetched whole by the client on every graph read.
+    byIsland.get(isl)[kd.loc.replace(':', '_')] = {
+      n: kd.name || '',
+      w: Math.round(kd.nw   || 0),
+      l: Math.round(kd.land || 0),
+      s: stanceLoc,
+      r: Array.isArray(kd.wars) ? kd.wars.join(',') : '',   // game-assigned war IDs
+    };
+  });
+
   const BATCH_SIZE = 500;
-  const writes = kds
-    .filter(kd => kd.loc)
-    .map(kd => {
-      const locKey  = kd.loc.replace(':', '_');
-      const docName = `${FB_DOC_ROOT}/kd_nw_history/${locKey}_${hourId}`;
-
-      // stance is either the string "Normal" or the array ["war", "X:Y"]
-      // Store stanceLoc as the enemy location when at war, empty string when at peace.
-      const stance    = kd.stance;
-      const stanceLoc = Array.isArray(stance) && stance[0] === 'war'
-        ? (stance[1] || '')
-        : '';
-
-      // wars is an array of integer war IDs assigned by the game.
-      const wars = Array.isArray(kd.wars) ? kd.wars.join(',') : '';
-
-      return {
-        update: {
-          name:   docName,
-          fields: {
-            loc:        _toFB(kd.loc),
-            name:       _toFB(kd.name   || ''),
-            nw:         _toFB(Math.round(kd.nw   || 0)),
-            land:       _toFB(Math.round(kd.land  || 0)),
-            stanceLoc:  _toFB(stanceLoc),
-            wars:       _toFB(wars),
-            storedAt:   _toFB(storedAt),
-          },
-        },
-      };
-    });
+  const writes = [...byIsland.entries()].map(([isl, kdMap]) => ({
+    update: {
+      name: `${FB_DOC_ROOT}/kd_nw_chunks/${isl}_${sampleId}`,
+      fields: {
+        island:   _toFB(isl),
+        sampleId: _toFB(sampleId),
+        storedAt: _toFB(storedAt),
+        full:     _toFB(isFullSweep),
+        n:        _toFB(Object.keys(kdMap).length),
+        kds:      _toFB(kdMap),
+      },
+    },
+  }));
 
   let written = 0;
   for (let i = 0; i < writes.length; i += BATCH_SIZE) {
     const batch = writes.slice(i, i + BATCH_SIZE);
     await fbBatchWrite(batch);
     written += batch.length;
-    console.log(`[snapshot] Wrote ${written}/${writes.length} KD documents`);
   }
+  console.log(`[snapshot] Wrote ${written} island documents covering ${pool.length} kingdoms ` +
+              `(the per-kingdom scheme would have cost ${pool.length} writes)`);
 
   // ── 3. Cleanup old age data ───────────────────────────────────────────────
   const cleanupDoc   = await fbGet('meta/nw_cleanup');
@@ -225,20 +292,26 @@ async function main() {
   if (ageStartDate > 0) {
     console.log(`[snapshot] Cleanup: deleting docs before ${new Date(ageStartDate).toISOString()}`);
     let totalDeleted = 0;
-    let iterations   = 0;
     const MAX_ITERS  = 300;
 
-    let batch;
-    do {
-      batch = await fbQueryOldDocs(ageStartDate);
-      if (batch.length) {
-        const deletes = batch.map(name => ({ delete: name }));
-        await fbBatchWrite(deletes);
-        totalDeleted += batch.length;
-        console.log(`[snapshot] Deleted ${batch.length} old docs (total: ${totalDeleted})`);
-      }
-      iterations++;
-    } while (batch.length === 500 && iterations < MAX_ITERS);
+    // Both collections: the chunked one in use, and the legacy per-kingdom one
+    // that is no longer written but still holds this age's history until the
+    // age rolls over. Draining it is what eventually lets the client stop
+    // reading it at all.
+    for (const coll of ['kd_nw_chunks', 'kd_nw_history']) {
+      let iterations = 0;
+      let batch;
+      do {
+        batch = await fbQueryOldDocs(ageStartDate, coll);
+        if (batch.length) {
+          const deletes = batch.map(name => ({ delete: name }));
+          await fbBatchWrite(deletes);
+          totalDeleted += batch.length;
+          console.log(`[snapshot] Deleted ${batch.length} old ${coll} docs (total: ${totalDeleted})`);
+        }
+        iterations++;
+      } while (batch.length === 500 && iterations < MAX_ITERS);
+    }
 
     if (totalDeleted > 0) {
       console.log(`[snapshot] Cleanup complete — ${totalDeleted} docs deleted`);

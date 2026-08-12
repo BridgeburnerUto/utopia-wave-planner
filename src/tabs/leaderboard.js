@@ -87,19 +87,90 @@ function _getWarPeriod() {
   } catch(e) { return null; }
 }
 
-// ── Filter state helpers ─────────────────────────────────────────────────────
+// ── Ops loading ──────────────────────────────────────────────────────────────
+// QUOTA — same rule as the dragon board (see dragon.js). `ops` accumulates for a
+// whole age and Firestore bills one read PER DOCUMENT, so every filter click
+// used to re-read the entire collection. It is now read AT MOST ONCE per
+// session through _lbLoadOps; the view helpers below re-aggregate the cached
+// rows, and syncOps folds in the new ops it fetched from the IS API for free.
 
-function lbView(v) { S.lbView = v; renderLeaderboard(); }
+const OPS_CACHE = 'ops';
+
+/**
+ * Lower bound for the ops query: the start of this age.
+ * `syncedAt` is used because every doc written by syncOps carries it — and
+ * unlike the in-game date fields it is a real timestamp, so it sorts. Ops from
+ * previous ages stay in Firestore but are not loaded: the leaderboard's own
+ * filters are in-game YR dates, which reset every age, so cross-age rows could
+ * not be told apart anyway.
+ * Returns 0 when the age start is unknown, which means "no bound".
+ */
+function _lbAgeFloor() {
+  return S.ageStartDate > 0 ? S.ageStartDate : 0;
+}
+
+/**
+ * The ops list — the ONLY place `ops` is read.
+ * opts.cached — reuse whatever is cached regardless of age (filter switches).
+ * opts.force  — re-read (the ⟳ Refresh button).
+ * Returns {rows, at, src, partial, error, warn}.
+ */
+async function _lbLoadOps(opts = {}) {
+  const kdId = S.own?.location?.replace(':', '_') || '';
+  if (!kdId) return { rows: [], at: 0, error: 'Own kingdom not loaded yet.' };
+
+  if (opts.force) fbCacheDrop(OPS_CACHE);
+  const hit = fbCacheGet(OPS_CACHE, kdId, opts.cached ? null : FB_QUOTA.CACHE_TTL_MS);
+  if (hit) return { rows: hit.rows, at: hit.at, readAt: hit.readAt, src: hit.src, partial: hit.partial };
+
+  const filters = [{ field: 'kingdomId', value: kdId }];
+  const floor   = _lbAgeFloor();
+  if (floor) filters.push({ field: 'syncedAt', op: 'GREATER_THAN_OR_EQUAL', value: floor, type: 'integer' });
+
+  const rows = await fbQueryOrdered('ops', filters, {
+    orderBy: 'syncedAt', dir: 'DESCENDING', limit: FB_QUOTA.OPS_LIMIT, what: 'ops',
+  });
+
+  // null = the read FAILED — never "no ops". The IS API still has the recent
+  // window and costs no quota, so the board degrades to that rather than
+  // reporting everyone as having done nothing.
+  if (!rows) {
+    const live = await fetchKingdomOps().catch(() => null);
+    const kdName = S.own?.kingdomName || '';
+    const fallback = Array.isArray(live)
+      ? live.filter(op => op.provinceName && TRACKED_OPS.has(op.opType)).map(op => _lbOpDoc(op, kdId, kdName))
+      : [];
+    if (fallback.length) {
+      const c = fbCachePut(OPS_CACHE, kdId, fallback, { src: 'is-api', partial: true });
+      return { rows: c.rows, at: c.at, readAt: c.readAt, src: 'is-api', partial: true,
+               warn: `${S.fbLastError || 'Firestore read failed'} — showing only the IS API's recent window (about 24h).` };
+    }
+    return { rows: [], at: 0, error: S.fbLastError || 'Firestore read failed' };
+  }
+
+  const partial = rows.length >= FB_QUOTA.OPS_LIMIT;
+  const c = fbCachePut(OPS_CACHE, kdId, rows, { partial });
+  return { rows: c.rows, at: c.at, readAt: c.readAt, src: 'firestore', partial };
+}
+
+// ── Filter state helpers ─────────────────────────────────────────────────────
+// All of these re-aggregate rows already in memory — {cached:true} keeps a
+// filter click from costing a full collection read.
+
+function lbView(v) { S.lbView = v; renderLeaderboard({ cached: true }); }
 
 function lbSetFilter(mode, opts) {
   S.lbFilter = { mode, ...opts };
-  renderLeaderboard();
+  renderLeaderboard({ cached: true });
 }
 
 function lbOpFilter(type) {
   S.lbOpFilter = type || 'all';
-  renderLeaderboard();
+  renderLeaderboard({ cached: true });
 }
+
+/** Explicit re-read — the only control here that spends quota on purpose */
+function lbRefresh() { renderLeaderboard({ force: true }); }
 
 /** Apply current filter to raw ops array */
 function _filterOps(ops) {
@@ -122,30 +193,65 @@ function _filterOps(ops) {
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
-async function renderLeaderboard() {
+/**
+ * opts.cached — re-render from what is already loaded (view/filter switches)
+ * opts.force  — re-read from Firestore (the ⟳ Refresh button)
+ * Neither is set when the tab is opened, so the cache TTL decides.
+ */
+async function renderLeaderboard(opts = {}) {
   const el = $id('__wpc_leaderboard');
   // The tab holds two independent top lists: ops (Firestore `ops`, written by
-  // the tool itself) and dragon contributions (`dragon_events`, pasted from the
+  // the tool itself) and dragon contributions (`dragon_events`, pulled from the
   // utopiabot Discord feed — see dragon.js).
-  if (S.lbSection === 'dragon') return renderDragonBoard(el);
+  if (S.lbSection === 'dragon') return renderDragonBoard(el, opts);
 
-  el.innerHTML = loadingHTML('LOADING LEADERBOARD...');
+  const kdId = S.own?.location?.replace(':', '_') || '';
+  if (!fbCacheGet(OPS_CACHE, kdId, null)) el.innerHTML = loadingHTML('LOADING LEADERBOARD...');
   try {
-    const kdId = S.own?.location.replace(':', '_');
-    const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
-    if (!allOps) throw new Error(S.fbLastError || 'Firestore read failed'); // null ≠ no ops
-    if (!allOps.length) {
+    const info = await _lbLoadOps(opts);
+    // A failed read must not render as "nobody has done anything".
+    if (info.error && !info.rows.length) {
+      el.innerHTML = _drgSectionSwitch() + `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">
+        Error loading leaderboard: ${esc(info.error)}
+        <div style="font-size:15px;color:#7a9090;margin-top:6px">
+          // The stored ops are untouched — this is a read failure, not missing data.
+        </div>
+      </div>
+      <div><button class="wb" onclick="__wpA.lbRefresh()" style="font-size:17px;padding:3px 12px">⟳ Try again</button></div>`;
+      return;
+    }
+    if (!info.rows.length) {
       el.innerHTML = _drgSectionSwitch() + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
         // No op data yet — data accumulates automatically as players use the tool during war.
       </div>`;
       return;
     }
-    el.innerHTML = _drgSectionSwitch() + _buildLeaderboard(allOps);
+    el.innerHTML = _drgSectionSwitch() + _lbDataStrip(info) + _buildLeaderboard(info.rows);
   } catch (e) {
     el.innerHTML = `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">
       Error loading leaderboard: ${esc(e.message)}
     </div>`;
   }
+}
+
+/** Provenance line — same contract as the dragon board's _drgDataStrip */
+function _lbDataStrip(info) {
+  const when = info.at ? new Date(info.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—';
+  const src  = info.src === 'is-api' ? 'from the IS API' : 'from the op store';
+  const warn = info.warn
+    ? `<div style="font-family:monospace;font-size:15px;color:#ffaa00;margin-top:4px">// ${esc(info.warn)}</div>` : '';
+  const trunc = info.partial && info.src !== 'is-api'
+    ? `<div style="font-family:monospace;font-size:15px;color:#ffaa00;margin-top:4px">
+         // Hit the ${FB_QUOTA.OPS_LIMIT}-document read limit — the oldest ops in this age are not shown.
+       </div>` : '';
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-family:monospace;font-size:15px;color:#617070">
+        // data as of ${esc(when)} ${esc(src)} — new ops are folded in as they sync
+      </span>
+      <button class="wb" onclick="__wpA.lbRefresh()" style="font-size:15px;padding:2px 8px"
+        title="Re-read the op store from Firestore. Filters and views re-use what is already loaded, so they cost no quota.">⟳ Refresh</button>
+    </div>${warn}${trunc}`;
 }
 
 function _buildLeaderboard(allOps) {
@@ -501,8 +607,11 @@ async function backfillOpDates() {
   const kdId = S.own?.location.replace(':', '_');
   if (!kdId) return;
   try {
-    const ops = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
-    if (!ops) { console.warn('[WavePlanner] Backfill skipped —', S.fbLastError); return; }
+    // Shares the leaderboard's session cache — this runs once per kingdom, but
+    // it must not be the thing that pays for a second full read.
+    const info = await _lbLoadOps({ cached: true });
+    if (info.error) { console.warn('[WavePlanner] Backfill skipped —', info.error); return; }
+    const ops = info.rows;
     const needsFill = ops.filter(op => !op.utoYear && op.utoDate);
     if (!needsFill.length) {
       console.log('[WavePlanner] Backfill: all ops already have date fields');
@@ -528,6 +637,36 @@ async function backfillOpDates() {
 
 // ── Silent op sync ───────────────────────────────────────────────────────────
 
+/**
+ * One IS op in the shape the `ops` collection stores.
+ * Shared by syncOps (what it writes) and _lbLoadOps (its IS-API fallback), so
+ * the two can never drift into disagreeing about a field name.
+ */
+function _lbOpDoc(op, kdId, kdName) {
+  const _dp = _parseUtoDate(op.utoDate || '');
+  return {
+    opId:         op.id,
+    kingdomId:    kdId,
+    kingdomName:  kdName,
+    server:       S.server,
+    utoDate:      op.utoDate     || '',
+    utoYear:      _dp?.year      || 0,
+    utoMonth:     _dp?.month     || 0,
+    lastUpdated:  op.lastUpdated || '',
+    slot:         op.slot        || 0,
+    provinceName: op.provinceName || '',
+    targetName:   op.targetName   || '',
+    opType:       op.opType       || '',
+    opName:       op.name || op.opType || '',
+    category:     OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive',
+    result:       op.result  || 0,
+    success:      op.result  === 1,
+    damage:       op.damage  || 0,
+    gain:         op.gain    || 0,
+    syncedAt:     Date.now(),
+  };
+}
+
 async function syncOps() {
   if (!S.own) return;
   try {
@@ -550,6 +689,7 @@ async function syncOps() {
 
     let synced = 0;
     let maxId  = lastId;
+    const wrote = [];
 
     for (const op of newOps) {
       if (!op.provinceName) continue;
@@ -568,33 +708,15 @@ async function syncOps() {
       if (isKnown && op.id > maxId) maxId = op.id;
       if (!isTracked) continue;
 
-      const category = OP_SETS.THIEF_SAB.has(op.opType) ? 'thief_sabotage' : 'magic_offensive';
-      const _dp      = _parseUtoDate(op.utoDate || '');
+      const doc     = _lbOpDoc(op, kdId, kdName);
+      const written = await fbWrite(`ops/${kdId}_${op.id}`, doc);
 
-      const written = await fbWrite(`ops/${kdId}_${op.id}`, {
-        opId:         op.id,
-        kingdomId:    kdId,
-        kingdomName:  kdName,
-        server:       S.server,
-        utoDate:      op.utoDate     || '',
-        utoYear:      _dp?.year      || 0,
-        utoMonth:     _dp?.month     || 0,
-        lastUpdated:  op.lastUpdated || '',
-        slot:         op.slot        || 0,
-        provinceName: op.provinceName || '',
-        targetName:   op.targetName   || '',
-        opType:       op.opType       || '',
-        opName:       op.name || op.opType || '',
-        category,
-        result:       op.result  || 0,
-        success:      op.result  === 1,
-        damage:       op.damage  || 0,
-        gain:         op.gain    || 0,
-        syncedAt:     Date.now(),
-      });
-
-      if (written && !written.error) synced++;
+      if (written && !written.error) { synced++; wrote.push(doc); }
     }
+
+    // The leaderboard's cache gets these for free — we built them here from the
+    // IS API, so it must not pay Firestore to read back what we just wrote.
+    fbCacheMerge(OPS_CACHE, kdId, wrote, r => r.opId);
 
     if (maxId > lastId) {
       await fbWrite(metaPath, { kingdomId: kdId, lastSyncedId: maxId, updatedAt: Date.now() });
@@ -621,8 +743,8 @@ async function resyncOps() {
   try {
     await fbWrite(metaPath, { kingdomId: kdId, lastSyncedId: 0, updatedAt: Date.now() });
     console.log('[WavePlanner] Op watermark reset to 0 — running full re-sync');
-    await syncOps();
-    renderLeaderboard();
+    await syncOps();   // folds everything it re-wrote into the cache
+    renderLeaderboard({ cached: true });
   } catch(e) {
     console.error('[WavePlanner] resyncOps failed:', e.message);
     if (el) el.innerHTML = `<div style="color:#E05050;padding:20px">Re-sync failed: ${esc(e.message)}</div>`;

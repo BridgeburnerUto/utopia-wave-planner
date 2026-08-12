@@ -50,9 +50,42 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   or report an absence that is not real. Both burned a whole day of Firestore
   quota once (see the 2026-08-12 session). `S.fbLastError` carries the reason.
 - **The project is on the Firestore Spark free tier: 50k document reads, 20k
-  writes, 20k deletes per DAY, resetting at midnight US Pacific.** Anything on
-  the 2-minute `syncBackend` timer must not read a whole collection -- 765 docs
-  a cycle is 23k reads an hour. Cache what you can per session.
+  writes, 20k deletes per DAY, resetting at midnight US Pacific.** A query is
+  billed one read **per document returned**, so a whole-collection read of an
+  800-doc collection costs 800. Budget constants live in `FB_QUOTA` (config.js).
+  Three rules, all enforced in firebase.js -- break them and you get another
+  quota blowout:
+  1. **A collection is read at most ONCE per session**, through a single loader
+     that caches (`fbCacheGet/Put/Merge/Drop`). Today that is `_drgLoadEvents`
+     (dragon_events) and `_lbLoadOps` (ops). **Never add a second `fbQuery` for a
+     collection that already has a loader** -- route through it with
+     `{cached:true}`. A view/sort/filter handler must re-render from the cache,
+     never refetch; only an explicit ⟳ Refresh passes `{force:true}`.
+  2. **Every query is bounded** -- age floor + `orderBy` + limit, via
+     `fbQueryOrdered` (which falls back and logs the console URL when the
+     composite index is missing). Bound on `storedAt`/`syncedAt`: **a range
+     filter EXCLUDES documents that lack the field**, so bounding dragon events
+     on `ts` would silently drop every pasted event.
+  3. **Keep caches current from the free sources**, not from Firestore: the
+     backend `?dragon` feed and the IS `KingdomOps` call are already being made,
+     so `fbCacheMerge` their results in rather than re-reading.
+  The header **read meter** (`S.fbReads`/`fbWrites`, tooltip breaks down by
+  source) makes a runaway visible while it is happening -- check it after any
+  change that touches Firestore.
+- **Required composite indexes** (project `utopia-leaderboard`, all created
+  2026-08-12): `dragon_events` (kdId ASC, storedAt DESC), `ops` (kingdomId ASC,
+  syncedAt DESC), `kd_nw_chunks` (island ASC, storedAt ASC), plus the original
+  `kd_nw_history` (loc ASC, storedAt ASC). Without one the bounded query falls
+  back to an unbounded read and logs the creation URL. Manage with
+  `gcloud firestore indexes composite list/create --project=utopia-leaderboard`.
+- **The WRITE budget is the tighter one (20k/day), and the hourly snapshot Action
+  owns most of it.** `scripts/snapshot.js` writes one document per ISLAND per
+  sample to `kd_nw_chunks` (not one per kingdom -- that cost ~18,400/day and left
+  the job with no headroom). Kingdoms at war are sampled every 3h, everyone else
+  once a day at 00:05 UTC. **Read the header of snapshot.js before changing the
+  cadence or the document shape**, and remember `fbQueryNWHistory` has to be
+  changed with it -- it reads the chunked collection AND the legacy per-kingdom
+  one and merges them.
 - Thresholds, webhook, API endpoint/key persist inside the war plan JSON (`warplan/{kdId}`) â€”
   new threshold keys must be added in three places: `state.js` defaults, the merge in
   `__wpA.init()` (app.js), and the reset object in `__wpA.clearPlan()` (app.js).
@@ -61,7 +94,232 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`,
   `sot.plague` (a real boolean, present on every SoT — verified 2026-08-12).
 
-## Recent work (2026-08-12, latest) -- NW graph "no data": Firestore quota blowout
+## Recent work (2026-08-12, latest) -- Write budget: chunked NW snapshots
+
+Leader ask after the read fixes below: "kör igång på alla besparingar vi kan
+göra" -- and, on the snapshot trade-off, "chunkade dokument, men går kanske att
+kombinera med att dra kungadömen som inte är i krig 1 gång per dygn. Kan dessutom
+köra kungadömen i krig var tredje timme" plus "NW graph skulle kunna ha 3h mellan
+punkterna".
+
+**The reads were fixed; the WRITES were the binding constraint.**
+`scripts/snapshot.js` wrote **one document per kingdom per hour** to
+`kd_nw_history`: ~765 KDs x 24h = **~18,400 of the 20,000 daily writes**, 92% of
+the budget before the planner wrote a single row. That is why a modest write
+spike elsewhere killed the Action with `batchWrite: 429` on 2026-08-11 -- the job
+had no headroom to lose.
+
+**Two changes, ~76x fewer writes:**
+1. **CHUNKED DOCUMENTS.** One document per **ISLAND** per sample in the new
+   `kd_nw_chunks` collection, holding every kingdom on that island in a `kds`
+   map (short keys `n/w/l/s/r` -- the doc is fetched whole on every graph read).
+   ~30 island docs instead of ~765 kingdom docs.
+2. **SAMPLE AS OFTEN AS THE DATA IS USED.** Kingdoms **at war every 3 hours**
+   (the graph's new resolution); **everyone else once a day**, on the 00:05 UTC
+   run (`isFullSweep`). A peaceful kingdom's NW curve does not need 24 points a
+   day. Islands with nobody at war cost nothing at all -- only islands with
+   something to sample get written.
+   Action cron: `5 * * * *` -> **`5 */3 * * *`**.
+
+**Reader (`fbQueryNWHistory`) reads BOTH collections and merges**, so no history
+is lost at the cutover: `_fbQueryNWChunks` (island equality + storedAt range,
+expands the `kds` map back into the per-kingdom row shape) and
+`_fbQueryNWLegacy` (the old per-KD query, unchanged). Rows are deduped per
+minute so a doubled point cannot be drawn, and **null is returned only when BOTH
+halves fail** -- the read-failure contract is preserved. `kd_nw_history` is no
+longer written and drains through the existing age cleanup (which now sweeps
+both collections); once it is empty the legacy half can be deleted.
+
+**A kingdom missing from a sample is not a gap** -- it simply was not at war that
+hour. Nothing in the graph or Find War treats absence as zero.
+
+**Also done this session (the rest of the "alla besparingar" list):**
+- **NW graph reads cached.** `_nwHistory(loc, from, to)` caches per location
+  *together with the window it covers*: a narrower lookback is served by slicing
+  what is loaded, and only widening it costs a read. `_nwSnapshots()` caches
+  `nw_snapshots`. Total/War/Popspace switches now pass `{cached:true}` -- **0
+  reads**. New ⟳ Refresh button next to the view switches.
+- **`cleanOldSnapshots` no longer re-reads the collection on every load.** It ran
+  from init every time just to discover there was nothing to delete; now it uses
+  the cache and skips entirely if it swept in the last 12h (`S._nwCleanedAt`).
+- **kddb tag view cached** per age (`kd_snapshots`) and bounded.
+  `kd_identities` was already once-per-session via `_kddbLoaded`.
+- **`_drgExtendMark` write throttled** to once per 30 min
+  (`WP_DRAGON_MARK_WRITE_MIN`). The in-memory window still advances every pull;
+  only the DOCUMENT write is throttled. During an active dragon events land on
+  most 2-minute cycles, and persisting each time would spend ~700 writes/day on
+  something read once per session. Falling behind costs at most a few idempotent
+  re-writes after a reload.
+
+**Composite indexes -- CREATED this session** via `gcloud` (authenticated as
+lindius@gmail.com, which has access to `utopia-leaderboard`):
+```
+gcloud firestore indexes composite create --project=utopia-leaderboard \
+  --collection-group=dragon_events --field-config=field-path=kdId,order=ascending \
+  --field-config=field-path=storedAt,order=descending
+```
+- `dragon_events` (kdId ASC, storedAt DESC)
+- `ops` (kingdomId ASC, syncedAt DESC)
+- `kd_nw_chunks` (island ASC, storedAt ASC)
+`gcloud firestore indexes composite list --project=utopia-leaderboard` shows
+state; they were CREATING at session end and go READY in minutes.
+
+**Write budget now:**
+| | before | after |
+|---|---|---|
+| snapshot Action | ~18,400/day | **~65-240/day** |
+| dragon mirror mark | ~700/day (as first built) | <=48/day |
+| ops sync + dragon events + plan saves | ~1,000 | unchanged |
+| **total** | **~20,000 of 20,000** | **~1,300 of 20,000** |
+
+**Verified.** New 26-assertion node test (`chunk-test.js` pattern: runs the REAL
+snapshot.js in a vm against a 760-KD/30-island fake dump and a fake Firestore,
+then feeds what it wrote to the REAL `fbQueryNWHistory`): a war sample writes one
+doc per island-with-a-war and contains only at-war KDs; the 00:xx run is flagged
+`full` and covers all 760 KDs in 30 writes; sampleId floors to the 3h grid so a
+late cron lands on the same id; **nw/land/name/stanceLoc/wars all survive the
+round trip**; a peaceful KD has exactly its one daily point; rows come back
+sorted; both collections are queried; both halves failing yields null with the
+reason. The earlier 58-assertion suite still passes unchanged. Harness: NW graph
+draws 2 polylines with the same cards off merged chunk+legacy data (9 chunk
+samples + 25 legacy dedupe to 25 points), 3 view switches cost 0 reads, ⟳ Refresh
+costs exactly one window (68 docs for 2 locs), all 12 tabs render, no console
+errors. Re-verified on the minified build (344.9 KB).
+
+Harness gained `mockNwChunks` + a map-capable `fbVal`, so the chunked shape is
+exercised offline alongside the legacy one.
+
+**Still open:** the legacy `kd_nw_history` read is still made on every graph load
+until that collection drains at the next age rollover -- delete `_fbQueryNWLegacy`
+and its call site then. `dragon_events` is still never pruned (bounded by age, so
+harmless for cost). The Action has NOT run under the new code yet -- **watch the
+first 00:05 UTC run**, it is the one that does the full sweep.
+
+## Recent work (2026-08-12) -- Leaderboard quota: caching, bounds, a meter
+
+Leader ask: "make the dragon part of the leaderboard more efficient, it is using
+up my Firestore quota" -> then "fix this for both dragon and ops".
+
+**What was still bleeding after the previous session's fix:**
+1. **Every button on the dragon board cost a full collection read.**
+   `drgMetric`/`drgSort`/`drgRange`/`drgDates`/`lbSection` all call
+   `renderLeaderboard()` -> `renderDragonBoard()` -> unbounded `fbQuery`. At 765
+   docs that is **765 reads per CLICK**; walking the three metrics was 2.3k.
+   The ops board had the identical defect on `lbView`/`lbSetFilter`/`lbOpFilter`.
+2. **`dragonPull` still re-read the whole collection whenever a new event
+   appeared.** The `S.drgHave` cache guard was
+   `if (!have || events.some(e => !have.has(e.id)))` -- quiet cycles were free
+   as designed, but **during an active dragon events arrive continuously, so
+   nearly every 2-minute cycle tripped it: ~23k reads/hour**, the same order as
+   the original blowout, just gated behind "a dragon is actually happening".
+3. **Latent truncation bug:** `fbQuery` capped at `limit: 2000` with no
+   `orderBy`. `dragon_events` is never pruned, so past 2000 docs the board would
+   silently show an arbitrary slice AND `have` would come back incomplete --
+   re-writing the missing events every cycle. The write amplification returning
+   through a different door, next age.
+
+**Fixes (58-assertion node test + harness-verified, minified build done):**
+
+- **Session cache, `_FB_CACHE` in firebase.js** (`fbCacheGet/Put/Merge/Drop`).
+  Each collection is read **at most once per session** through one loader --
+  `_drgLoadEvents` (dragon.js) and `_lbLoadOps` (leaderboard.js). Every view
+  helper now passes `{cached:true}`, so **metric/sort/range/filter switches cost
+  zero reads**. `{force:true}` is the new ⟳ Refresh button, the only control on
+  either board that spends quota on purpose. A "data as of HH:MM from the event
+  store" strip says which it is -- a cached board must not look live.
+- **The caches are topped up for FREE from the sources already being polled.**
+  `dragonPull` folds the backend `?dragon` list (which `syncBackend` fetches
+  every 2 minutes anyway) straight into the board cache; `syncOps` folds in the
+  ops it just built from the IS API. Neither costs a Firestore read, so the
+  boards stay current without ever re-reading. **Firestore is the superset**
+  (it holds pasted history the backend never saw), which is why it is still the
+  thing read once -- the backend is what keeps it fresh, not what replaces it.
+- **`dragonPull` no longer re-reads at all.** What has been mirrored now lives in
+  **`meta/{kdId}_dragon_mirror`** as a `{minTs,maxTs,n}` window: one document
+  read per session instead of 765. `S.drgHave` stays as the exact in-session set,
+  and the board's own read populates it for free (`S.drgHaveComplete`), so a
+  session that opened the board pays nothing extra. Rationale for trusting the
+  cache: doc ids are deterministic, so a stale answer costs **one redundant
+  idempotent write**, versus 765 reads. Only a fully clean batch extends the
+  window -- a partial run leaves it so the next pull retries the gap.
+  **First run per kingdom still does one full read to seed the mark**; that is
+  the last time that read ever happens.
+- **Every query is bounded** by the age (`storedAt >= S.ageStartDate` for dragon,
+  `syncedAt >=` for ops) with `orderBy DESC` + a hard limit
+  (`FB_QUOTA.DRAGON_LIMIT` 1500 / `OPS_LIMIT` 3000). Cost stops growing every
+  age, and hitting the limit is **reported in the UI** instead of silently
+  truncating. **`storedAt`/`syncedAt` rather than `ts`/`utoDate` deliberately:
+  every doc has them, and a range filter on a field a document lacks EXCLUDES
+  that document** -- filtering dragon events on `ts` would have silently dropped
+  every pasted event.
+- **`fbQueryOrdered`** handles the missing composite index: a bounded query 400s
+  until the index exists, so it logs the console URL from the error, falls back
+  to the unbounded form, and remembers that for the session. The boards never go
+  down waiting for someone to click the link.
+- **Read meter in the header** (`__wpfbq`): "683 r · 1 w", grey/amber/red against
+  `FB_QUOTA.READ_AMBER/RED`, with a **per-source breakdown in the tooltip**
+  ("dragon_events: 1680, ops: 240, kd_nw_history 5:2: 25, ..."). `_fbBillReads`
+  counts documents, not queries -- which is what Firestore bills. This is the
+  diagnostic the previous session listed as still open; it names a runaway in
+  seconds.
+- **Failure still never renders as "empty"**, on either board: both print the
+  HTTP status, "the stored X are untouched -- this is a read failure, not missing
+  data", and a ⟳ Try again. New: **the dragon board falls back to the backend
+  feed and ops falls back to the IS API**, so a blown quota degrades to a partial
+  view with a stated caveat rather than a dead tab.
+- Shared plumbing so the readers cannot drift: `_lbOpDoc` (used by both `syncOps`
+  and its IS fallback), `_drgEventRow` (normalises a Firestore doc and a raw
+  backend event into one row shape). `backfillOpDates`, `_postWarSummary` and
+  `_drgSlayLaggards` all went through the shared loaders -- none of them reads a
+  collection on its own any more. `fbCount` (aggregation query, ~1 read) exists
+  for "how much did the limit hide".
+
+**ACTION FOR THE LEADER -- create two composite indexes** in the Firestore
+console (project `utopia-leaderboard`), or the bounded queries keep falling back
+to unbounded reads (still cached, so ~once per session, but unbounded):
+- `dragon_events`: `kdId` ASC + `storedAt` DESC
+- `ops`: `kingdomId` ASC + `syncedAt` DESC
+The exact creation URL is printed to the console the first time each query runs.
+
+**Measured, in the harness with 420 dragon events + 240 ops:**
+| | before | after |
+|---|---|---|
+| open dragon board | 765 | 420 (once per session) |
+| 9 view clicks | ~6,900 | **0** |
+| open ops board | 240+ | **0** (shares the backfill's read) |
+| 6 filter clicks | ~1,400 | **0** |
+| quiet 2-min pull | 0 | 0 |
+| pull with a new event | ~765 | **0 reads, 2 writes** |
+| whole session, mark stored | 765+ | **0 reads, 1 meta doc** |
+
+**Verified.** 58-assertion node test (vm-loads config/state/firebase/dragon/
+leaderboard from src, fakes Firestore at the fetch layer and counts documents
+served): first load bills exactly the age window; 5-6 view switches bill zero;
+force re-reads; previous-age docs are excluded; first pull seeds the mark with
+one read and writes nothing; repeat pull 0/0; a new event costs 0 reads and 2
+writes and is not re-written next cycle; a stored mark makes a whole session cost
+0 document reads; a 429 falls back to the backend/IS API and writes NOTHING;
+laggards return null not the roster; the missing-index path captures the URL and
+disables the bounded form. Harness: all 12 tabs render, no console errors, both
+campaigns still inferred correctly (Aug 6-10 / Jul 28-31), 23/23 matched,
+9 dragon clicks + 6 ops clicks = 0 additional reads, ⟳ Refresh costs exactly one
+window, forced 429 shows the read-failure message on both boards. Re-verified on
+the minified build (342 KB).
+
+**Harness gained real fixtures** for `ops` (240) and `dragon_events` (420 across
+two campaigns), plus `window.__fbReadCount` / `__fbQueryLog` -- the collections
+used to be served as `[]`, so none of this was testable offline. `ageStartDate`
+is now set in the harness plan so the age-bounded path is the one exercised.
+Also added a `mockup-alt2` launch config (port 7790) -- other sessions held 7788
+and 7789.
+
+**Still open:** `nwgraph.js` reads `nw_snapshots` in full at two call sites and
+kddb reads `kd_identities`/`kd_snapshots` in full -- same defect class, same
+`fbCache*` fix applies, not done this session (the meter now counts them, so
+they will show up if they matter). `dragon_events` is still never pruned; the
+age bound makes that harmless for cost but the collection grows forever.
+
+## Recent work (2026-08-12) -- NW graph "no data": Firestore quota blowout
 
 Leader report: "the nw graph stopped working -- NW gives the answer no data,
 popspace looks like all old data is gone."
