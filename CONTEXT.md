@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-10 (latest).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-12 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -49,9 +49,154 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `__wpA.init()` (app.js), and the reset object in `__wpA.clearPlan()` (app.js).
 - IS SoT field names (verified from the IS bundle): `sot.soldiers`, `sot.food`, `sot.money`,
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
-  `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`.
+  `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`,
+  `sot.plague` (a real boolean, present on every SoT — verified 2026-08-12).
 
-## Recent work (2026-08-11, latest) -- Dragon ingest LIVE (deployed, working)
+## Recent work (2026-08-12, latest) -- Economy: race/pers, doctrine, plague, dragons
+
+Leader ask: "add person and race modifiers to the economy tab". Scope chosen
+(all three): show them per province, model the war-doctrine race effects, and
+audit the per-age tables.
+
+**Source of truth this session:** the leader supplied `AGE 116 FINAL CHANGES`
+(PDF) and named **https://utopiawiki.com** as the general-formula wiki, with the
+**Age 116 doc winning on any conflict**. They agree here. The wiki's Modified
+Income formula is `raw x Plague x Riots x Bank% x Income Science x Honor x Race
+x Personality x Dragon x Ritual` -- i.e. race and personality each enter at
+exactly ONE place, which is what the code does. (No PDF tooling on this box:
+`pdftoppm` is missing, but `pypdf` extracts the text fine.)
+
+**Audit result: the modifier tables were already complete for Age 116** -- the
+only economy entries the age has are Human (+30% income, +25% wages, Civil
+Administration prisoners +2gc), Avian (-25% wages), Artisan (+25% building
+production -> banks) and War Hero (+100% honor effects). Nothing was missing.
+What WAS missing was that none of it was visible, and the war doctrine was
+ignored. The audit is now written into config.js so nobody re-derives it,
+including the four things deliberately NOT applied and why:
+- **Dwarf +30% BE and the Dwarf doctrine's +12.5% BE** -- `sot.be` is the
+  EFFECTIVE building efficiency and already carries both. Same "API reports it
+  post-modifier" property that keeps the OME/DME tables empty; applying them
+  here would double-count.
+- **Artisan +25% Economy Science / Sage +15% Science Eff** -- `sos.books[]
+  .effect` is the reported effect and already includes them.
+- **Artisan immunity to Greed/Riots/Fool's Gold** -- only matters once those ops
+  are modeled (they are not).
+- **Dragon income/wage terms** -- race-independent, so they live in their own
+  `DRAGON_ECON` table and are applied per KINGDOM (see below).
+
+**PLAGUE -- now MODELLED (leader ask, same session).** The multiplier that had
+been "unknown" since 2026-07-28 is on the new wiki after all, at
+**utopiawiki.com/index.php/The_Plague** (NOT `/Plague`, which 404s -- the link
+inside the Economy page's Modified Income formula is what finds it):
+**"-15% Income (applied as -15% Tax Collection)"**. The Age 116 doc does not
+touch plague income, so the wiki value stands. `PLAGUE_INCOME_MULT = 0.85`.
+- **Undead is IMMUNE and always carries plague**, so `sot.plague` is
+  permanently true on every Undead province. Applying the hit blindly would
+  have silently docked every Undead 15% forever -- `RACE_PLAGUE_IMMUNE
+  {undead: true}` cancels it, and the chip reads `🦠 immune` (green) instead of
+  `🦠 -15% inc` (red), so the flag never looks like an unexplained discrepancy.
+- Plague's other effects need nothing here: -15% DME / -10% OME are already
+  inside the reported `som.dme/ome`, and "no population growth" / "-10%
+  prisoners each tick" change FUTURE ticks, while `sot.peasants`/`sot.prisoners`
+  are already the current counts.
+- **`sot.plague` is a real boolean on every SoT** -- confirmed against the dump
+  (present on all 45 provinces, all `false` in this end-of-age fixture). It is
+  NOT hidden inside `sot.badSpells`; add it to the verified SoT field list.
+- Chips gained a `kind`: `racepers` (the only kind the Mods tally card counts),
+  `kd` (doctrine -> Wages card) and `status` (plague -> Gross card, which now
+  reads "🦠 3 plagued" / "6 immune").
+- Verified by injecting plague into a COPY of the fixture (backed up, patched,
+  restored -- baseline numbers confirmed identical afterwards): 3 plagued Elves
+  dropped own net 1.1M -> 1.0M/t and the header badge with it, while 6 plagued
+  Undead left enemy gross at exactly 989k. **The harness caches `is_dump.json`
+  hard** -- a plain reload replays the stale copy and you will think nothing
+  changed. `fetch('is_dump.json', {cache:'reload'})` then reload.
+
+**War doctrine wages -- now MODELLED (the one real behaviour change).**
+`_wdEconWageCut(provinces)` in economy.js: at war only, sums any doctrine effect
+labelled `Military Wage` with sign `-`, scaled by same-race province count via
+the existing `_wdStrength`. Age 116 that is **Avian alone, up to -12.5%**.
+Doctrines are display-only everywhere else because som.ome/dme already include
+them -- but **nothing reports wages, this tool computes them**, so here the cut
+has to be applied by hand or it is simply absent. Matched by label through
+`WD_ECON_WAGE_LABEL` in config.js. It is a KINGDOM-level value, so
+`_econKdCtx(provinces)` computes it once and `_provEconomy(prov, loc, ctx)` /
+`_kdEconomy(provinces, loc, ctx)` thread it through; omitting ctx = no cut, so
+any future caller is safe by default.
+
+**Display:**
+- New **Pers** column next to Race (the tab showed race but never personality).
+- New **Mods** column: one chip per modifier actually in play, green when it
+  raises net income, red when it lowers it (so Human's +25% wage reads red and
+  Avian's -25% reads green), each with a tooltip naming the source. Chips are
+  built by `_econMods` **from the same config lookups `_provEconomy` multiplies
+  by**, so the column cannot drift from the Net figure.
+- Honor and prisoner chips only render when the province actually has honor /
+  prisoners, so a peasant War Hero shows nothing.
+- New **Race / Pers Mods** summary card tallying what the kingdom fields
+  ("+30% inc x7 · +25% wage x7 · pris +2gc x7"); the kingdom-wide doctrine goes
+  on the **Wages card** instead ("⚔ -X% war doctrine") since it hits every row.
+- Tab footnote now states the doctrine and the not-double-applied rule.
+
+**Config refactor (two hardcodes became tables), so every race/pers modifier is
+now one age-varying lookup:** `HUMAN_PRISONER_EXTRA_GC` -> `RACE_PRISONER_EXTRA_GC
+{human: 2.0}`, and the inline `if (pers === 'war hero') honor *= 2` ->
+`PERS_HONOR_MULT {'war hero': 2}`.
+
+**DRAGONS -- now MODELLED (leader ask, same session).** From the Age 116 doc,
+only two of the five touch the economy: **Ruby +20% Military Wages**, **Topaz
+-25% Income**. `DRAGON_ECON` in config.js; Amethyst/Emerald/Sapphire have no
+income or wage term.
+- A dragon is KINGDOM-wide, so it rides in `_econKdCtx(provinces, kd)` next to
+  the war doctrine. **`kd` (the S.own / S.enemy object) had to be threaded
+  through** `_econSection`/`_kdEconomy`/`renderEconBadges` -- `kdEffects` lives
+  on the kingdom, not on a province, and the enemy's dragon must come from
+  `S.enemy` (their dragon is not ours).
+- **NOT applied**: Topaz's -25% Building Efficiency (already inside `sot.be`,
+  same rule as Dwarf) and Ruby's -12.5% Military Effectiveness (inside
+  som.ome/dme -- and already named in the MIL_EFF_* comment as a reason the
+  wage-rate inversion is clamped).
+- **The type string is UNCONFIRMED.** `kdEffects.dragon` was `""` in every dump
+  captured so far, so we do not know whether the IS says "Ruby" or "Ruby
+  Dragon". Matching is case-insensitive SUBSTRING, so both work. **A dragon
+  whose name matches nothing still renders "🐉 <name> -- no economy effect"**
+  with a tooltip pointing at DRAGON_ECON -- deliberately, because silence would
+  mean both "harmless dragon" and "table needs fixing". First live dragon:
+  check that line, and if a Ruby/Topaz shows it, fix the table.
+- Chips are `kind: 'kd'` like the doctrine, so they appear on every row but stay
+  out of the race/pers tally card; the KD line goes on the Gross card for an
+  income dragon and the Wages card for a wage dragon.
+
+**Verified.** 59-assertion node test (vm-loads config/utils/economy straight from
+src -- keep it, it is the cheap way to check an age update): doctrine 0 in peace
+/ 2.0% at 1 avian / 5.0% at 4 / 12.5% cap at 20 / 0 for non-wage doctrines;
+Human income x1.30 and wages x1.25 isolated, Avian x0.75, Artisan bank flat gc
+up, Duke 20% -> War Hero 40% and gross x(1.40/1.20); 12.5% cut = wages x0.875
+with gross untouched; plague x0.85 with wages untouched, Undead immune, Human +
+plague stacking to x1.30 x0.85; dragon name matching ("Ruby"/"Ruby Dragon"/
+"ruby dragon" all hit, Emerald recognised with no term, empty -> null), Ruby
+wages x1.20 with gross untouched and Topaz the mirror, Topaz+plague and
+Ruby+doctrine stacking; chip sets, good/bad flags, `kind` routing, and
+`_kdEconomy` deriving its own ctx. Harness: all 12 tabs render, no console
+errors, own KD 23 rows with the 7 Humans chipped and the tally card correct,
+enemy KD net **259k/t unchanged** (no Human/Avian/Artisan/War Hero there, and
+the fixture is out of war) -- confirming the math moved only where a modifier
+actually applies. Dragons exercised by injecting into a fixture copy: Topaz on
+own KD 2.8M -> 2.1M gross / net 1.1M -> 361k with wages untouched; Ruby on the
+enemy 730k -> 876k wages / net 259k -> 113k with gross untouched; Emerald showed
+the "no economy effect" line and moved nothing. Fixture restored and the
+baseline re-confirmed identical. Minified build done (328 KB). NOT live-tested.
+
+**One trap worth remembering:** the first version of the Human income test
+asserted `humanGross / baseGross == 1.30` and "failed". The code was right --
+Human ALSO gets Civil Administration prisoner gold, so the ratio is not clean.
+Isolate a modifier before asserting a ratio on it.
+
+**Note on the fixture:** mockup/is_dump.json is an end-of-Age-115 dump, so it
+contains `paladin` (removed in 116) and no Avian provinces -- the doctrine path
+is covered by the node test, not the harness.
+
+## Recent work (2026-08-11) -- Dragon ingest LIVE (deployed, working)
 
 The Discord->backend->Firestore->board chain is now running in production.
 101 real events from #dragon are in Firestore, slots and land/NW resolved.
@@ -630,7 +775,8 @@ Solver mechanics (waveplan.js):
 - **Age 116 constants centralized in config.js** economy block: INCOME_PER_*,
   JOBS_PER_ACRE, BANK_FLAT_GC, BANK_INCOME_RATE, ARMOURY_WAGE_RATE, WAGE_PER_SPEC/
   ELITE, RACE_INCOME_MULT {human 1.30}, RACE_WAGE_MULT {human 1.25, avian 0.75},
-  PERS_BANK_PROD_MULT {artisan 1.25}, HUMAN_PRISONER_EXTRA_GC, HONOR_INCOME_PCT.
+  PERS_BANK_PROD_MULT {artisan 1.25}, RACE_PRISONER_EXTRA_GC (was
+  HUMAN_PRISONER_EXTRA_GC, tabled 2026-08-12), HONOR_INCOME_PCT.
   UPDATE EVERY AGE (source: AGE 116 FINAL CHANGES doc + utopiawiki).
 - `sot.be` (a %) is used directly as BE. `sot.gcpa` is stockpiled gold per acre
   (gcpa x land ~= money), NOT income. Enemy has NO som -> wages from sot totals.
@@ -839,7 +985,10 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
   exercised a wave re-assignment.)
 
 ### Possible next steps (all optional)
-- Economy v2: plague/dragon/riot/war-doctrine income-wage modifiers; honor pop bonus
+- Economy v2: Incite Riots is the last unmodelled income modifier (war doctrine,
+  plague and dragons all DONE 2026-08-12). Riots is -20% income this age, but it
+  needs per-province op tracking with a duration, and Artisan is immune to it;
+  honor pop bonus
   in _provLivingSpace; upgrade _enemyPopPct to surveys (changes solver sort!); net
   income graphed over time (user declined for v1).
 - Define further wave types beyond standard / shrink / shrink-AI (leader will specify).

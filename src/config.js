@@ -123,7 +123,6 @@ const RACE_POP_MULT = { halfling: 1.125, faery: 0.95 };
 const INCOME_PER_EMPLOYED   = 3.0;   // gc per employed peasant per tick
 const INCOME_PER_UNEMPLOYED = 1.0;
 const INCOME_PER_PRISONER   = 0.75;
-const HUMAN_PRISONER_EXTRA_GC = 2.0; // Civil Administration (Age 116)
 const JOBS_PER_ACRE         = 25;    // jobs per built non-home acre
 const BANK_FLAT_GC          = 25;    // gc per bank acre × BE
 const BANK_INCOME_RATE      = 1.5;   // % income per % built (x·(1−x) curve, max 37.5%)
@@ -143,12 +142,83 @@ const MIL_EFF_BASE      = 33;
 const MIL_EFF_WAGE_COEF = 67;
 const MIL_EFF_WAGE_EXP  = 0.25;
 const WAGE_RATE_MAX     = 200;   // % — game cap on the wage setting
-// Age 116 race/personality economy modifiers (1.0 fallback):
-const RACE_INCOME_MULT    = { human: 1.30 };
-const RACE_WAGE_MULT      = { human: 1.25, avian: 0.75 };
-const PERS_INCOME_MULT    = {};                 // none this age
-const PERS_WAGE_MULT      = {};                 // none this age
-const PERS_BANK_PROD_MULT = { artisan: 1.25 };  // +25% Building Production (Banks)
+// ── Race / personality ECONOMY modifiers (Age 116) ───────────────────────────
+// Everything a race or personality changes about income or wages lives in these
+// tables, so tabs/economy.js can both APPLY and DISPLAY a modifier from one
+// place (`_econMods` builds the Mods column out of exactly these lookups — the
+// column cannot drift from the Net figure). 1.0 / absent = no effect.
+//
+// AUDITED 2026-08-12 against the AGE 116 FINAL CHANGES doc (Races +
+// Personalities sections) — this is the COMPLETE set for the age. The wiki's
+// Modified Income formula is raw × Plague × Riots × Bank% × Income Science ×
+// Honor × Race × Personality × Dragon × Ritual, so Race/Personality enter at
+// exactly one place each.
+//
+// Deliberately NOT here — they reach the economy by another route, or not at all:
+//   Dwarf +30% Building Efficiency (and the Dwarf war doctrine's +12.5% BE):
+//     `sot.be` is the province's EFFECTIVE building efficiency and already
+//     carries both, the same "API reports it post-modifier" property that keeps
+//     the OME/DME tables empty. Applying them here would double-count.
+//   Artisan +25% Economy Science / Sage +15% Science Efficiency: `sos.books[]
+//     .effect` is the reported effect and already includes them.
+//   Artisan immunity to Greed / Incite Riots / Fool's Gold: only matters once
+//     those ops are modeled, and they are not (v1).
+//     (Dragon income/wage terms are race-independent and live in DRAGON_ECON
+//      above; they are applied per kingdom, not per province.)
+// (Undead's plague immunity IS a race economy modifier and lives in
+//  RACE_PLAGUE_IMMUNE above, next to the plague term it cancels.)
+// ── Dragon economy effects (Age 116) ─────────────────────────────────────────
+// A dragon is a KINGDOM-wide effect: `kdEffects.dragon` holds the type name
+// (empty string when none) and `kdEffects.dragonDuration` the ticks left.
+// Only two of the five touch income or wages:
+//   Ruby   +20% Military Wages
+//   Topaz  −25% Income
+// Matched case-insensitively as a SUBSTRING of the reported name, because the
+// IS may report either "Ruby" or "Ruby Dragon" — the field was empty in every
+// dump captured so far, so the exact form is UNCONFIRMED. Substring matching
+// makes both work; if a live dragon ever reads as something else entirely, the
+// Economy tab shows "🐉 <name> — no economy effect" rather than silently
+// dropping it, which is the signal to fix this table.
+// NOT applied here: Topaz's −25% Building Efficiency (already inside `sot.be`,
+// same rule as Dwarf), Ruby's −12.5% Military Effectiveness (inside
+// som.ome/dme — and note MIL_EFF_* above already mentions it as a reason the
+// wage-rate inversion is clamped), and Amethyst / Emerald / Sapphire, which
+// have no income or wage term at all.
+const DRAGON_ECON = {
+  ruby:  { wageMult:   1.20 },
+  topaz: { incomeMult: 0.75 },
+};
+
+// The Plague's income term (utopiawiki "The Plague": "−15% Income (applied as
+// −15% Tax Collection)"). The AGE 116 FINAL CHANGES doc does not touch it, so
+// the wiki value stands for this age. Plague's other effects are already
+// handled or out of scope: −15% DME / −10% OME are inside the reported
+// som.dme/ome, "no population growth" and "−10% prisoners each tick" change
+// future ticks rather than this tick's income (sot.peasants/prisoners are
+// already the current counts).
+const PLAGUE_INCOME_MULT = 0.85;
+// Races immune to the plague's EFFECTS. Age 116: Undead has Plague Immunity and
+// "always carries Plague" — so an Undead province reads as plagued on every SoT
+// while taking no income hit. Without this every Undead province would be
+// permanently and wrongly docked 15%.
+const RACE_PLAGUE_IMMUNE = { undead: true };
+
+const RACE_INCOME_MULT       = { human: 1.30 };            // Human +30% Income
+const RACE_WAGE_MULT         = { human: 1.25, avian: 0.75 };  // +25% / −25% Military Wages
+const RACE_PRISONER_EXTRA_GC = { human: 2.0 };             // Civil Administration
+const PERS_INCOME_MULT       = {};                 // none this age
+const PERS_WAGE_MULT         = {};                 // none this age
+const PERS_BANK_PROD_MULT    = { artisan: 1.25 };  // +25% Building Production (Banks)
+const PERS_HONOR_MULT        = { 'war hero': 2 };  // +100% Honor Effects
+
+// Race WAR DOCTRINE effects that the economy model applies itself. Doctrines
+// are kingdom-wide and active only AT WAR; strength scales with the kingdom's
+// same-race province count (WAR_DOCTRINES / _wdStrength). Unlike OME/DME there
+// is nothing to double-count here — wages are computed by this tool, not read
+// off the API — so a doctrine wage cut has to be applied or it is simply
+// missing. Matched by the doctrine effect's label.
+//   Age 116: Avian "up to −12.5% Military Wage Cost to you and your kingdom".
+const WD_ECON_WAGE_LABEL = 'Military Wage';
 // Honor income % by title (cumulative; War Hero's +100% Honor Effects doubles it)
 const HONOR_INCOME_PCT = {
   peasant: 0, knight: 2, lady: 2, lord: 4, 'noble lady': 4,
