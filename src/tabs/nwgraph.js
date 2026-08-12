@@ -312,10 +312,23 @@ async function _loadAndRenderNwGraph() {
   }
 
   try {
-    const [docsA, docsB] = await Promise.all([
+    const [resA, resB] = await Promise.all([
       fbQueryNWHistory(S.nwLocA, fromTs, toTs),
       fbQueryNWHistory(S.nwLocB, fromTs, toTs),
     ]);
+
+    // null means the READ failed (quota, network, missing index) — not that the
+    // history is gone. Reporting it as "no data" sent us hunting for deleted
+    // documents that were sitting in Firestore the whole time.
+    if (!resA && !resB) {
+      area.innerHTML = `<div style="color:#e09040;font-family:monospace;font-size:19px;padding:30px 0;text-align:center">
+        // Could not read NW history.<br>
+        <span style="font-size:17px;color:#7a9090">${esc(S.fbLastError || 'Firestore query failed')}<br>
+        The stored history is untouched — this is a read failure, not missing data.</span>
+      </div>`;
+      return;
+    }
+    const docsA = resA || [], docsB = resB || [];
 
     // Popspace view: also load own war-tick snapshots (precise capacity +
     // current pop) when one of the graphed KDs is our own kingdom or the

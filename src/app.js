@@ -552,10 +552,18 @@ window.__wpA = {
     const fromTs = toTs - 90 * 24 * 3_600_000;
 
     try {
-      const [docsA, docsB] = await Promise.all([
+      const [resA, resB] = await Promise.all([
         fbQueryNWHistory(S.nwLocA, fromTs, toTs),
         fbQueryNWHistory(S.nwLocB, fromTs, toTs),
       ]);
+      // null = failed read, not an absence of wars — say so instead of
+      // reporting "no mutual war found" off a query that never ran.
+      if (!resA || !resB) {
+        if (area) area.innerHTML = `<div style="color:#e09040;font-family:monospace;font-size:19px;padding:20px 0;text-align:center">
+          Could not read NW history — ${esc(S.fbLastError || 'Firestore query failed')}</div>`;
+        return;
+      }
+      const docsA = resA, docsB = resB;
 
       // Round each snapshot to its hourId so A and B snapshots align even if
       // storedAt differs by a few seconds within the same batch write.

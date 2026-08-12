@@ -79,6 +79,10 @@ const S = {
   drgRange:  'all',    // Dragon board time filter: 'all' | 'c<N>' (campaign index) | 'custom'
   drgFrom:   '',       // custom range start, YYYY-MM-DD ('' = open-ended)
   drgTo:     '',       // custom range end,   YYYY-MM-DD ('' = open-ended)
+  drgHave:   null,     // Set of event ids known to be mirrored into Firestore — session cache so the 2-min sync does not re-read the whole collection (quota)
+  drgHaveKd: '',       // kingdom the drgHave cache belongs to
+
+  fbLastError: '',         // last Firestore read failure, e.g. quota exhausted — surfaced by the tabs that read it
 
   oldisEcon: {},           // exact wage rates from the OLD IS board, {[loc]: {provs: {[slot]: {wagePct, ...}}, updatedAt}} — meta/oldis_econ_{loc}, written by scripts/oldis-collector.js
 

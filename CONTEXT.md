@@ -44,6 +44,15 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   math -- not even Orc's OME.
 - Firestore access is plain REST (`src/firebase.js`): `fbWrite`, `fbGet`, `fbQuery`, `fbDelete`.
   Project `utopia-leaderboard`, rules wide open, docs keyed by `kdId` = own location with `:` â†’ `_`.
+- **`fbQuery`/`fbQueryNWHistory` return `null` when the READ FAILED and `[]` only
+  when the collection is genuinely empty. Never conflate them** -- a caller that
+  treats a failed read as "empty" will re-write everything it thinks is missing
+  or report an absence that is not real. Both burned a whole day of Firestore
+  quota once (see the 2026-08-12 session). `S.fbLastError` carries the reason.
+- **The project is on the Firestore Spark free tier: 50k document reads, 20k
+  writes, 20k deletes per DAY, resetting at midnight US Pacific.** Anything on
+  the 2-minute `syncBackend` timer must not read a whole collection -- 765 docs
+  a cycle is 23k reads an hour. Cache what you can per session.
 - Thresholds, webhook, API endpoint/key persist inside the war plan JSON (`warplan/{kdId}`) â€”
   new threshold keys must be added in three places: `state.js` defaults, the merge in
   `__wpA.init()` (app.js), and the reset object in `__wpA.clearPlan()` (app.js).
@@ -52,7 +61,86 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`,
   `sot.plague` (a real boolean, present on every SoT — verified 2026-08-12).
 
-## Recent work (2026-08-12, latest) -- Economy: race/pers, doctrine, plague, dragons
+## Recent work (2026-08-12, latest) -- NW graph "no data": Firestore quota blowout
+
+Leader report: "the nw graph stopped working -- NW gives the answer no data,
+popspace looks like all old data is gone."
+
+**Nothing was deleted. Firestore was refusing to serve reads.** A bare curl
+against `kd_nw_history` answered `429 RESOURCE_EXHAUSTED "Quota exceeded."`, and
+the hourly GitHub Action had been dying on the same thing since 2026-08-11:
+`[snapshot] Fatal error: batchWrite failed: 429`. Run history tells the story --
+17/17 green on 08-10, then 11 failures on 08-11 and 3 more on 08-12, each block
+ending right after **midnight US Pacific**, which is when the Spark free tier
+resets (50k document reads, 20k writes, 20k deletes per day).
+
+**Root cause -- a two-stage runaway, both stages ours:**
+1. **`dragonPull()` runs on the 2-minute `syncBackend` timer and read the ENTIRE
+   `dragon_events` collection every cycle** to build the "already mirrored" id
+   set. After the backfill that collection is 765+ docs: 765 x 30/h = **~23k
+   document reads per hour**, so a leader with the tool open exhausts a 50k
+   DAILY read quota in about two hours.
+2. Once reads 429, **`fbQuery` returned `[]` on failure** -- indistinguishable
+   from "collection is empty". `have` came back empty, every event looked
+   missing, and the pull **re-wrote all 765 docs every two minutes** (~23k
+   writes/hour against a 20k/day cap). That is what killed the snapshot
+   Action's `batchWrite`, and with `kd_nw_history` unreadable the NW graph
+   printed its "No data found for this period" message -- pointing at deleted
+   documents that were sitting in Firestore untouched the whole time.
+
+**The `[]`-on-error contract was the real defect** and it had teeth well beyond
+the graph: `_drgSlayLaggards()` documents that it returns null rather than
+"accuse the whole kingdom off a broken read", but it only guarded against a
+THROW -- on a 429 it got `[]`, concluded nobody had slayed, and would have
+posted the entire roster to Discord as slackers. `_postWarSummary` would have
+reported a war of zero ops for everyone.
+
+**Fixes (node-tested + harness-verified, minified build done):**
+- **`fbQuery` / `fbQueryNWHistory` now return `null` on failure and `[]` only
+  when the collection really is empty**, via a shared `_fbRunQuery(body, what)`
+  in firebase.js that logs the status and records `S.fbLastError` (with the
+  "resets at midnight US Pacific" hint on a 429). **Every caller was updated to
+  treat null as "unknown", never "empty"** -- dragonPull, `_drgSlayLaggards`,
+  the dragon board, ops leaderboard, `backfillOpDates`, kddb (both queries),
+  `_postWarSummary`, the NW graph and `nwFindWar`.
+- **`dragonPull` caches the mirrored id set for the session** (`S.drgHave` /
+  `S.drgHaveKd`). Firestore is consulted only on the first pull or when the
+  backend actually reports an id the cache has not seen, so **a quiet 2-minute
+  cycle now costs ZERO reads** instead of 765. Ids enter the cache only when
+  their write SUCCEEDED (checked per doc), and the mirror loop **breaks on the
+  first failed write** instead of hammering a dead quota.
+- A failed read aborts mirroring outright -- the write amplification cannot
+  recur even if some future path drops the cache.
+- **NW graph now names the failure**: "Could not read NW history -- Firestore
+  read failed (HTTP 429) ... The stored history is untouched -- this is a read
+  failure, not missing data." Same for Find War, the leaderboards and kddb.
+- `fbQuery(collection)` with no filters was sending an empty `compositeFilter`
+  (kddb's `kd_identities` list); the where clause is now omitted entirely.
+
+**Verified.** 19-assertion node test (vm-loads state/firebase/dragon straight
+from src): 429 and network errors both yield null while a genuinely empty result
+yields `[]`; first pull = 1 query + 2 writes; **repeat pull = 0 queries, 0
+writes**; a newly appearing event costs exactly 1 query and 1 write; a failed
+read writes NOTHING and leaves the cache unset; laggards return null instead of
+the whole roster. Harness: Total NW unchanged (2 polylines, 25 snapshots, same
+cards), Popspace unchanged (4 polylines / 2 dashed, "live - own 23/23 - eny
+22/22"), all 12 tabs render, no console errors. With `:runQuery` forced to 429
+the graph, both leaderboard sections and kddb each show their own read-failure
+message instead of an empty view.
+
+**Note for whoever reads this next:** the quota is a DAILY bucket, so the graph
+stays empty until the next midnight US Pacific (09:00 CEST) even with the fix
+deployed. **NOT COMMITTED / NOT PUSHED at time of writing** -- the bookmarklet
+is served from GitHub Pages, so nothing changes for the leader until dist/app.js
+is pushed.
+
+**Still open:** `renderDragonBoard` still reads the whole `dragon_events`
+collection on every open (fine at ~765 docs and manual, but it grows every age);
+bounding it to the selected campaign would need a composite index. Nothing warns
+when reads are running hot -- a per-session read counter would have made this
+obvious in minutes.
+
+## Recent work (2026-08-12) -- Economy: race/pers, doctrine, plague, dragons
 
 Leader ask: "add person and race modifiers to the economy tab". Scope chosen
 (all three): show them per province, model the war-doctrine race effects, and

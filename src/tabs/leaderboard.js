@@ -133,6 +133,7 @@ async function renderLeaderboard() {
   try {
     const kdId = S.own?.location.replace(':', '_');
     const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
+    if (!allOps) throw new Error(S.fbLastError || 'Firestore read failed'); // null ≠ no ops
     if (!allOps.length) {
       el.innerHTML = _drgSectionSwitch() + `<div style="color:#7a9090;font-family:monospace;font-size:19px;padding:20px 0">
         // No op data yet — data accumulates automatically as players use the tool during war.
@@ -501,6 +502,7 @@ async function backfillOpDates() {
   if (!kdId) return;
   try {
     const ops = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
+    if (!ops) { console.warn('[WavePlanner] Backfill skipped —', S.fbLastError); return; }
     const needsFill = ops.filter(op => !op.utoYear && op.utoDate);
     if (!needsFill.length) {
       console.log('[WavePlanner] Backfill: all ops already have date fields');

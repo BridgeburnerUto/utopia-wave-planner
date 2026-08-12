@@ -448,6 +448,9 @@ async function _postWarSummary(webhookUrl) {
 
     // Fetch all ops for this KD from Firebase
     const allOps = await fbQuery('ops', [{ field: 'kingdomId', value: kdId }]);
+    // null = failed read. Posting a war summary built from it would report the
+    // whole war as zero ops for everyone.
+    if (!allOps) { console.warn('[WavePlanner] war summary skipped —', S.fbLastError); return; }
 
     // Filter to the war period if we could detect one
     let warOps = allOps;

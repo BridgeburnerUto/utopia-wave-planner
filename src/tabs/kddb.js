@@ -40,6 +40,7 @@ function _kddbSnapKey(age, location) {
 
 async function _kddbLoadAll() {
   const docs = await fbQuery('kd_identities');
+  if (!docs) throw new Error(S.fbLastError || 'Firestore read failed'); // null ≠ no identities
   _kddbIdentities = docs;
   _kddbLoaded = true;
 }
@@ -249,6 +250,11 @@ async function _kddbOpenTagView() {
   if (!age) { alert('Set the current age first (e.g. a114)'); return; }
   $id('__wpc_kddb').innerHTML = loadingHTML('LOADING UNTAGGED...');
   const docs = await fbQuery('kd_snapshots', [{ field: 'age', value: age }]);
+  if (!docs) {
+    $id('__wpc_kddb').innerHTML = `<div style="color:#e09040;font-family:monospace;font-size:19px;padding:20px 0">
+      Could not load snapshots: ${esc(S.fbLastError || 'Firestore read failed')}</div>`;
+    return;
+  }
   _kddbTagData = docs
     .filter(d => !d.identityId)
     .map(d => ({ ...d, matches: _kddbScore(d.provinces || []) }));
@@ -301,7 +307,15 @@ function _kddbBuildIdRows() {
 async function renderKddb() {
   if (!_kddbLoaded) {
     $id('__wpc_kddb').innerHTML = loadingHTML('LOADING DATABASE...');
-    await _kddbLoadAll();
+    try {
+      await _kddbLoadAll();
+    } catch (e) {
+      // A failed read must not render as an empty database — the tab would
+      // invite re-tagging kingdoms that are already in there.
+      $id('__wpc_kddb').innerHTML = `<div style="color:#e09040;font-family:monospace;font-size:19px;padding:20px 0">
+        Could not load the kingdom database: ${esc(e.message)}</div>`;
+      return;
+    }
   }
   renderTab('__wpc_kddb', _kddbView === 'tag' ? _buildTagView : _buildMainView);
 }

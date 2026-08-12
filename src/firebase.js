@@ -52,10 +52,34 @@ async function fbGet(path) {
 }
 
 /**
- * Query a collection with simple field filters.
- * filters: [{field, op, value}] — op defaults to 'EQUAL', value must be a string.
- * Returns array of plain JS objects (fields unwrapped from Firestore format).
+ * Run a structuredQuery and unwrap the documents.
+ * Returns an array on success, **null** on failure — the two must never be
+ * confused. Returning [] for a failed read once cost us the whole Firestore
+ * daily quota: dragonPull read [] instead of the 765 events it already had,
+ * concluded every event was missing and re-wrote the entire collection every
+ * two minutes. Callers must treat null as "unknown", never as "empty".
  */
+async function _fbRunQuery(body, what) {
+  const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(e => { console.warn(`[WavePlanner] ${what} query network error:`, e.message); return null; });
+  if (!r) return null;
+  if (!r.ok) {
+    const hint = r.status === 429 ? ' — Firestore daily free quota exhausted, resets at midnight US Pacific' : '';
+    console.error(`[WavePlanner] ${what} query failed: HTTP ${r.status}${hint}`);
+    S.fbLastError = `Firestore read failed (HTTP ${r.status})${hint}`;
+    return null;
+  }
+  const data = await r.json().catch(() => null);
+  if (!data) return null;
+  return (data || [])
+    .filter(d => d.document)
+    .map(d => Object.fromEntries(Object.entries(d.document.fields || {}).map(([k, v]) => [k, _fromFB(v)])));
+}
+
 /** Delete a document at path */
 async function fbDelete(path) {
   const r = await fetch(_fbUrl(path), { method: 'DELETE' }).catch(() => null);
@@ -65,10 +89,10 @@ async function fbDelete(path) {
 /**
  * Query kd_nw_history for a specific location within a storedAt time range.
  * Requires a composite index on (loc ASC, storedAt ASC) in Firestore.
- * Returns array of plain JS objects sorted ascending by storedAt.
+ * Returns array of plain JS objects sorted ascending by storedAt, or null when
+ * the read itself failed (see _fbRunQuery — null is NOT "no history").
  */
 async function fbQueryNWHistory(loc, fromTs, toTs) {
-  const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
   const body = {
     structuredQuery: {
       from: [{ collectionId: 'kd_nw_history' }],
@@ -104,20 +128,15 @@ async function fbQueryNWHistory(loc, fromTs, toTs) {
       limit: 500,
     },
   };
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (!r || !r.ok) return [];
-  const data = await r.json();
-  return (data || [])
-    .filter(d => d.document)
-    .map(d => Object.fromEntries(Object.entries(d.document.fields || {}).map(([k, v]) => [k, _fromFB(v)])));
+  return _fbRunQuery(body, `kd_nw_history ${loc}`);
 }
 
+/**
+ * Query a collection with simple field filters.
+ * filters: [{field, op, value}] — op defaults to 'EQUAL', value must be a string.
+ * Returns array of plain JS objects, or null when the read failed.
+ */
 async function fbQuery(collection, filters = []) {
-  const url = `${CFG.FB_BASE}:runQuery?key=${CFG.FB_API_KEY}`;
   const where = filters.map(f => ({
     fieldFilter: {
       field: { fieldPath: f.field },
@@ -132,14 +151,6 @@ async function fbQuery(collection, filters = []) {
       limit: 2000,
     },
   };
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (!r || !r.ok) return [];
-  const data = await r.json();
-  return (data || [])
-    .filter(d => d.document)
-    .map(d => Object.fromEntries(Object.entries(d.document.fields || {}).map(([k, v]) => [k, _fromFB(v)])));
+  if (!filters.length) delete body.structuredQuery.where;
+  return _fbRunQuery(body, collection);
 }

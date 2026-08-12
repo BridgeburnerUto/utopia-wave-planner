@@ -293,6 +293,9 @@ async function _drgSlayLaggards() {
     console.warn('[WavePlanner] dragon laggard query failed:', e.message);
     return null;
   }
+  // A failed read returns null, not []. Treating [] as "nobody slayed" would
+  // post the ENTIRE roster to Discord as slackers off a quota error.
+  if (!events) { console.warn('[WavePlanner] dragon laggard query failed:', S.fbLastError); return null; }
 
   // Only the CURRENT dragon counts. The store holds the whole age, and someone
   // who slayed a dragon three weeks ago has done nothing about the one on us
@@ -352,18 +355,31 @@ async function dragonPull(quiet) {
     const events = data?.events || [];
     if (!events.length) { say('Backend has no dragon events yet.', '#ffaa00'); return { ok: true, added: 0, total: 0 }; }
 
-    // Only write what Firestore does not already have — one query beats N reads.
-    const have = new Set((await fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]))
-      .map(d => d.evId).filter(Boolean));
+    // Only write what Firestore does not already have. The id set is cached for
+    // the session: this runs on the 2-minute sync timer, and re-reading a whole
+    // age of events (765+ docs) every cycle is ~23k document reads an hour —
+    // the free tier allows 50k a DAY. With the cache a quiet cycle costs zero
+    // reads, and Firestore is only consulted when the backend has ids we have
+    // not seen yet.
+    let have = S.drgHaveKd === kdId ? S.drgHave : null;
+    if (!have || events.some(e => e.id && !have.has(e.id))) {
+      const docs = await fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]);
+      // null = the read FAILED (quota, network). Mirroring against a failed read
+      // would treat every event as missing and re-write the entire collection.
+      if (!docs) { say('Could not read the event store — skipped mirroring.', '#ffaa00'); return { ok: false, error: 'firestore read failed' }; }
+      have = new Set(docs.map(d => d.evId).filter(Boolean));
+      S.drgHave = have; S.drgHaveKd = kdId;
+    }
 
     const missing = events.filter(e => e.id && !have.has(e.id));
 
     // Written in parallel batches: a backfill of a whole age is hundreds of
     // events, and one-at-a-time would stall the sync timer for minutes.
     const BATCH = 10;
-    let added = 0;
+    let added = 0, failed = 0;
     for (let i = 0; i < missing.length; i += BATCH) {
-      await Promise.all(missing.slice(i, i + BATCH).map(e => {
+      const slice = missing.slice(i, i + BATCH);
+      const res = await Promise.all(slice.map(e => {
         const prov = _drgProv(e.prov);
         return fbWrite(`dragon_events/${kdId}_${e.id.replace(/[^A-Za-z0-9_]/g, '')}`, {
           kdId,
@@ -381,9 +397,14 @@ async function dragonPull(quiet) {
           storedAt: Date.now(),
         });
       }));
-      added += Math.min(BATCH, missing.length - i);
+      // Only a written event goes into the cache — caching a failed write would
+      // hide it until the next reload, and caching nothing would re-write it
+      // every two minutes.
+      slice.forEach((e, k) => { if (res[k] && !res[k].error) { have.add(e.id); added++; } else failed++; });
       if (!quiet) say(`Mirroring ${added}/${missing.length}…`);
+      if (failed) break; // writes are failing (quota?) — stop hammering
     }
+    if (failed) { say(`Mirrored ${added}, then writes failed — stopped.`, '#ffaa00'); return { ok: false, added, error: 'write failed' }; }
     say(added ? `Pulled ${added} new event${added === 1 ? '' : 's'}.` : 'Up to date.', '#00ff88');
     return { ok: true, added, total: events.length };
   } catch (e) {
@@ -481,10 +502,14 @@ async function renderDragonBoard(el) {
   let events = [], checks = [];
   try {
     const kdId = _drgKdId();
-    [events, checks] = await Promise.all([
+    const [ev, ch] = await Promise.all([
       fbQuery('dragon_events', [{ field: 'kdId', value: kdId }]),
       fbQuery('dragon_check',  [{ field: 'kdId', value: kdId }]),
     ]);
+    // null = read failed. An empty board would read as "nobody contributed",
+    // which is a very different message from "we could not look".
+    if (!ev) throw new Error(S.fbLastError || 'Firestore read failed');
+    events = ev; checks = ch || [];
   } catch (e) {
     el.innerHTML = _drgSectionSwitch()
       + `<div style="color:#ff4455;font-family:monospace;font-size:19px;padding:20px 0">Error loading dragon data: ${esc(e.message)}</div>`
