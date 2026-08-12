@@ -86,6 +86,7 @@ const S = {
   drgMirrorKd:   '',   // kingdom the mirror mark belongs to
   drgMarkWroteAt: 0,   // last time the mark DOC was persisted — throttled, the in-memory window advances every pull
   _nwCleanedAt:  0,    // last nw_snapshots cleanup sweep (runs from init; without this it re-read the collection every load)
+  nwLegacyDrained: false, // meta/nw_cleanup.legacyDrained — set by the snapshot Action once kd_nw_history is empty; the NW graph then stops querying it entirely
 
   fbLastError: '',         // last Firestore read failure, e.g. quota exhausted — surfaced by the tabs that read it
 

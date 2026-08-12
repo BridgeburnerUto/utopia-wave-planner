@@ -166,9 +166,14 @@ async function fbDelete(path) {
  * (null is NOT "no history" — see _fbRunQuery).
  */
 async function fbQueryNWHistory(loc, fromTs, toTs) {
+  // The legacy half retires itself: the snapshot Action sets legacyDrained on
+  // meta/nw_cleanup once kd_nw_history is genuinely empty, which happens when
+  // the age rolls over and the cleanup deletes the last of it. Until then it
+  // still holds this age's history and must be merged in. Skipping it halves
+  // the graph's queries, and needs no code change to take effect.
   const [chunks, legacy] = await Promise.all([
     _fbQueryNWChunks(loc, fromTs, toTs),
-    _fbQueryNWLegacy(loc, fromTs, toTs),
+    S.nwLegacyDrained ? Promise.resolve([]) : _fbQueryNWLegacy(loc, fromTs, toTs),
   ]);
   if (chunks === null && legacy === null) return null;   // both failed
   const rows = [...(chunks || []), ...(legacy || [])];

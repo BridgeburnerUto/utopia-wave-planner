@@ -189,10 +189,29 @@ errors. Re-verified on the minified build (344.9 KB).
 Harness gained `mockNwChunks` + a map-capable `fbVal`, so the chunked shape is
 exercised offline alongside the legacy one.
 
-**Still open:** the legacy `kd_nw_history` read is still made on every graph load
-until that collection drains at the next age rollover -- delete `_fbQueryNWLegacy`
-and its call site then. `dragon_events` is still never pruned (bounded by age, so
-harmless for cost). The Action has NOT run under the new code yet -- **watch the
+**The legacy read RETIRES ITSELF -- no future code change needed.** Deleting
+`_fbQueryNWLegacy` now would have thrown away the whole current age: the cleanup
+only removes docs from BEFORE `ageStartDate`, so `kd_nw_history` still holds
+every hour since 2026-07-26 and will not empty until the age rolls over. Instead:
+- The snapshot Action probes the collection after each cleanup
+  (`fbCountRemaining`, one read, asks for a single doc rather than counting) and
+  writes **`legacyDrained: true` onto `meta/nw_cleanup`** when it is genuinely
+  empty. `updateMask` is set on that write -- without it a batchWrite `update`
+  REPLACES the document and would wipe `ageStartDate`, which the cleanup itself
+  depends on.
+- The client already fetches `meta/nw_cleanup` at init, so it picks the flag up
+  for **zero extra reads** (`S.nwLegacyDrained`), and `fbQueryNWHistory` then
+  skips the legacy half entirely -- halving the graph's queries.
+- **A failed probe returns null, not 0**, and only `=== 0` flags. A transient
+  error can never retire a collection that still holds history.
+- Harness: **`?drained=1`** replays the post-rollover state (otherwise
+  unreachable outside an age boundary). Verified both ways -- flag off: 4
+  queries, 68 docs, old+new merged; flag on: 2 queries, 18 docs, same 2
+  polylines and identical cards.
+
+**Still open:** `dragon_events` is never pruned (bounded by age, so harmless for
+cost). `_fbQueryNWLegacy` itself can be deleted for real once the flag has been
+true for an age. The Action has NOT run under the new code yet -- **watch the
 first 00:05 UTC run**, it is the one that does the full sweep.
 
 ## Recent work (2026-08-12) -- Leaderboard quota: caching, bounds, a meter

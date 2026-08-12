@@ -242,10 +242,15 @@ window.__wpA = {
       renderPlayer();
       this.setRole('leader');
 
-      // Load age start date from Firestore (authoritative source for GitHub Actions)
+      // Load age start date from Firestore (authoritative source for GitHub Actions).
+      // The same document carries legacyDrained — set by the snapshot Action once
+      // kd_nw_history is genuinely empty, which lets the NW graph stop querying
+      // it (see fbQueryNWHistory). Riding on a doc we already fetch means acting
+      // on it costs no extra read.
       fbGet('meta/nw_cleanup').then(doc => {
         const ts = doc?.fields?.ageStartDate ? parseInt(doc.fields.ageStartDate.integerValue || 0) : 0;
         if (ts > S.ageStartDate) S.ageStartDate = ts; // Firestore wins if newer
+        S.nwLegacyDrained = doc?.fields?.legacyDrained?.booleanValue === true;
       }).catch(() => {});
 
       // Discord alert check — only fires on state changes

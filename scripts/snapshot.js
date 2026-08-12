@@ -181,6 +181,26 @@ async function fbBatchWrite(writes) {
   return r.json();
 }
 
+/**
+ * Is there anything at all left in a collection?
+ * Asks for a single document rather than counting — one read, and the only
+ * question that matters is "empty or not".
+ * Returns 0, 1 (meaning "at least one"), or null when the check itself failed —
+ * null must NOT be treated as empty, or the client would stop reading a
+ * collection that still holds history.
+ */
+async function fbCountRemaining(collection) {
+  const headers = await _authHeaders();
+  const r = await fetch(`${FB_BASE}:runQuery`, {
+    method:  'POST',
+    headers,
+    body:    JSON.stringify({ structuredQuery: { from: [{ collectionId: collection }], limit: 1 } }),
+  });
+  if (!r.ok) return null;
+  const data = await r.json();
+  return (data || []).filter(d => d.document).length;
+}
+
 async function fbQueryOldDocs(cutoffTs, collection) {
   const headers = await _authHeaders();
   const body = {
@@ -317,6 +337,36 @@ async function main() {
       console.log(`[snapshot] Cleanup complete — ${totalDeleted} docs deleted`);
     } else {
       console.log(`[snapshot] Cleanup: no old docs found`);
+    }
+
+    // ── Retire the legacy collection when it is genuinely empty ─────────────
+    // The client reads BOTH kd_nw_chunks and the legacy kd_nw_history and
+    // merges them, so history written before the chunked scheme is not lost.
+    // That second query should stop happening once there is nothing left to
+    // find — but only the writer can safely decide that, and only by looking.
+    //
+    // kd_nw_history holds the CURRENT age until the age rolls over and this
+    // cleanup deletes it, so the flag flips on its own at rollover and needs no
+    // code change. It is published on meta/nw_cleanup, a document the client
+    // already fetches at init, so acting on it costs no extra read.
+    const alreadyDrained = cleanupDoc?.fields?.legacyDrained?.booleanValue === true;
+    if (alreadyDrained) {
+      console.log('[snapshot] Legacy kd_nw_history already drained — client skips it');
+    } else {
+      const remaining = await fbCountRemaining('kd_nw_history');
+      if (remaining === 0) {
+        await fbBatchWrite([{
+          update: {
+            name:   `${FB_DOC_ROOT}/meta/nw_cleanup`,
+            fields: { legacyDrained: _toFB(true), legacyDrainedAt: _toFB(now) },
+          },
+          updateMask: { fieldPaths: ['legacyDrained', 'legacyDrainedAt'] },
+        }]);
+        console.log('[snapshot] Legacy kd_nw_history is empty — flagged drained, ' +
+                    'the client will stop querying it (halves NW graph reads)');
+      } else {
+        console.log(`[snapshot] Legacy kd_nw_history still holds data — client keeps merging it`);
+      }
     }
   } else {
     console.log(`[snapshot] Cleanup: ageStartDate not set, skipping`);
