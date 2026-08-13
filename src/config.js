@@ -229,6 +229,10 @@ const DRAGON_ECON = {
 // som.dme/ome, "no population growth" and "−10% prisoners each tick" change
 // future ticks rather than this tick's income (sot.peasants/prisoners are
 // already the current counts).
+// APPLIED TO OUR OWN KINGDOM ONLY (economy.js `ctx.plague`) — `sot.plague` is a
+// snapshot boolean with no timer, and plague is usually cured on the spot with
+// Nature's Blessing, so on a hours- or days-old enemy SoT it would show income
+// permanently lower than it really is.
 const PLAGUE_INCOME_MULT = 0.85;
 // Races immune to the plague's EFFECTS. Age 116: Undead has Plague Immunity and
 // "always carries Plague" — so an Undead province reads as plagued on every SoT

@@ -22,6 +22,14 @@
 //
 // Plague costs −15% income (PLAGUE_INCOME_MULT) and is flagged 🦠, except on
 // races immune to it — Undead carries plague permanently and takes no hit.
+// MODELLED ON OUR OWN KINGDOM ONLY (leader decision 2026-08-13): `sot.plague`
+// is a plain snapshot boolean with no timer, so it stays "on" until a NEWER SoT
+// says otherwise — and most provinces cure it immediately with Nature's
+// Blessing. On the enemy, where SoTs are hours or days old, that reads as a
+// permanent −15% and would have us plan against an income lower than they
+// actually have. Own provinces are re-SoT'd every tick, so there the flag is
+// current and the hit is real. `ctx.plague` carries the decision; a ctx without
+// it means no plague term, so a future caller is safe by default.
 // A dragon on the kingdom applies its DRAGON_ECON term (Age 116: Ruby +20%
 // wages, Topaz −25% income) to every province in that kingdom.
 // Provinces without a survey are estimated acres-only (banks/armouries/homes
@@ -130,9 +138,11 @@ function _dragonEcon(kd) {
 }
 
 /** Kingdom-level context every province row in that kingdom shares.
- *  `kd` is the kingdom object (S.own / S.enemy) — needed for kdEffects. */
-function _econKdCtx(provinces, kd) {
-  return { wdWageCut: _wdEconWageCut(provinces), dragon: _dragonEcon(kd) };
+ *  `kd` is the kingdom object (S.own / S.enemy) — needed for kdEffects.
+ *  `own` = this is OUR kingdom, the only one whose SoTs are fresh enough to
+ *  trust a plague flag on (see the plague note in the file header). */
+function _econKdCtx(provinces, kd, own) {
+  return { wdWageCut: _wdEconWageCut(provinces), dragon: _dragonEcon(kd), plague: !!own };
 }
 
 /**
@@ -224,7 +234,9 @@ function _provEconomy(prov, loc, ctx) {
   honor *= (PERS_HONOR_MULT[pers] || 1);  // War Hero: +100% Honor Effects
 
   // Plague costs income unless the race is immune (Undead carries it always).
-  const plague       = !!sot.plague;
+  // Only modelled where the SoT is fresh enough to mean anything — our own
+  // kingdom (`ctx.plague`); on the enemy a stale flag would understate income.
+  const plague       = !!sot.plague && !!ctx?.plague;
   const plagueImmune = !!RACE_PLAGUE_IMMUNE[race];
   const plagueMult   = (plague && !plagueImmune) ? PLAGUE_INCOME_MULT : 1;
 
@@ -288,8 +300,8 @@ function _provEconomy(prov, loc, ctx) {
 
 /** KD totals — provinces without computable economy are skipped (nSkipped).
  *  `ctx` is derived from the same province list when not supplied. */
-function _kdEconomy(provinces, loc, ctx, kd) {
-  const c = ctx || _econKdCtx(provinces, kd);
+function _kdEconomy(provinces, loc, ctx, kd, own) {
+  const c = ctx || _econKdCtx(provinces, kd, own);
   const t = { gross: 0, wages: 0, net: 0, nEst: 0, n: 0, nSkipped: 0, wdWageCut: c.wdWageCut };
   for (const p of provinces || []) {
     const e = _provEconomy(p, loc, c);
@@ -314,17 +326,17 @@ function renderEconBadges() {
       <div class="v" style="color:${color};font-family:monospace">${fK(tot.net)}/t${estMark}</div>
     </div>`;
   };
-  el.innerHTML = mk('Own Net', _kdEconomy(S.own?.provinces, S.own?.location, null, S.own), '#60C040')
-               + mk('Eny Net', _kdEconomy(S.enemy?.provinces, S.eLoc, null, S.enemy), '#ffd400');
+  el.innerHTML = mk('Own Net', _kdEconomy(S.own?.provinces, S.own?.location, null, S.own, true), '#60C040')
+               + mk('Eny Net', _kdEconomy(S.enemy?.provinces, S.eLoc, null, S.enemy, false), '#ffd400');
 }
 
 // ── Tab render ───────────────────────────────────────────────────────────────
 
-function _econSection(title, provinces, accent, loc, kd) {
+function _econSection(title, provinces, accent, loc, kd, own) {
   if (!provinces?.length) {
     return `${sectionHead(title)}<div style="color:#7a9090;font-size:17px;font-style:italic;padding:6px 0 18px">No data loaded.</div>`;
   }
-  const ctx  = _econKdCtx(provinces, kd);
+  const ctx  = _econKdCtx(provinces, kd, own);
   const tot  = _kdEconomy(provinces, loc, ctx);
   const rows = provinces
     .map(p => ({ p, e: _provEconomy(p, loc, ctx) }))
@@ -341,7 +353,8 @@ function _econSection(title, provinces, accent, loc, kd) {
   ].filter(Boolean).join(' · ') || 'rates from Mil Advisor';
   // Plague is a status rather than a race/pers modifier, so it gets counted on
   // the Gross card instead of the Mods tally. Immune carriers (Undead) are
-  // called out separately — they show 🦠 but cost nothing.
+  // called out separately — they show 🦠 but cost nothing. Both counts are 0 on
+  // the enemy section, where plague is not modelled at all.
   const nPlague = rows.filter(r => r.e.plagueApplied).length;
   const nImmune = rows.filter(r => r.e.plague && r.e.plagueImmune).length;
   const plagueNote = (nPlague || nImmune) ? `<div class="s">`
@@ -461,13 +474,16 @@ function renderEconomy() {
       race/personality modifiers applied to that province, plus the kingdom-wide race war
       doctrine (⚔, at war only — Avian's military-wage cut this age). Dwarf's building
       efficiency and the science bonuses are already inside the reported BE and book effects,
-      so they are not applied again. 🦠 = plague, −15% income — except on Undead, which
-      carries plague permanently and is immune to it. 🐉 = a dragon on that kingdom
+      so they are not applied again. 🦠 = plague, −15% income, <b style="color:#8fa8a8">own
+      kingdom only</b> — an enemy SoT has no plague timer on it and most provinces cure
+      plague at once with Nature's Blessing, so an old flag would show their income lower
+      than it is (Undead carries plague permanently and is immune to it either way).
+      🐉 = a dragon on that kingdom
       (Ruby +20% wages, Topaz −25% income; the other three have no economy effect).
       Rituals and Incite Riots not modeled. ⚠ = no survey (banks/armouries as 0, est).
     </div>`
     + (isEnemy
-      ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400', S.eLoc, S.enemy)
-      : _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040', S.own?.location, S.own)));
+      ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400', S.eLoc, S.enemy, false)
+      : _econSection('OWN KINGDOM' + (S.own?.location ? ` (${S.own.location})` : ''), S.own?.provinces, '#60C040', S.own?.location, S.own, true)));
   renderEconBadges();
 }

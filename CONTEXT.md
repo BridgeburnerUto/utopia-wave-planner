@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-12 (latest).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-13 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -93,8 +93,56 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   `sot.runes`, `sot.peasants`, `sot.totalTroops`, `sot.thieves`, `sot.wizards`, `sot.offPoints`,
   `sot.defPoints`, `sot.opa`, `sot.dpa`, `sot.rTpa`, `sot.ruler`, `sot.personality`, `sot.badSpells`,
   `sot.plague` (a real boolean, present on every SoT — verified 2026-08-12).
+- **Nothing in the tool has a game TIMER.** Every state read off a SoT
+  (`sot.plague`, bad spells, the lot) is a SNAPSHOT: it goes on when a SoT says
+  so and comes off only when a NEWER SoT overwrites it -- `S.own`/`S.enemy` are
+  replaced wholesale from the IS on each refresh, nothing is merged or
+  remembered. So a short-lived condition on a stale enemy SoT reads as
+  permanent. **Before modelling any new status effect, ask how fast it is
+  normally cured against how old that side's SoTs are** (see the 2026-08-13
+  plague decision below).
 
-## Recent work (2026-08-12, latest) -- Write budget: chunked NW snapshots
+## Recent work (2026-08-13, latest) -- Plague: own kingdom only
+
+Leader: "I want to remove plague from the econ tab, many cure it right away
+casting nature's blessing, having it in will lure us thinking the enemy econ is
+lower than it actually is. We can keep it for own kd."
+
+**The reasoning, worth keeping:** `sot.plague` is a plain boolean with no timer
+attached (asked and answered this session -- the econ tab read it at face value
+on every render, and nothing anywhere tracks a duration). Own provinces are
+re-SoT'd constantly so the flag is current; enemy SoTs are hours to days old
+(the fixture has enemy SoTs `ageSeconds` ~4.2M, i.e. ~49 days), and since
+Nature's Blessing cures plague on the spot, a flag that old is far more likely
+stale than real. Left in, it docked every once-plagued enemy province 15% of its
+income forever and had us planning against a poorer enemy than exists.
+
+**What changed:** `_econKdCtx(provinces, kd, own)` gained a `plague` flag, and
+`_provEconomy` now reads `!!sot.plague && !!ctx?.plague`. Own section/badge pass
+`true`, enemy pass `false`. **A ctx without the flag means no plague term**, the
+same safe-by-default convention `wdWageCut` uses. With plague off, everything
+downstream follows for free: no −15%, no 🦠 chip, no row flag, no "N plagued"
+line on the Gross card. Undead immunity is untouched on our side. The tab
+footnote states the own-only rule and WHY, so its absence on the enemy view
+cannot read as a bug; the same note sits on `PLAGUE_INCOME_MULT` in config.js.
+
+Deliberately NOT done: showing 🦠 on the enemy as a display-only marker. It
+would invite exactly the misread the leader asked to remove, and the flag is
+stale by default anyway. Easy to add back (`ctx.plague` already separates
+"show" from "apply" cleanly) if intel value is wanted later.
+
+**Verified.** 24-assertion node test (vm-loads config/utils/economy from src):
+own ctx true / enemy false / omitted false; own plagued gross = clean x0.85 with
+wages untouched and the chip present; Undead immune chip and no hit; **enemy
+plagued gross == enemy clean gross == the old own-clean figure**, no chip, no
+flags, no immune chip; ctx omitted = no term; Human +30% and the ma wage source
+unmoved; KD totals differ by side. Harness (fixture patched with 3 own + 5 enemy
+plagued provinces, then RESTORED and the baseline re-confirmed): own net
+1.1M -> **1.0M** with "🦠 3 plagued" on the Gross card, enemy net **259k and
+gross 989k unchanged** with the only 🦠 on the page being the footnote's. All 12
+tabs render, no console errors. Minified build done (345.2 KB).
+
+## Recent work (2026-08-12) -- Write budget: chunked NW snapshots
 
 Leader ask after the read fixes below: "kör igång på alla besparingar vi kan
 göra" -- and, on the snapshot trade-off, "chunkade dokument, men går kanske att
