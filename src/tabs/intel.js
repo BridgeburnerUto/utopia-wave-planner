@@ -14,22 +14,40 @@
  * once the fetch completes.
  */
 function _ensureKdNewsLoaded() {
-  if (S._kdNewsCache !== null || S._kdNewsLoading) return;
-  if (!S.apiEndpoint) { S._kdNewsCache = false; return; } // no backend configured
-  S._kdNewsLoading = true;
-  fetchBackendNews().then(records => {
-    S._kdNewsLoading = false;
-    if (!records.length) { S._kdNewsCache = false; renderIntel(); return; }
+  _loadKdNews();
+}
+
+/**
+ * Promise-returning form of _ensureKdNewsLoaded, for callers that must have the
+ * news in hand before deciding something (the Discord war-end check — a verdict
+ * built on news that has not arrived yet is exactly the failure mode we are
+ * fixing). Shares the same cache and the same in-flight request, so calling
+ * both forms never fires a second fetch.
+ *
+ * Resolves to the records array, or [] when no backend is configured, the
+ * fetch failed, or there is simply no news stored yet.
+ */
+function _loadKdNews() {
+  if (Array.isArray(S._kdNewsCache)) return Promise.resolve(S._kdNewsCache);
+  if (S._kdNewsCache === false)      return Promise.resolve([]);
+  if (!S.apiEndpoint) { S._kdNewsCache = false; return Promise.resolve([]); } // no backend configured
+  if (!S._kdNewsPromise) {
+    S._kdNewsLoading = true;
     // Keep all cached editions (records are sorted newest-first by the
     // backend) — a single edition may not cover the full 72-tick lookback,
     // so stats are aggregated across every edition we have.
-    S._kdNewsCache = records;
-    renderIntel();
-  }).catch(() => {
-    S._kdNewsLoading = false;
-    S._kdNewsCache = false;
-    renderIntel();
-  });
+    S._kdNewsPromise = fetchBackendNews()
+      .then(records => (Array.isArray(records) ? records : []))
+      .catch(() => [])
+      .then(records => {
+        S._kdNewsLoading = false;
+        S._kdNewsPromise = null;
+        S._kdNewsCache   = records.length ? records : false;
+        renderIntel();
+        return records;
+      });
+  }
+  return S._kdNewsPromise;
 }
 
 /**

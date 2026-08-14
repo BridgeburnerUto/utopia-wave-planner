@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-13 (latest).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-14 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -102,7 +102,93 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   normally cured against how old that side's SoTs are** (see the 2026-08-13
   plague decision below).
 
-## Recent work (2026-08-13, latest) -- Plague: own kingdom only
+## Recent work (2026-08-14, latest) -- War summary fired mid-war: end detection rewritten
+
+Leader: "The tool sent out a summary of the war, before the war ended, I wonder
+what triggered that. Do we have a timer how long a war can be perhaps? The war
+lasted 6 real life days." Then, on the fix: "a kd will still be 'at war' for the
+end of war ceasefire (eowcf) so the decider have to be a news item saying the
+enemy has withdrawn, or taken from own sot which I think also shows we are in
+eowcf".
+
+**No timer exists anywhere** -- nothing in the tool times a war or caps its
+length. The summary was edge-triggered on `_atWar()` going true -> false, and
+what went false was the data, not the war.
+
+**Root cause, in layers:**
+- `_atWar()` ORs six sources, but on a live IS the only one that actually
+  reports war is the kingdomNews scan (`S.own.war` is never populated -- see the
+  2026-08-10 Popspace entry, same root cause).
+- **That scan sees ONE news edition, and an edition is one in-game month = 24
+  ticks ~ 1 real day.** In a 6-day war the "declared war" line is several
+  editions in the past, so the scan cannot see the war start. It then wrote
+  `false` -- an accidental timer whose length is the news window.
+- The peace matcher accepted the bare words `peace` / `ceasefire`, so a
+  ceasefire *offered* or *declined*, or one involving a third kingdom, ended the
+  war too.
+- `war_active` was written unconditionally even when the enemy failed to load,
+  while every enemy-dependent alert key is deliberately carried forward. One bad
+  refresh was enough to post.
+- **The deeper design error:** a kingdom stays at war through the EOWCF, so
+  "not at war" is the wrong question in both directions -- it goes false while
+  the war is still on (data gaps) and stays true after the fighting stops.
+
+**What changed -- the decider is now a positive war-END signal**, never an
+absence of war. New `_detectWarEnd(warLoc)` in discord.js, three sources in
+order: (1) `war_withdrawals` from the backend kingdom news -- the authoritative
+event, the same one `lbFindWar()` already uses, and it carries exact in-game
+dates for both ends of the war; (2) a withdrawal / surrender / ceasefire-
+*accepted* line in the IS news edition, for kingdoms with no scraper backend;
+(3) `_eowcfFromOwn()` -- the EOWCF flag on own kingdom data. It returns **null
+when it cannot tell**, and a declaration with no withdrawal after it returns
+null early rather than falling through to weaker sources.
+
+`_eowcfFromOwn()` probes `stance`, then named fields (`eowcf`, `ceasefire`,
+`kdEffects.*`, `relations.*`), then scans one level for any ceasefire-shaped
+key, **logging the field name it finds once** -- the IS payload does not
+document this, so the real name still needs pinning down from a live EOWCF.
+Only ever consulted when we already recorded a war, since an FCF outside a war
+would look identical.
+
+`war_active` is now an arming flag: true while at war, cleared only when a war
+end has been detected AND its summary posted. Silence keeps it armed. A failed
+webhook or a failed ops read keeps it armed and retries. `war_summary_key`
+(enemy + declaration date + end date) makes the post idempotent -- a withdrawal
+sits in the news cache for days and would otherwise re-post on every refresh.
+
+Also fixed on the way past:
+- `_refreshWarStatus` no longer forces `false` when it sees neither event (news
+  window rolled over = no information, not peace), skips future-dated lines from
+  a stale age, and shares the new `WAR_NEWS_START_RE` / `WAR_NEWS_END_RE`.
+- **`_getWarPeriod` never worked**: it parsed news lines with `_parseUtoDate`
+  ("July 2, YR1", the tick-name format) when news lines read "July 2 of YR1". It
+  returned null every time, so the summary said "Duration unknown" and
+  aggregated **the entire age's ops**. Now `_parseNewsDate` with the old parser
+  as fallback. Worth checking the mis-fired summary in Discord -- if it says
+  "Duration unknown", that is this bug.
+- `_loadKdNews()` (intel.js) is a promise-returning twin of
+  `_ensureKdNewsLoaded()` sharing one cache and one in-flight request, so the
+  war-end check can await the news instead of deciding without it.
+- The summary names the kingdom recorded at war start, not whoever is loaded
+  now, and its footer states which source detected the end.
+
+**Verified.** 27-assertion node harness (vm-loads config/state/utils/ritual/
+discord/intel/leaderboard from src, stubs fetch/Firestore): ceasefire offer does
+not end a war; a war survives its declaration ageing out of the news window;
+withdrawal does end it; stale future-dated lines ignored; no summary while a
+declaration has no withdrawal after it; **summary fires on withdrawal while
+stance is still war (the EOWCF case)**; ops after the war end excluded; no
+re-post on the same key; total silence posts nothing and stays armed; failed
+webhook and failed ops read both stay armed with no key written; EOWCF flag path
+fires; a ceasefire with no war behind it posts nothing; IS-news fallback works
+with no backend; `_getWarPeriod` now parses "of YR" dates. Minified build done
+(349.4 KB). **Not yet live-tested against a real war end.**
+
+Open item: ops rows carry only `utoYear`/`utoMonth`, so period filtering is
+month-granular -- ops from the war's final month that happened after the
+withdrawal are still counted. Needs a day field on ops to fix properly.
+
+## Recent work (2026-08-13) -- Plague: own kingdom only
 
 Leader: "I want to remove plague from the econ tab, many cure it right away
 casting nature's blessing, having it in will lure us thinking the enemy econ is

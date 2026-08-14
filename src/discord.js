@@ -187,24 +187,44 @@ async function checkAndSendDiscordAlerts() {
   }
 
   // ── War end detection → auto-post war summary ─────────────────────────────
-  // Track whether we were at war last check. When it flips true → false,
-  // compile and post a war summary embed before the state is overwritten.
-  // Also store which enemy KD triggered the war-active state so that an
-  // unrelated ceasefire (accepted from a KD we never actually fought) doesn't
-  // fire a summary against the wrong kingdom.
+  // NOT "at war went false". A kingdom stays at war through the end-of-war
+  // ceasefire (EOWCF), so that edge fires either hours late or — far worse —
+  // the moment any war signal goes quiet, which is how a summary got posted
+  // mid-war. The summary now waits for a POSITIVE end-of-war signal
+  // (_detectWarEnd: a withdrawal in the kingdom news, or the EOWCF flag).
+  //
+  // war_active is the arming flag: it goes true while we are at war and only
+  // clears once a war end has been detected AND its summary posted. Missing or
+  // stale data leaves it armed instead of ending the war by default.
   const curAtWar = _atWar();
-  next.war_active = curAtWar;
-  if (curAtWar && S.eLoc) next.war_eLoc = S.eLoc; // remember who the war is against
-  if (prev.war_active === true && !curAtWar) {
-    // Only post if the current enemy matches who we were at war with.
-    // If war_eLoc was never recorded (old state), allow it through for backwards compat.
-    const expectedLoc = prev.war_eLoc;
-    if (!expectedLoc || expectedLoc === S.eLoc) {
-      await _postWarSummary(webhookUrl);
+  const wasAtWar = prev.war_active === true;
+  // Who the war is against — the recorded enemy wins over the currently loaded
+  // one, so a summary can never be compiled against a kingdom we never fought.
+  const warLoc = prev.war_eLoc || (curAtWar ? S.eLoc : '');
+  next.war_eLoc        = (curAtWar && S.eLoc) ? S.eLoc : (prev.war_eLoc || '');
+  next.war_summary_key = prev.war_summary_key || '';
+
+  const warEnd = (wasAtWar || curAtWar) ? await _detectWarEnd(warLoc) : null;
+  let warHandled = !warEnd;  // nothing to settle while the war is still on
+
+  if (warEnd) {
+    // One summary per war, keyed on the war's own dates: a withdrawal event
+    // stays in the news cache for days, and re-posting on every refresh would
+    // be worse than posting late.
+    const key = `${warLoc}|${warEnd.declAbs || 0}|${warEnd.endAbs || 0}`;
+    if (!wasAtWar || prev.war_summary_key === key) {
+      warHandled = true;                      // never armed, or already summarised
+      if (wasAtWar) console.log('[WavePlanner] War end already summarised — skipping');
+    } else if (await _postWarSummary(webhookUrl, warEnd, warLoc)) {
+      next.war_summary_key = key;
+      warHandled = true;
     } else {
-      console.log(`[WavePlanner] War-end detected but enemy changed (${expectedLoc} → ${S.eLoc}) — skipping summary`);
+      console.warn('[WavePlanner] War summary post failed — staying armed, will retry next open');
     }
   }
+  // Only a handled war end disarms. Otherwise stay armed, even if every war
+  // signal has gone quiet (news window rolled over, enemy fetch failed).
+  next.war_active = (warEnd && warHandled) ? false : (curAtWar || wasAtWar);
 
   // ── Enemy failed invasions — critical counter-attack opportunity ───────
   // Does not require S.enemy, only the kd_news cache + own location.
@@ -434,24 +454,140 @@ async function checkAndSendDiscordAlerts() {
   if (sentCount < toSend.length) console.warn(`[WavePlanner] ${toSend.length - sentCount} alert(s) failed — will retry on next open`);
 }
 
-// ── War summary post ──────────────────────────────────────────────────────────
-// Called when war_active transitions true → false. Pulls ops from Firebase,
-// compiles per-player stats, and posts a single summary embed.
+// ── War end detection ─────────────────────────────────────────────────────────
 
-async function _postWarSummary(webhookUrl) {
+/**
+ * Decide whether the war we were tracking has actually ENDED, and when.
+ *
+ * The end of a war is a withdrawal, not the absence of a war: `stance` stays
+ * "war" through the end-of-war ceasefire (EOWCF), and every other war signal we
+ * have goes quiet for reasons that have nothing to do with peace (the loaded
+ * news edition rolls over, the enemy fetch fails, the IS drops a field). So
+ * this returns a verdict ONLY on a positive signal, in priority order:
+ *
+ *  1. war_withdrawals in the backend kingdom news — the authoritative event,
+ *     the same one lbFindWar() uses to bound a war period. Carries exact
+ *     in-game dates for both ends of the war.
+ *  2. A withdrawal/surrender/ceasefire-accepted line in the IS news edition —
+ *     fallback for kingdoms without the news-scraper backend.
+ *  3. The EOWCF flag on own kingdom data (see _eowcfFromOwn). Lowest priority
+ *     because it carries no date and cannot name the war it belongs to.
+ *
+ * @param   {string} warLoc — enemy location recorded when the war started
+ * @returns {null|{source, party, declDate, declAbs, endDate, endAbs}}
+ *          null = no verdict (still at war, or not enough data to say)
+ */
+async function _detectWarEnd(warLoc) {
+  // Only trust the loaded enemy's NAME if it is still the kingdom we fought —
+  // if the enemy has already moved on, match on dates alone rather than on the
+  // wrong kingdom's name.
+  const sameEnemy = !warLoc || !S.eLoc || warLoc === S.eLoc;
+  const eneName   = sameEnemy ? (S.enemy?.kingdomName || '').toLowerCase() : '';
+  const ownName   = (S.own?.kingdomName || '').toLowerCase();
+
+  const stamp = e => {
+    const d = _parseNewsDate(e.date);
+    return d ? { ...e, _d: d, _abs: _utoToAbs(d.month, d.day, d.year) } : null;
+  };
+
+  // ── 1. Backend kingdom-news events ──────────────────────────────────────
+  const recs = await _loadKdNews();
+  if (recs.length) {
+    const merged = _mergeKdNews(['war_declarations', 'war_withdrawals']);
+
+    const decls = (merged.war_declarations || []).map(stamp).filter(Boolean)
+      .filter(d => !eneName || ((d.attacker || '') + ' ' + (d.defender || '')).toLowerCase().includes(eneName))
+      .sort((a, b) => b._abs - a._abs);
+
+    const withds = (merged.war_withdrawals || []).map(stamp).filter(Boolean)
+      .filter(w => {
+        const txt = (w.party || '').toLowerCase();
+        return (eneName && txt.includes(eneName)) || (ownName && txt.includes(ownName)) || /^we\b|^our\b/.test(txt);
+      })
+      .sort((a, b) => a._abs - b._abs);
+
+    const decl = decls[0] || null;
+    const end  = decl ? withds.find(w => w._abs >= decl._abs) : withds[withds.length - 1] || null;
+
+    if (end) {
+      return { source: 'kd_news', party: end.party || '',
+               declDate: decl?._d || null, declAbs: decl?._abs || 0,
+               endDate: end._d, endAbs: end._abs };
+    }
+    // A declaration with no withdrawal after it is positive evidence that the
+    // war is still running — stop here rather than falling through to weaker
+    // sources that might say otherwise.
+    if (decl) return null;
+  }
+
+  // ── 2. IS news edition text ─────────────────────────────────────────────
+  try {
+    const IS   = JSON.parse(localStorage.getItem('IntelState') || '{}');
+    const news = IS.kingdomNews?.parseString;
+    const cur  = _parseUtoDate(IS.currentTick?.tickName || '');
+    if (news) {
+      const curAbs = cur ? _utoToAbs(cur.month, cur.day, cur.year) : Infinity;
+      let best = null;
+      news.split('\n').forEach(line => {
+        const parts = line.split('\t');
+        if (parts.length < 2) return;
+        const d = _parseNewsDate(parts[0].trim());
+        if (!d) return;
+        const abs = _utoToAbs(d.month, d.day, d.year);
+        if (abs > curAbs) return;
+        const text = parts[1];
+        if (!WAR_NEWS_END_RE.test(text)) return;
+        // Must be about this war: name the enemy, name us, or be about "our" war
+        const low = text.toLowerCase();
+        if (eneName && !low.includes(eneName) && warLoc && !low.includes(warLoc.toLowerCase())
+            && !(ownName && low.includes(ownName)) && !/\bour\b|\bwe\b/.test(low)) return;
+        if (!best || abs > best._abs) best = { _d: d, _abs: abs, text: parts[1].trim() };
+      });
+      if (best) {
+        return { source: 'is_news', party: best.text,
+                 declDate: null, declAbs: 0, endDate: best._d, endAbs: best._abs };
+      }
+    }
+  } catch(e) {}
+
+  // ── 3. EOWCF flag on own kingdom ────────────────────────────────────────
+  // Only meaningful because the caller has already established we were at war;
+  // a forced ceasefire outside a war would look the same.
+  if (_eowcfFromOwn()) {
+    let cur = null;
+    try {
+      const IS = JSON.parse(localStorage.getItem('IntelState') || '{}');
+      cur = _parseUtoDate(S.currentTickName || IS.currentTick?.tickName || '');
+    } catch(e) {}
+    return { source: 'eowcf', party: '',
+             declDate: null, declAbs: 0,
+             endDate: cur, endAbs: cur ? _utoToAbs(cur.month, cur.day, cur.year) : 0 };
+  }
+
+  return null;
+}
+
+// ── War summary post ──────────────────────────────────────────────────────────
+// Called once per war, when _detectWarEnd() returns a verdict. Pulls ops from
+// Firebase, compiles per-player stats, and posts a single summary embed.
+// Returns true only if the embed was actually sent — the caller keeps the war
+// armed until it was, so a failed post retries instead of being lost.
+
+async function _postWarSummary(webhookUrl, warEnd, warLoc) {
   try {
     const kdId = S.own?.location.replace(':', '_');
-    if (!kdId || !webhookUrl) return;
+    if (!kdId || !webhookUrl) return false;
 
-    // War period from kingdomNews (gives in-game date range)
-    const period = _getWarPeriod();
+    // War period: exact in-game dates from the withdrawal event when we have
+    // them, otherwise the kingdomNews scan.
+    const period = _warEndPeriod(warEnd) || _getWarPeriod();
 
     // Ops for this KD, through the leaderboard's session cache — a war summary
     // is not worth a second full read of the collection.
     const opsInfo = await _lbLoadOps({ cached: true });
     // An error means the read FAILED. Posting a summary built from that would
     // report the whole war as zero ops for everyone.
-    if (opsInfo.error) { console.warn('[WavePlanner] war summary skipped —', opsInfo.error); return; }
+    if (opsInfo.error) { console.warn('[WavePlanner] war summary skipped —', opsInfo.error); return false; }
     const allOps = opsInfo.rows;
 
     // Filter to the war period if we could detect one
@@ -505,8 +641,14 @@ async function _postWarSummary(webhookUrl) {
       ? `${period.fromLabel} → ${period.toLabel}`
       : 'Duration unknown';
 
+    // Name the kingdom we actually fought, not whoever is loaded now
+    const eneLabel = (!warLoc || warLoc === S.eLoc)
+      ? (S.enemy?.kingdomName || S.eLoc || warLoc || 'Enemy KD')
+      : (warLoc || 'Enemy KD');
+
     const lines = [
-      `**vs ${S.enemy?.kingdomName || S.eLoc || 'Enemy KD'}**  ·  ${durationLine}`,
+      `**vs ${eneLabel}**  ·  ${durationLine}`,
+      warEnd?.party ? `_${warEnd.party}_` : null,
       '',
       `**${totalOps}** ops  ·  **${successRate}%** success rate`,
       totalDamage ? `**${fK(totalDamage)}** total damage dealt` : null,
@@ -519,21 +661,45 @@ async function _postWarSummary(webhookUrl) {
       lines.push('', '_No op data recorded for this war._');
     }
 
-    await sendDiscordEmbed(webhookUrl, {
+    const ok = await sendDiscordEmbed(webhookUrl, {
       content: `<@&${DISCORD.COUNCIL_ROLE}>`,
       embeds: [{
         title: '⚔️ War ended — Summary',
         description: lines.join('\n'),
         color: DISCORD.COLORS.green,
         timestamp: new Date().toISOString(),
-        footer: { text: 'Wave Planner · War Summary' },
+        footer: { text: `Wave Planner · War Summary${warEnd?.source ? ' · via ' + warEnd.source : ''}` },
       }],
     });
 
-    console.log('[WavePlanner] War summary posted to Discord');
+    if (ok) console.log(`[WavePlanner] War summary posted to Discord (end detected via ${warEnd?.source || 'unknown'})`);
+    return ok;
   } catch(e) {
     console.warn('[WavePlanner] War summary post failed:', e.message);
+    return false;
   }
+}
+
+/**
+ * Build a leaderboard-shaped period from a _detectWarEnd() verdict. Returns
+ * null when the verdict carries no usable dates (EOWCF has none), so the caller
+ * falls back to _getWarPeriod().
+ */
+function _warEndPeriod(warEnd) {
+  if (!warEnd?.endDate) return null;
+  const start = warEnd.declDate;
+  const end   = warEnd.endDate;
+  const fmt   = d => `${MONTH_NAMES[d.month]} ${d.day}, YR${d.year}`;
+  if (!start) {
+    // End date only — do NOT invent a start; an open-ended range would sweep
+    // in every op of the age. _getWarPeriod() gets its chance instead.
+    return null;
+  }
+  return {
+    fromYear:  start.year, fromMonth: start.month,
+    toYear:    end.year,   toMonth:   end.month,
+    fromLabel: fmt(start), toLabel:   fmt(end),
+  };
 }
 
 // ── Reset Discord alert state ─────────────────────────────────────────────────

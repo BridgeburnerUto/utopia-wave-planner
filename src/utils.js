@@ -239,21 +239,55 @@ function _atWar() {
   return false;
 }
 
+// ── War news matchers ─────────────────────────────────────────────────────────
+// Shared by _refreshWarStatus (utils), _getWarPeriod (leaderboard) and
+// _detectWarEnd (discord) so the three cannot drift apart.
+//
+// The END list deliberately does NOT match the bare words "peace" or
+// "ceasefire". A war generates plenty of news mentioning both — offers made,
+// offers declined, ceasefires with OTHER kingdoms — and matching any of them
+// used to end the war as far as the tool was concerned. Only an event that
+// actually terminates the war counts: someone withdraws, someone surrenders,
+// or a ceasefire is accepted/agreed (not merely proposed).
+const WAR_NEWS_START_RE = /declared war|war has been declared|at war with/i;
+const WAR_NEWS_END_RE   = new RegExp([
+  'withdr\\w+ from (the|our|their) war',      // "has withdrawn from the war"
+  'withdr\\w+ from the war',
+  'the war (with|against)[^\\n]*?(has )?ended',
+  'war (has|is)( now)? over',
+  'has surrendered',
+  'accept\\w*( a| the)? ceasefire',
+  'ceasefire (has been |was )?(agreed|accepted|signed)',
+].join('|'), 'i');
+
 /**
- * Scan kingdomNews.parseString for the most recent war/peace events.
- * Caches the result in S._warFromNews so _atWar() can read it without
+ * Scan kingdomNews.parseString for the most recent war declaration / war-end
+ * event. Caches the result in S._warFromNews so _atWar() can read it without
  * re-scanning. Call once per refresh cycle.
+ *
+ * IMPORTANT — this scan sees ONE news edition, the one the IS last loaded, and
+ * an edition covers a single in-game month (24 ticks ≈ 1 real day). In a war
+ * that runs longer than that, the "declared war" line scrolls out of the window
+ * and the scan can no longer see the war start. That is NOT peace, so a scan
+ * that finds neither a start nor an end event now LEAVES THE CACHED VERDICT
+ * ALONE instead of forcing it to false. (Forcing it to false is what made the
+ * tool post a war summary mid-war after ~6 days.)
  */
 function _refreshWarStatus() {
   try {
     const IS   = JSON.parse(localStorage.getItem('IntelState') || '{}');
     const news = IS.kingdomNews?.parseString;
-    if (!news) { S._warFromNews = false; return; }
+    if (!news) return;  // no news loaded ≠ no war — keep whatever we last knew
 
-    // Walk every line: track the absolute date of the most recent war declaration
-    // and the most recent peace event.  If latest war > latest peace → still at war.
-    let lastWarAbs   = -1;
-    let lastPeaceAbs = -1;
+    // Guard against stale editions cached from a previous age: anything dated
+    // after the live tick cannot have happened yet.
+    const cur    = _parseUtoDate(IS.currentTick?.tickName || '');
+    const curAbs = cur ? _utoToAbs(cur.month, cur.day, cur.year) : Infinity;
+
+    // Walk every line: track the absolute date of the most recent war
+    // declaration and of the most recent war-ending event.
+    let lastWarAbs = -1;
+    let lastEndAbs = -1;
 
     news.split('\n').forEach(line => {
       const parts = line.split('\t');
@@ -262,20 +296,79 @@ function _refreshWarStatus() {
       // (_parseNewsDate is defined in ritual.js, hoisted and available at runtime)
       const d = _parseNewsDate(parts[0].trim());
       if (!d) return;
-      const abs  = _utoToAbs(d.month, d.day, d.year);
-      const text = parts[1].toLowerCase();
-      if (text.includes('declared war') || text.includes('at war with')) {
+      const abs = _utoToAbs(d.month, d.day, d.year);
+      if (abs > curAbs) return;
+      const text = parts[1];
+      if (WAR_NEWS_START_RE.test(text)) {
         if (abs > lastWarAbs) lastWarAbs = abs;
-      } else if (text.includes('peace') || text.includes('ceasefire') || text.includes('white peace')) {
-        if (abs > lastPeaceAbs) lastPeaceAbs = abs;
+      } else if (WAR_NEWS_END_RE.test(text)) {
+        if (abs > lastEndAbs) lastEndAbs = abs;
       }
     });
 
-    S._warFromNews = lastWarAbs > 0 && lastWarAbs > lastPeaceAbs;
-    if (S._warFromNews) console.log('[WavePlanner] War status from kingdomNews: AT WAR');
+    // Nothing relevant in this edition → no new information. Keep the cache.
+    if (lastWarAbs < 0 && lastEndAbs < 0) return;
+    // Only an end event visible → the war we can see is over.
+    // Ties go to war: a declaration and an end on the same in-game day is far
+    // more likely to be a re-declaration than a same-tick withdrawal.
+    S._warFromNews = lastWarAbs >= 0 && lastWarAbs >= lastEndAbs;
+    console.log(`[WavePlanner] War status from kingdomNews: ${S._warFromNews ? 'AT WAR' : 'NOT AT WAR'}`);
   } catch(e) {
-    S._warFromNews = false;
+    // Leave the cache untouched — a parse failure is not evidence of peace.
   }
+}
+
+/**
+ * Positive "the fighting is over" signal read from own kingdom data.
+ *
+ * A kingdom stays at war through the end-of-war ceasefire (EOWCF), so waiting
+ * for "at war" to go false reports the end hours late at best, and misreports a
+ * data gap as the end at worst. The EOWCF itself is the early, positive signal:
+ * it only exists once a war has ended.
+ *
+ * The IS OwnKingdom payload does not document this field, so we probe the
+ * plausible paths and then scan one level of S.own / S.own.kdEffects for a key
+ * that names a ceasefire. The first hit is logged once so the real field name
+ * can be hard-coded here later.
+ *
+ * Callers must only treat this as a war END when they already recorded that we
+ * were at war — a forced ceasefire (FCF) outside a war would look identical.
+ */
+let _eowcfKeyLogged = false;
+function _eowcfFromOwn() {
+  const own = S.own;
+  if (!own) return false;
+
+  const truthy = v => v === true
+    || (typeof v === 'number' && v > 0)
+    || (typeof v === 'string' && v.trim() !== '' && !/^(no|none|false|0)$/i.test(v.trim()));
+
+  // 1. Stance explicitly reports a ceasefire instead of a war
+  const st     = own.stance;
+  const stName = Array.isArray(st) ? st[0] : st;
+  if (typeof stName === 'string' && /ceasefire/i.test(stName)) return true;
+
+  // 2. Field names we would expect the IS / world dump to use
+  for (const v of [own.eowcf, own.ceasefire, own.endOfWarCeasefire,
+                   own.kdEffects?.eowcf, own.kdEffects?.ceasefire,
+                   own.relations?.ceasefire]) {
+    if (truthy(v)) return true;
+  }
+
+  // 3. Unknown field name — scan one level for anything ceasefire-shaped
+  for (const obj of [own, own.kdEffects, own.relations]) {
+    if (!obj || typeof obj !== 'object') continue;
+    for (const [k, v] of Object.entries(obj)) {
+      if (!/ceasefire|eowcf/i.test(k) || !truthy(v)) continue;
+      if (!_eowcfKeyLogged) {
+        _eowcfKeyLogged = true;
+        console.log(`[WavePlanner] EOWCF detected via own-kingdom field "${k}" =`, v);
+      }
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** Update the save status indicator in the header */

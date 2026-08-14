@@ -51,15 +51,19 @@ function _getWarPeriod() {
     news.split('\n').forEach(line => {
       const parts = line.split('\t');
       if (parts.length < 2) return;
-      const d = _parseUtoDate(parts[0].trim());
+      // News lines are dated "July 2 of YR5" — _parseNewsDate, NOT _parseUtoDate
+      // ("July 2, YR5", the tick-name format used for curDate above). Parsing
+      // news lines with _parseUtoDate matched nothing, so this whole function
+      // returned null and the war summary silently covered the entire age.
+      const d = _parseNewsDate(parts[0].trim()) || _parseUtoDate(parts[0].trim());
       if (!d) return;
       // Skip future dates — guards against stale IS data from a previous age
       const abs = _utoToAbs(d.month, d.day, d.year);
       if (abs > curAbs) return;
-      const text = parts[1].toLowerCase();
-      if (text.includes('declared war') || text.includes('war has been declared') || text.includes('at war with')) {
+      const text = parts[1];
+      if (WAR_NEWS_START_RE.test(text)) {
         events.push({ abs, date: d, type: 'war' });
-      } else if (text.includes('peace') || text.includes('ceasefire') || text.includes('white peace')) {
+      } else if (WAR_NEWS_END_RE.test(text)) {
         events.push({ abs, date: d, type: 'peace' });
       }
     });
