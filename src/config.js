@@ -152,7 +152,7 @@ const RACE_POP_MULT = { halfling: 1.125, faery: 0.95 };
 // Growth pages, age-specific modifiers from the AGE 116 doc. Used by
 // tabs/economy.js. Wage rate comes from the Military Advisor when we have it,
 // else it is recovered from the SoM's military efficiency (see MIL_EFF_* below);
-// dragons/rituals/riots/plague income effects not modeled.
+// ritual income effects are not modeled (dragons, plague and riots are).
 const INCOME_PER_EMPLOYED   = 3.0;   // gc per employed peasant per tick
 const INCOME_PER_UNEMPLOYED = 1.0;
 const INCOME_PER_PRISONER   = 0.75;
@@ -194,8 +194,10 @@ const WAGE_RATE_MAX     = 200;   // % — game cap on the wage setting
 //     the OME/DME tables empty. Applying them here would double-count.
 //   Artisan +25% Economy Science / Sage +15% Science Efficiency: `sos.books[]
 //     .effect` is the reported effect and already includes them.
-//   Artisan immunity to Greed / Incite Riots / Fool's Gold: only matters once
-//     those ops are modeled, and they are not (v1).
+//   Artisan immunity to Greed / Incite Riots / Fool's Gold: Incite Riots IS
+//     modeled now and the immunity with it — it lives in PERS_RIOTS_IMMUNE
+//     next to the riots term it cancels, the same way Undead's plague
+//     immunity does. Greed and Fool's Gold are still not modeled.
 //     (Dragon income/wage terms are race-independent and live in DRAGON_ECON
 //      above; they are applied per kingdom, not per province.)
 // (Undead's plague immunity IS a race economy modifier and lives in
@@ -239,6 +241,46 @@ const PLAGUE_INCOME_MULT = 0.85;
 // while taking no income hit. Without this every Undead province would be
 // permanently and wrongly docked 15%.
 const RACE_PLAGUE_IMMUNE = { undead: true };
+
+// ── Incite Riots (Age 116) ───────────────────────────────────────────────────
+// Thievery op, −20% income for the duration (AGE 116 FINAL CHANGES: was −15%;
+// the age doc wins over the wiki). It is the last unmodelled term in the wiki's
+// Modified Income formula.
+//
+// TIMING is what makes it modellable at all. One tick = one real hour = one
+// in-game day, and the op's duration is capped at 18 in-game days — so a riot
+// can never be older than 18 real hours, which fits INSIDE the ~24h window the
+// IS KingdomOps endpoint returns. Enemy riots are therefore read off our own op
+// log (economy.js `_riotsFromOps`), with no Firestore read and no guessing
+// about ops we cannot see. Riots on OUR provinces come from the province's own
+// SoT instead (`_riotsFromSot`) — the enemy's ops are not in our log.
+//
+// The duration itself scales with the thieves sent and NOTHING WE RECEIVE
+// REPORTS IT: the op log has no duration field (`damage` is deliberately not
+// read as one — a value in range would be indistinguishable from a real
+// duration and silently wrong). So an enemy riot is assumed to last
+// RIOTS_TICKS_ASSUMED ticks from the tick it landed, and every enemy riot chip
+// says "est". Change this ONE constant when the real figure is known.
+const RIOTS_INCOME_MULT   = 0.80;
+const RIOTS_MAX_TICKS     = 18;   // game cap on the duration, in ticks (= real hours)
+const RIOTS_TICKS_ASSUMED = 12;   // ESTIMATE — see above. Enemy side only.
+// How a riot announces itself in `sot.badSpells`. UNVERIFIED against a live SoT
+// with riots on it — no capture so far has had one — so the match is a loose
+// prefix ("Riots", "Rioting", "Incite Riots" all hit) and economy.js logs the
+// badSpells names it sees once per session (`_riotsSotProbe`) to pin the real
+// wording down. The word boundary is not decoration: a bare /riot/ also matches
+// PATRIOTISM, which is a self-buff and would have flagged half the kingdom as
+// rioting the moment it turned up in the wrong array.
+const RIOTS_SOT_RE = /\briot/i;
+// Ticks-left field on a badSpells entry, in the order they are tried. Also
+// unverified: the shape of a badSpells entry beyond `name` is unknown, so every
+// plausible key is checked and a missing one just means "active, no timer".
+const RIOTS_SOT_TICK_KEYS = ['duration', 'ticks', 'ticksLeft', 'ticksRemaining',
+                             'daysRemaining', 'remaining', 'days', 'length'];
+// Personalities immune to the riots income hit. Age 116: Artisan is immune to
+// Greed / Incite Riots / Fool's Gold — the immunity the race/pers audit noted as
+// "only matters once those ops are modeled". Riots is now modeled, so it does.
+const PERS_RIOTS_IMMUNE = { artisan: true };
 
 const RACE_INCOME_MULT       = { human: 1.30 };            // Human +30% Income
 const RACE_WAGE_MULT         = { human: 1.25, avian: 0.75 };  // +25% / −25% Military Wages

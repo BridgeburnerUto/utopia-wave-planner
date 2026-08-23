@@ -32,8 +32,29 @@
 // it means no plague term, so a future caller is safe by default.
 // A dragon on the kingdom applies its DRAGON_ECON term (Age 116: Ruby +20%
 // wages, Topaz −25% income) to every province in that kingdom.
+//
+// INCITE RIOTS costs −20% income (RIOTS_INCOME_MULT) and is flagged 🔥, except
+// on Artisan, which is immune. Each side is read from the only source that
+// knows about it (leader's call 2026-08-23):
+//   OWN     — the province's own SoT (`_riotsFromSot`). The enemy's ops are not
+//             in our op log, and our SoTs are re-taken every tick, so the SoT is
+//             both the only source and a current one. A ticks-left figure is
+//             used when the entry carries one; without it the flag is treated as
+//             a plain snapshot, the same way plague is.
+//   ENEMY   — OUR OWN op log (`_riotsFromOps`), a riot counted as live for
+//             RIOTS_TICKS_ASSUMED ticks from the tick the op landed. A riot
+//             lasts at most 18 ticks = 18 real hours, which fits inside the
+//             ~24h window the IS KingdomOps endpoint returns, so no Firestore
+//             read and no aging problem: ops that fell out of the window are
+//             ops whose riots have expired anyway. Nothing reports the actual
+//             duration, so every enemy riot chip is marked est.
+// An enemy SoT flagging riots is deliberately NOT used: it carries no timer, and
+// a riot runs for days rather than being cured on sight like plague, so a stale
+// flag would keep an expired riot alive indefinitely (the 2026-08-13 plague
+// rule, applied to the other side of the same problem).
+//
 // Provinces without a survey are estimated acres-only (banks/armouries/homes
-// treated as 0) and flagged ⚠ est. Rituals and Incite Riots not modeled.
+// treated as 0) and flagged ⚠ est. Rituals not modeled.
 
 /**
  * Recover the wage rate from a SoM's military efficiency.
@@ -89,6 +110,146 @@ function _oldisWage(prov, loc) {
   return { pct: w, ageSec };
 }
 
+// ── Incite Riots ─────────────────────────────────────────────────────────────
+
+/**
+ * Ticks left on a badSpells entry, or null when it carries no timer.
+ * The shape of an entry beyond `name` is UNVERIFIED (no capture so far has had
+ * riots on it), so every plausible key from RIOTS_SOT_TICK_KEYS is tried and a
+ * numeric string counts. Clamped to the game cap — a bigger number is a field
+ * that means something else, and reading it as ticks would keep a dead riot on
+ * the books for as long as it says.
+ */
+function _riotTicksLeft(entry) {
+  for (const k of RIOTS_SOT_TICK_KEYS) {
+    const v = entry?.[k];
+    const n = typeof v === 'number' ? v
+            : (typeof v === 'string' && /^\s*\d+\s*$/.test(v)) ? parseInt(v, 10) : null;
+    if (n != null && n > 0) return Math.min(RIOTS_MAX_TICKS, n);
+  }
+  return null;
+}
+
+/**
+ * Riots on a province, read off its own SoT — the OWN-kingdom source.
+ * Returns {ticksLeft, src:'sot'} or null. ticksLeft is null when the entry has
+ * no timer on it, which still means "rioting": on our own kingdom the SoT is
+ * re-taken every tick, so the flag being there at all is current information.
+ */
+function _riotsFromSot(sot) {
+  const e = (sot?.badSpells || []).find(b => RIOTS_SOT_RE.test(b?.name || ''));
+  if (!e) return null;
+  return { ticksLeft: _riotTicksLeft(e), name: e.name || 'Incite Riots', src: 'sot' };
+}
+
+/**
+ * One-shot console probe: every distinct badSpells name on our own provinces.
+ * RIOTS_SOT_RE is a guess at wording nobody has seen in a capture yet, so this
+ * line is how the next session learns what the SoT actually calls a riot (and
+ * whether the entry carries a timer) instead of guessing again. Runs once per
+ * session and only for our own kingdom.
+ */
+let _riotsProbed = false;
+function _riotsSotProbe(provinces) {
+  if (_riotsProbed || !provinces?.length) return;
+  _riotsProbed = true;
+  const seen = new Map();
+  for (const p of provinces) {
+    for (const b of (p.sot?.badSpells || [])) {
+      if (b?.name && !seen.has(b.name)) seen.set(b.name, b);
+    }
+  }
+  if (!seen.size) return;
+  console.log('[WavePlanner] Own badSpells seen:', [...seen.keys()].join(', '));
+  const riot = [...seen.values()].find(b => RIOTS_SOT_RE.test(b.name));
+  if (riot) console.log('[WavePlanner] Riots badSpells entry (shape check):', riot);
+}
+
+/**
+ * How many ticks ago an op landed, or null when it cannot be dated.
+ * One tick = one real hour = one in-game day, so both clocks answer the same
+ * question. The real timestamp is preferred because it is fractional, but it is
+ * range-checked first: `lastUpdated` has no documented format, and a value that
+ * parses to something outside "some time in the last three days" is a format we
+ * do not understand, not a genuinely old op. The in-game date is the fallback
+ * and is exact to the tick.
+ */
+function _opAgeTicks(op) {
+  const t = Date.parse(op?.lastUpdated || '');
+  if (Number.isFinite(t)) {
+    const h = (Date.now() - t) / 3600000;
+    if (h >= 0 && h <= 72) return h;
+  }
+  const d   = _parseUtoDate(op?.utoDate || '');
+  const cur = _parseUtoDate(S.currentTickName || '');
+  if (d && cur) {
+    const diff = _utoToAbs(cur.month, cur.day, cur.year) - _utoToAbs(d.month, d.day, d.year);
+    if (diff >= 0) return diff;
+  }
+  return null;
+}
+
+/**
+ * Live riots WE have incited, from the kingdom op log — the ENEMY-kingdom
+ * source. Returns a Map of lowercased target province name → riot info.
+ *
+ * `S.recentOps` is the raw IS KingdomOps list that syncOps already fetches, so
+ * this costs nothing. Its ~24h window is wider than the 18-tick cap on a riot,
+ * which is what makes the op log sufficient on its own.
+ *
+ * Only successful ops count, riots do not stack (a re-riot refreshes the timer,
+ * so the newest op on a target wins), and the target is matched BY NAME — the op
+ * log has no target kingdom on it. That is safe while the name belongs to a
+ * province in the enemy kingdom on screen, which is the only place the result is
+ * used; a same-named province in a third kingdom would be a false positive.
+ */
+function _riotsFromOps() {
+  const out = new Map();
+  for (const op of (S.recentOps || [])) {
+    if (op?.opType !== 'INCITE_RIOTS' || op.result !== 1 || !op.targetName) continue;
+    const age = _opAgeTicks(op);
+    if (age == null || age >= RIOTS_TICKS_ASSUMED) continue;   // expired or undateable
+    const key  = op.targetName.trim().toLowerCase();
+    const prev = out.get(key);
+    if (prev && prev.ticksAgo <= age) continue;                 // keep the newest
+    out.set(key, {
+      ticksAgo: age,
+      ticksLeft: RIOTS_TICKS_ASSUMED - age,
+      by: op.provinceName || '',
+      assumed: true,
+      src: 'ops',
+    });
+  }
+  return out;
+}
+
+/** Ticks as a short label: 3.4 → "3t", 0.4 → "<1t". */
+function _riotT(n) {
+  return n >= 1 ? Math.round(n) + 't' : '<1t';
+}
+
+/**
+ * Where a riot came from and how long it has left, in words — the tooltip on
+ * every 🔥 chip. An estimate is always named as one.
+ */
+function _riotWhen(r) {
+  if (r.src === 'sot') {
+    return r.ticksLeft != null
+      ? `${_riotT(r.ticksLeft)} left, from our own SoT`
+      : 'on our SoT — the entry carries no timer, so it stays until a newer SoT drops it';
+  }
+  const by = r.by ? ` by ${r.by}` : '';
+  return `we incited it${by} ~${_riotT(r.ticksAgo)} ago — assumed ${RIOTS_TICKS_ASSUMED}t duration, `
+       + `so ~${_riotT(r.ticksLeft)} left (est: nothing reports the real duration)`;
+}
+
+/** The riot on one province, from whichever source that kingdom uses. */
+function _provRiots(prov, ctx) {
+  if (ctx?.own) return _riotsFromSot(prov.sot);
+  const name = (prov.name || '').trim().toLowerCase();
+  return (name && ctx?.riotOps?.get(name)) || null;
+}
+
 // ── Race / personality modifiers ─────────────────────────────────────────────
 
 /** A multiplier as a signed percentage: 1.30 → "+30%", 0.75 → "−25%". */
@@ -140,9 +301,17 @@ function _dragonEcon(kd) {
 /** Kingdom-level context every province row in that kingdom shares.
  *  `kd` is the kingdom object (S.own / S.enemy) — needed for kdEffects.
  *  `own` = this is OUR kingdom, the only one whose SoTs are fresh enough to
- *  trust a plague flag on (see the plague note in the file header). */
+ *  trust a plague flag on (see the plague note in the file header). It also
+ *  picks the riots source: our own SoTs for us, our op log for them. */
 function _econKdCtx(provinces, kd, own) {
-  return { wdWageCut: _wdEconWageCut(provinces), dragon: _dragonEcon(kd), plague: !!own };
+  if (own) _riotsSotProbe(provinces);
+  return {
+    wdWageCut: _wdEconWageCut(provinces),
+    dragon:    _dragonEcon(kd),
+    plague:    !!own,
+    own:       !!own,
+    riotOps:   own ? null : _riotsFromOps(),
+  };
 }
 
 /**
@@ -188,6 +357,13 @@ function _econMods(race, pers, o) {
     `${cap(race)}: Plague Immunity — carries plague permanently, takes no income hit`, 'status');
   else if (o.plague) add('🦠 ' + pc(PLAGUE_INCOME_MULT) + ' inc', false,
     `The Plague: ${pc(PLAGUE_INCOME_MULT)} income (tax collection)`, 'status');
+  // Riots: a status like plague, and Artisan's immunity to it is a personality
+  // modifier — say so out loud rather than leaving a rioting Artisan looking
+  // like a province the model forgot about.
+  if (o.riot && o.riotImmune) add('🔥 immune', true,
+    `${cap(pers)}: immune to Incite Riots — rioting costs it nothing`, 'status');
+  else if (o.riot) add('🔥 ' + pc(RIOTS_INCOME_MULT) + ' inc', false,
+    `Incite Riots: ${pc(RIOTS_INCOME_MULT)} income — ${_riotWhen(o.riot)}`, 'status');
   return m;
 }
 
@@ -240,11 +416,17 @@ function _provEconomy(prov, loc, ctx) {
   const plagueImmune = !!RACE_PLAGUE_IMMUNE[race];
   const plagueMult   = (plague && !plagueImmune) ? PLAGUE_INCOME_MULT : 1;
 
+  // Incite Riots — own kingdom off its own SoT, enemy off our op log
+  // (_provRiots picks by ctx.own). Artisan pays nothing for it.
+  const riot       = _provRiots(prov, ctx);
+  const riotImmune = !!PERS_RIOTS_IMMUNE[pers];
+  const riotMult   = (riot && !riotImmune) ? RIOTS_INCOME_MULT : 1;
+
   const dragon = ctx?.dragon || null;   // kingdom-wide, null when none
 
   const gross = raw * (1 + bankPct / 100) * (1 + alch / 100) * (1 + honor / 100)
               * (RACE_INCOME_MULT[race] || 1) * (PERS_INCOME_MULT[pers] || 1)
-              * plagueMult * (dragon?.incomeMult || 1);
+              * plagueMult * riotMult * (dragon?.incomeMult || 1);
 
   const specs    = (sot.oSpecs || 0) + (sot.dSpecs || 0);
   const elites   = sot.elites || 0;
@@ -291,7 +473,9 @@ function _provEconomy(prov, loc, ctx) {
   return {
     gross: Math.round(gross), wages: Math.round(wages), net: Math.round(gross - wages),
     est, plague, plagueImmune, plagueApplied: plagueMult !== 1, race, pers,
-    mods: _econMods(race, pers, { honor, prisoners, wdWageCut, plague, plagueImmune, dragon }),
+    riot, riotImmune, riotApplied: riotMult !== 1,
+    mods: _econMods(race, pers, { honor, prisoners, wdWageCut, plague, plagueImmune,
+                                  riot, riotImmune, dragon }),
     emplPct: jobs > 0 ? Math.min(100, Math.round(peasants / jobs * 100)) : null,
     banksPct, armPct, bankPct, armCut, alch, book, honor, wdWageCut,
     wagePct, wageSrc, wageAge, wageAssumed: wageSrc === 'assumed',
@@ -357,6 +541,16 @@ function _econSection(title, provinces, accent, loc, kd, own) {
   // the enemy section, where plague is not modelled at all.
   const nPlague = rows.filter(r => r.e.plagueApplied).length;
   const nImmune = rows.filter(r => r.e.plague && r.e.plagueImmune).length;
+  // Riots gets the same treatment on the same card, and says which source it
+  // came from — "3 rioting" means something different on each side.
+  const nRiot     = rows.filter(r => r.e.riotApplied).length;
+  const nRiotImm  = rows.filter(r => r.e.riot && r.e.riotImmune).length;
+  const riotSrc   = own ? 'from our own SoTs' : 'from our op log, duration estimated';
+  const riotNote  = (nRiot || nRiotImm) ? `<div class="s">`
+    + (nRiot ? `<span style="color:#E05050" title="Incite Riots — ${_econPct(RIOTS_INCOME_MULT)} income, applied (${riotSrc})">🔥 ${nRiot} rioting</span>` : '')
+    + (nRiot && nRiotImm ? ' · ' : '')
+    + (nRiotImm ? `<span style="color:#7a9090" title="Rioting but immune to it (Artisan) — no income effect">${nRiotImm} immune</span>` : '')
+    + `</div>` : '';
   const plagueNote = (nPlague || nImmune) ? `<div class="s">`
     + (nPlague ? `<span style="color:#E05050" title="The Plague — −15% income, applied">🦠 ${nPlague} plagued</span>` : '')
     + (nPlague && nImmune ? ' · ' : '')
@@ -400,7 +594,7 @@ function _econSection(title, provinces, accent, loc, kd, own) {
 
   const cards = `
     <div class="wsum" style="margin-bottom:10px">
-      <div class="wscard"><div class="l">Gross / tick</div><div class="v">${fK(tot.gross)}</div><div class="s">${tot.n} provinces</div>${plagueNote}${drgIncNote}${drgNoneNote}</div>
+      <div class="wscard"><div class="l">Gross / tick</div><div class="v">${fK(tot.gross)}</div><div class="s">${tot.n} provinces</div>${plagueNote}${riotNote}${drgIncNote}${drgNoneNote}</div>
       <div class="wscard"><div class="l">Wages / tick</div><div class="v" style="color:#E05050">−${fK(tot.wages)}</div>
         <div class="s">${wageNote}</div>${wdNote}${drgWageNote}</div>
       <div class="wscard"><div class="l">Net / tick</div><div class="v" style="color:${accent}">${fK(tot.net)}</div><div class="s">${fK(tot.net * 24)} / real day (24t)</div></div>
@@ -414,7 +608,10 @@ function _econSection(title, provinces, accent, loc, kd, own) {
     const flags = (e.est ? '<span title="No survey — banks/armouries/homes assumed 0">⚠</span>' : '')
                 + (e.plague ? ` <span title="${e.plagueImmune
                     ? 'Carries plague but is immune to it (Undead) — no income effect'
-                    : 'The Plague — −15% income, applied'}">🦠</span>` : '');
+                    : 'The Plague — −15% income, applied'}">🦠</span>` : '')
+                + (e.riot ? ` <span title="${esc(e.riotImmune
+                    ? 'Rioting but immune to it (Artisan) — no income effect'
+                    : 'Incite Riots — ' + _econPct(RIOTS_INCOME_MULT) + ' income, applied. ' + _riotWhen(e.riot))}">🔥</span>` : '');
     const nCol = e.net >= 0 ? '#60C040' : '#E05050';
     const mods = e.mods.length
       ? e.mods.map(m => `<span title="${esc(m.title)}" style="display:inline-block;font-size:13px;`
@@ -480,7 +677,15 @@ function renderEconomy() {
       than it is (Undead carries plague permanently and is immune to it either way).
       🐉 = a dragon on that kingdom
       (Ruby +20% wages, Topaz −25% income; the other three have no economy effect).
-      Rituals and Incite Riots not modeled. ⚠ = no survey (banks/armouries as 0, est).
+      🔥 = <b style="color:#8fa8a8">Incite Riots</b>, ${_econPct(RIOTS_INCOME_MULT)} income
+      (Artisan is immune). On <b style="color:#8fa8a8">our</b> provinces it is read off the
+      province's own SoT; on <b style="color:#8fa8a8">theirs</b> it is read off our own op
+      log — a riot lasts at most ${RIOTS_MAX_TICKS} ticks and the IS op window is wider than
+      that, so every riot we incited is still in it. Nothing reports the actual duration, so an
+      enemy riot is counted for ${RIOTS_TICKS_ASSUMED} ticks from the tick it landed and the
+      chip says est. An enemy SoT flagging riots is not used — it has no timer, and riots run
+      for days, so a stale flag would never expire.
+      Rituals not modeled. ⚠ = no survey (banks/armouries as 0, est).
     </div>`
     + (isEnemy
       ? _econSection('ENEMY KINGDOM' + (S.eLoc ? ` (${S.eLoc})` : ''), S.enemy?.provinces, '#ffd400', S.eLoc, S.enemy, false)

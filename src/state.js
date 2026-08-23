@@ -110,6 +110,12 @@ const S = {
   atkSettings: {},         // per-province attacker settings {[slot]: {elitePct, eliteCount?, setAt}} — shared via meta/{kdId}_atk_settings
   atkSettingsLoaded: false, // true once loadAtkSettings() has run (success or not)
 
+  // Raw IS KingdomOps list from the last syncOps fetch (~24h window), kept so
+  // the Economy tab can find the riots we incited without a Firestore read —
+  // a riot lasts at most RIOTS_MAX_TICKS ticks, which is inside this window.
+  recentOps:   null,   // array of raw IS ops, or null when never fetched
+  recentOpsAt: 0,      // Unix ms of that fetch
+
   waveSeq: null,     // PUBLISHED wave sequence (array of hit objects) — persisted in war plan JSON
   waveDraft: null,   // generated-but-unpublished sequence (leader's working copy, session only)
   waveGenAt: 0,      // Unix ms when the draft/published seq was generated

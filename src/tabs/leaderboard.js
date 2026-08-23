@@ -673,6 +673,16 @@ async function syncOps() {
     const ops = await fetchKingdomOps();
     if (!Array.isArray(ops) || !ops.length) return;
 
+    // Hand the raw window to the Economy tab before doing anything else with
+    // it: riots on the enemy are read out of this list (economy.js
+    // `_riotsFromOps`), and this is the fetch that already pays for it. The
+    // re-render is what makes them appear — syncOps runs after the first paint,
+    // so without it the riots stay invisible until the next refresh.
+    S.recentOps   = ops;
+    S.recentOpsAt = Date.now();
+    renderEconBadges();
+    if (S.tab === 'economy') renderEconomy();
+
     const kdId   = S.own.location.replace(':', '_');
     const kdName = S.own.kingdomName || '';
 

@@ -102,7 +102,78 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   normally cured against how old that side's SoTs are** (see the 2026-08-13
   plague decision below).
 
-## Recent work (2026-08-13, latest) -- Plague: own kingdom only
+## Recent work (2026-08-23, latest) -- Economy: Incite Riots modelled
+
+Leader: "I don't think we are counting riots are we? Riots on self have a timer
+that should be caught on the own sot when the player logs in. Riots on enemy
+provs could be taken when the op is done."
+
+Correct -- we were not. Riots was the last unmodelled term in the wiki's
+Modified Income formula (war doctrine, plague and dragons were done 2026-08-12).
+It is now applied, **-20% income** (`RIOTS_INCOME_MULT = 0.80`, Age 116 doc
+raises it from -15%), with **Artisan immune** (`PERS_RIOTS_IMMUNE`) -- the
+immunity the 2026-08-12 audit parked as "only matters once those ops are
+modeled".
+
+**The timing fact that makes this cheap:** 1 tick = 1 real hour = 1 in-game day,
+and the riot duration caps at **18 in-game days = 18 real hours**. That is
+INSIDE the ~24h window `fetchKingdomOps()` already returns. So the enemy side
+needs no Firestore read and no aging heuristic: an INCITE_RIOTS op that has
+fallen out of the IS window is an op whose riot has expired anyway. `syncOps()`
+now stashes its raw fetch in `S.recentOps` (+ `recentOpsAt`) and re-renders the
+econ badges / tab -- it runs after first paint, so without that re-render the
+riots stayed invisible until the next refresh.
+
+**Two sources, one per side** (`ctx.own` picks, same shape as the plague flag):
+- **Own** -- `_riotsFromSot(sot)` scans `sot.badSpells` for RIOTS_SOT_RE. Our
+  SoTs are re-taken every tick so the flag is current; a ticks-left figure is
+  used when the entry carries one (`RIOTS_SOT_TICK_KEYS`, clamped to 18), and
+  without one it is treated as a plain snapshot, exactly like plague.
+- **Enemy** -- `_riotsFromOps()` over `S.recentOps`: successful INCITE_RIOTS
+  only, newest op per target wins (riots refresh rather than stack), matched by
+  `targetName` (the op log has no target kingdom -- safe because the result is
+  only ever read against the enemy KD on screen). Age via `lastUpdated`
+  (range-checked 0-72h, since its format is undocumented) with the in-game date
+  as fallback.
+
+**An enemy SoT flagging riots is deliberately NOT used.** It carries no timer,
+and unlike plague a riot runs for days rather than being cured on sight -- so a
+stale flag would keep an expired riot alive forever. That is the 2026-08-13
+plague rule applied to the other side of the same problem.
+
+**UNVERIFIED, and the code says so out loud in two places:**
+1. **The wording in `sot.badSpells`** -- no capture so far has had riots on it.
+   `RIOTS_SOT_RE = /\briot/i`, and `_riotsSotProbe()` logs every distinct
+   badSpells name on our own provinces once per session (plus the raw riot entry
+   when one matches) so the next session learns the real wording and the real
+   timer field instead of guessing again. **The word boundary is load-bearing:
+   a bare /riot/ matches PATRIOTISM.**
+2. **The duration** -- nothing we receive reports it (it scales with thieves
+   sent). Enemy riots are counted for `RIOTS_TICKS_ASSUMED = 12` ticks from the
+   tick they landed and every enemy chip/tooltip says est. **Ask the leader for
+   the real figure -- it is a one-constant change.** `op.damage` is deliberately
+   NOT read as a duration: a value that happened to land in 1-18 would be
+   indistinguishable from a real one and silently wrong.
+
+**UI:** 🔥 chip in Mods (red `-20% inc` with a tooltip saying where it came from
+and how long is left; green `immune` on Artisan), 🔥 in the row flags, and
+"🔥 N rioting - N immune" on the Gross card next to the plague line, whose
+tooltip names the source per side. Tab footnote explains both sources and why
+the enemy SoT is not one.
+
+**Verified.** 29-assertion node test (loads config/state/utils/ritual/leaderboard
+/economy from src into one scope): baseline clean; own SoT riot = clean x0.80
+with wages untouched, timer read, absurd duration clamped to 18, no-timer entry
+still rioting; Patriotism NOT a riot, "Rioting Peasants" is; Artisan sees the
+riot, takes no hit, gets the green chip; enemy op riot = x0.80 with ticksLeft =
+12 - age, marked est; failed op / expired op / other op type / undateable op all
+ignored; name match trims and lowercases; newest op wins; enemy SoT flag alone
+does nothing; in-game-date fallback gives exact ticks. Section render smoke test
+on both sides produces the chips, flags and card lines. Minified build done
+(349.4 KB). **NOT live-tested against a real riot** -- see the two unverified
+points above.
+
+## Recent work (2026-08-13) -- Plague: own kingdom only
 
 Leader: "I want to remove plague from the econ tab, many cure it right away
 casting nature's blessing, having it in will lure us thinking the enemy econ is
@@ -1398,9 +1469,9 @@ that offense aren't attackers. Verified: Faeries drop to ~0 max off and out of t
   exercised a wave re-assignment.)
 
 ### Possible next steps (all optional)
-- Economy v2: Incite Riots is the last unmodelled income modifier (war doctrine,
-  plague and dragons all DONE 2026-08-12). Riots is -20% income this age, but it
-  needs per-province op tracking with a duration, and Artisan is immune to it;
+- Economy v2: Incite Riots DONE 2026-08-23 (own = SoT, enemy = our op log) --
+  what is left on it is confirming the badSpells wording and the real duration
+  (see that session's notes). Rituals are now the only unmodelled income term;
   honor pop bonus
   in _provLivingSpace; upgrade _enemyPopPct to surveys (changes solver sort!); net
   income graphed over time (user declined for v1).
