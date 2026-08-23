@@ -154,6 +154,20 @@ plague rule applied to the other side of the same problem.
    deliberately NOT read as a duration: a value that happened to land in 1-18
    would be indistinguishable from a real one and silently wrong.
 
+**Checked against the stored op history (2026-08-23, from Firestore directly --
+no client needed): 30 INCITE_RIOTS records, `damage` and `gain` are 0 on every
+one, successes included.** So the mapped IS fields carry no duration; if the API
+has one it is in a field `_lbOpDoc` never mapped, which is what `_riotOpProbe`
+is for. That read also exposed the real shape of `lastUpdated`
+(`2026-05-21T15:53:48.0606031` -- ISO-shaped, NO timezone designator), which
+found a live bug: `Date.parse` reads such a string as LOCAL time, so on the
+leader's UTC+2 browser every op aged two hours -- two ticks of a 12-tick window
+-- too old. `_opAgeTicks` now takes the IN-GAME date as its primary source (one
+tick = one in-game day, so `utoDate` IS the tick counter, exact and
+timezone-free) and only falls back to `lastUpdated`, appending `Z` when the
+string carries no offset. Regression covers both, and the suite passes under
+TZ=Europe/Stockholm as well as UTC.
+
 **Two probes for the duration (leader: "we might want to take that from the
 discord channel that catches the ops"), both added the same day:**
 - `_riotOpProbe()` logs one RAW IS INCITE_RIOTS op record. "The IS has no

@@ -185,24 +185,35 @@ function _riotOpProbe(ops) {
 
 /**
  * How many ticks ago an op landed, or null when it cannot be dated.
- * One tick = one real hour = one in-game day, so both clocks answer the same
- * question. The real timestamp is preferred because it is fractional, but it is
- * range-checked first: `lastUpdated` has no documented format, and a value that
- * parses to something outside "some time in the last three days" is a format we
- * do not understand, not a genuinely old op. The in-game date is the fallback
- * and is exact to the tick.
+ *
+ * THE IN-GAME DATE IS THE PRIMARY SOURCE, not the real timestamp. One tick =
+ * one real hour = one in-game day, so `utoDate` is not a coarse approximation
+ * of the tick counter — it IS the tick counter, exact to the unit riots are
+ * measured in, and free of any timezone question.
+ *
+ * `lastUpdated` is the fallback, and it needs care: the stored values look like
+ * `2026-05-21T15:53:48.0606031` — ISO-shaped with NO timezone designator, which
+ * `Date.parse` reads as LOCAL time. On a UTC+2 browser that silently shifts
+ * every op by two hours, i.e. two ticks off a 12-tick window. A string with no
+ * offset is therefore read as UTC, which is what the IS means by it. The range
+ * check stays: a value landing outside "some time in the last three days" is a
+ * format we do not understand rather than a genuinely old op.
  */
 function _opAgeTicks(op) {
-  const t = Date.parse(op?.lastUpdated || '');
-  if (Number.isFinite(t)) {
-    const h = (Date.now() - t) / 3600000;
-    if (h >= 0 && h <= 72) return h;
-  }
   const d   = _parseUtoDate(op?.utoDate || '');
   const cur = _parseUtoDate(S.currentTickName || '');
   if (d && cur) {
     const diff = _utoToAbs(cur.month, cur.day, cur.year) - _utoToAbs(d.month, d.day, d.year);
     if (diff >= 0) return diff;
+  }
+  const raw = (op?.lastUpdated || '').trim();
+  if (raw) {
+    // Append Z unless the string already carries an offset (…Z or …±HH:MM).
+    const t = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : raw + 'Z');
+    if (Number.isFinite(t)) {
+      const h = (Date.now() - t) / 3600000;
+      if (h >= 0 && h <= 72) return h;
+    }
   }
   return null;
 }
@@ -217,7 +228,10 @@ function _opAgeTicks(op) {
  *
  * Only successful ops count, riots do not stack (a re-riot refreshes the timer,
  * so the newest op on a target wins), and the target is matched BY NAME — the op
- * log has no target kingdom on it. That is safe while the name belongs to a
+ * log has no target kingdom on it. There is nothing else to read: 30 stored
+ * INCITE_RIOTS records were checked in Firestore (2026-08-23) and `damage` and
+ * `gain` are 0 on every one of them, successes included — so those fields carry
+ * no duration, and the duration stays assumed until a source for it is found. That is safe while the name belongs to a
  * province in the enemy kingdom on screen, which is the only place the result is
  * used; a same-named province in a third kingdom would be a false positive.
  */
