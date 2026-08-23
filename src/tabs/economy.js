@@ -166,6 +166,24 @@ function _riotsSotProbe(provinces) {
 }
 
 /**
+ * One-shot console probe: the RAW IS op record for an INCITE_RIOTS.
+ * "The IS ships no duration" is so far an inference from `_lbOpDoc`, which maps
+ * only the fields the leaderboard needs — not from the payload itself. This
+ * prints one whole record so the next session can see every field the endpoint
+ * actually sends. If a duration is in there, RIOTS_TICKS_ASSUMED goes away and
+ * no Discord ingest is needed. Nothing is logged until a riot op appears, so it
+ * keeps trying across fetches until there is something to learn from.
+ */
+let _riotOpProbed = false;
+function _riotOpProbe(ops) {
+  if (_riotOpProbed) return;
+  const op = (ops || []).find(o => o?.opType === 'INCITE_RIOTS');
+  if (!op) return;
+  _riotOpProbed = true;
+  console.log('[WavePlanner] Raw IS INCITE_RIOTS op (field check):', op);
+}
+
+/**
  * How many ticks ago an op landed, or null when it cannot be dated.
  * One tick = one real hour = one in-game day, so both clocks answer the same
  * question. The real timestamp is preferred because it is fractional, but it is

@@ -680,6 +680,7 @@ async function syncOps() {
     // so without it the riots stay invisible until the next refresh.
     S.recentOps   = ops;
     S.recentOpsAt = Date.now();
+    _riotOpProbe(ops);          // what does the API really ship on a riot op?
     renderEconBadges();
     if (S.tab === 'economy') renderEconomy();
 

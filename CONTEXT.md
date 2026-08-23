@@ -150,10 +150,27 @@ plague rule applied to the other side of the same problem.
    a bare /riot/ matches PATRIOTISM.**
 2. **The duration** -- nothing we receive reports it (it scales with thieves
    sent). Enemy riots are counted for `RIOTS_TICKS_ASSUMED = 12` ticks from the
-   tick they landed and every enemy chip/tooltip says est. **Ask the leader for
-   the real figure -- it is a one-constant change.** `op.damage` is deliberately
-   NOT read as a duration: a value that happened to land in 1-18 would be
-   indistinguishable from a real one and silently wrong.
+   tick they landed and every enemy chip/tooltip says est. `op.damage` is
+   deliberately NOT read as a duration: a value that happened to land in 1-18
+   would be indistinguishable from a real one and silently wrong.
+
+**Two probes for the duration (leader: "we might want to take that from the
+discord channel that catches the ops"), both added the same day:**
+- `_riotOpProbe()` logs one RAW IS INCITE_RIOTS op record. "The IS has no
+  duration" is an inference from `_lbOpDoc`, which maps only the fields the
+  leaderboard needs -- NOT from the payload. Check this before building any
+  ingest: if the field is already there, the whole Discord route is unnecessary.
+- `scripts/riot-probe.js` -- reads the utopiabot ops channel (or an `ops.txt`
+  from `fetch_discord.js`) and reports whether riot messages carry a
+  duration-looking number, WHERE it sits (content vs embed title / description /
+  field -- utopiabot posts op results as embeds, which carry more text than the
+  API does), and whether the thieves-sent number is there as a fallback lead.
+  Writes nothing. If the feed does carry it, the ingest to build is the
+  **oldis-collector pattern** (a manually run script that parses and pushes one
+  Firestore doc per kingdom, read by the client into state like `S.oldisEcon`)
+  -- no backend deploy, unlike the dragon chain. The Discord feed also carries
+  the target's KINGDOM `(X:Y)`, which the IS op log does not, so an ingest would
+  close the match-by-name caveat in `_riotsFromOps` as well.
 
 **UI:** 🔥 chip in Mods (red `-20% inc` with a tooltip saying where it came from
 and how long is left; green `immune` on Artisan), 🔥 in the row flags, and
