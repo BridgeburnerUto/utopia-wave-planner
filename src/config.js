@@ -44,6 +44,18 @@ const FB_QUOTA = {
   LIMIT:        2000,   // default for any other collection
 };
 
+// KD activity (ACTIVITY tab). Written by scripts/activity-collector.user.js,
+// which samples one kingdom page's online (*) markers every few minutes into
+// activity/{K_I}_{YYYYMMDD} -- ONE document per kingdom per UTC day, so a week
+// of history is 7 document reads, fetched with one batchGet and cached.
+const ACTIVITY = {
+  DAYS_MAX:      14,       // widest lookback the tab offers (= reads on first open)
+  TODAY_TTL_MS:  10 * 60e3, // re-opening the tab re-reads TODAY's doc after this; older days never change
+  LIVE_MIN:      15,       // last sample younger than this = collector running, "online now" is shown
+  TIMELINE_H:    48,       // Timeline view: hours shown
+  TIMELINE_BIN_MIN: 30,    // Timeline view: minutes per cell
+};
+
 // Duration ops (toggle on/off a province card)
 const DOPS = [
   {c:'BLI',l:'Blizzard'},{c:'CHA',l:'Chaos'},{c:'DG',l:'Dragon'},

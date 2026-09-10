@@ -116,6 +116,15 @@ const S = {
   waveType: 'standard', // wave type: 'standard' | 'shrink' (leader-picked shrink targets)
                         // | 'shrinkai' (solver picks them) — see waveplan.js header
 
+  // ── KD activity (tabs/activity.js) ─────────────────────────────────────────
+  actView:  'enemy',  // 'enemy' | 'own' — which kingdom's online history is shown
+  actDays:  7,        // lookback in UTC days (1..ACTIVITY.DAYS_MAX)
+  actTz:    'local',  // 'local' | 'utc' — hour columns; UTC hours are tick-aligned
+  actMode:  'hours',  // 'hours' (hour-of-day heatmap) | 'timeline' (last 48h, per sample)
+  actSort:  'slot',   // 'slot' | 'active' | 'seen'
+  actCache: {},       // {[loc]: {docs: {[YYYYMMDD]: doc|null}, readAt: {[YYYYMMDD]: ms}}} — null = day has no doc (collector was not running)
+  actErr:   '',       // last activity read failure (shown in the tab; never rendered as "no data")
+
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
   tmMatchupOp: 'ns',      // T/M Matchup: active op id (see TM_OPS in tmmatchup.js)

@@ -142,6 +142,43 @@ async function _fbRunQuery(body, what) {
   return rows;
 }
 
+/**
+ * Read several known documents in ONE request (`:batchGet`).
+ * Returns {[path]: plainObject | null} — null for a document that does not
+ * exist — or **null when the read itself failed**. fbGet cannot make that
+ * distinction (a 404 and a 429 both come back null), which is exactly the
+ * confusion the quota rules forbid, so anything that must tell "no such day"
+ * from "could not read" goes through here.
+ * Billed as one read per requested document: Firestore charges a lookup of a
+ * missing document too.
+ */
+async function fbBatchGet(paths, what) {
+  if (!paths?.length) return {};
+  const root = CFG.FB_BASE.replace(/^https:\/\/firestore\.googleapis\.com\/v1\//, '');
+  const r = await fetch(`${CFG.FB_BASE}:batchGet?key=${CFG.FB_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documents: paths.map(p => `${root}/${p}`) }),
+  }).catch(e => { console.warn(`[WavePlanner] ${what} batchGet network error:`, e.message); return null; });
+  if (!r) { S.fbLastError = 'Firestore read failed (network)'; return null; }
+  if (!r.ok) {
+    const hint = r.status === 429 ? ' — Firestore daily free quota exhausted, resets at midnight US Pacific' : '';
+    console.error(`[WavePlanner] ${what} batchGet failed: HTTP ${r.status}${hint}`);
+    S.fbLastError = `Firestore read failed (HTTP ${r.status})${hint}`;
+    return null;
+  }
+  const data = await r.json().catch(() => null);
+  if (!Array.isArray(data)) return null;
+  _fbBillReads(paths.length, what);
+  const out = Object.fromEntries(paths.map(p => [p, null]));
+  for (const d of data) {
+    if (!d.found) continue;
+    const path = d.found.name.slice(d.found.name.indexOf('/documents/') + '/documents/'.length);
+    out[path] = Object.fromEntries(Object.entries(d.found.fields || {}).map(([k, v]) => [k, _fromFB(v)]));
+  }
+  return out;
+}
+
 /** Delete a document at path */
 async function fbDelete(path) {
   const r = await fetch(_fbUrl(path), { method: 'DELETE' }).catch(() => null);

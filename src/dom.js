@@ -60,6 +60,7 @@ function buildOverlay() {
   <div class="wt"     id="__wpt_summary"     onclick="__wpA.tab('summary')">WAVE PLAN</div>
   <div class="wt"     id="__wpt_nwgraph"     onclick="__wpA.tab('nwgraph')">NW GRAPH</div>
   <div class="wt"     id="__wpt_economy"     onclick="__wpA.tab('economy')">ECONOMY</div>
+  <div class="wt"     id="__wpt_activity"    onclick="__wpA.tab('activity')">ACTIVITY</div>
   <div class="wt"     id="__wpt_alerts"      onclick="__wpA.tab('alerts')">ALERTS<span id="__wpalc"></span></div>
   <div class="wt"     id="__wpt_leaderboard" onclick="__wpA.tab('leaderboard')">LEADERBOARD</div>
   <div class="wt"     id="__wpt_kddb"        onclick="__wpA.tab('kddb')">KD DATABASE</div>
@@ -75,6 +76,7 @@ function buildOverlay() {
   <div id="__wpc_summary"     style="display:none"></div>
   <div id="__wpc_nwgraph"     style="display:none"></div>
   <div id="__wpc_economy"     style="display:none"></div>
+  <div id="__wpc_activity"    style="display:none"></div>
   <div id="__wpc_alerts"      style="display:none"></div>
   <div id="__wpc_leaderboard" style="display:none"></div>
   <div id="__wpc_kddb"        style="display:none"></div>

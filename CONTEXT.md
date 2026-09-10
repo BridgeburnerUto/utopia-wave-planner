@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-08-13 (latest).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-09-11 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -102,7 +102,78 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   normally cured against how old that side's SoTs are** (see the 2026-08-13
   plague decision below).
 
-## Recent work (2026-08-13, latest) -- Plague: own kingdom only
+## Recent work (2026-09-11, latest) -- KD activity tracker (NEW: ACTIVITY tab)
+
+Leader ask: map when the enemy's provinces are online, from the star next to
+their names on the game's kingdom page, with a computer keeping the page up.
+
+**Premise corrected before building.** The idea (from a claude.ai chat) was to
+reuse the game's intel-site POSTs to the Cloud Run backend. **They stopped on
+2026-07-04** (requests.log ends there) and no `kingdom_details` page was ever
+among the retained raws (567 throne, 102 kd_news, 3 province_profile). So the
+backend is NOT involved at all.
+
+**The marker (verified live on utopia-game.com):** legend "Protection^ Monarch
+(M) Steward (S) You Online*"; each row is `<td class="province-name"><a
+href=".../province_operations/K/I/S">Name</a> (S)*</td>` -- the star is in the
+bare text AFTER the link. **Two stars = the province's MENTOR is logged in**
+(leader: a mentor can log in 4h out of every 12h). How long a star lingers
+after the clicking stops is still UNKNOWN -- keep the sample interval below it.
+
+**Collector: `scripts/activity-collector.user.js`** (Tampermonkey, or pasted
+into the console on any utopia-game.com page). A same-origin `fetch` of
+`/wol/game/kingdom_details/K/I` every N min (default 5, 2-60), DOMParser, no
+reload/navigation, no game actions. No CSP on the game. Writes ONE Firestore
+`:commit` per sample: `activity/{K_I}_{YYYYMMDD}` (UTC day), names/kdName/
+updatedAt overwritten via updateMask + the sample APPENDED with
+`appendMissingElements` -> `samples: [{t, on: [slots starred], mt: [the ** subset]}]`.
+~288 writes/day per tracked KD. Guards: every province href must match the
+requested K:I (the game answering with another kingdom is refused), logged-out
+page -> error + retry in 60s, nothing written. Several utopia tabs elect one
+sampler via a localStorage lock (`wpActivityLock`, stale after 150s -- hidden
+tabs tick ~1/min). Panel bottom-left: Track... / sample now / Stop.
+Side effect stated in the UI: the collecting member's own province shows
+online 24/7 while it runs. **Utopia's automation rules were flagged to the
+leader, not checked** -- passive page reads, but it is their call.
+
+**Planner: `src/tabs/activity.js`, ACTIVITY tab** (after ECONOMY). Enemy/Own
+switch, 1/3/7/14 days, By hour (province x hour-of-day heatmap + KINGDOM avg
+row) or Timeline (last 48h, 30-min cells), Local/UTC, sort slot/active/last
+seen. Cards: Collector live/idle, Online now (only while live, <15 min),
+Quietest hours, Busiest hour, Coverage. Green in 4 steps (<10/10-25/25-50/50%+)
+= player, purple underline = mentor, hatched = NO SAMPLES (never "offline").
+A province is only judged in samples where the day doc's `names[slot]` matches
+its current name (a slot that changed hands does not merge two players).
+**Quota:** new `fbBatchGet` in firebase.js (one request, null on failure vs
+null-per-missing-doc, bills per requested doc). Day cache in `S.actCache`; a
+closed UTC day is never re-read; only "open" days (read before the day ended)
+refresh -- on ⟳ or re-open after `ACTIVITY.TODAY_TTL_MS`. Constants in
+`ACTIVITY` (config.js). Wired: build.js, dom.js, app.js (`__wpA.actView/actDays/
+actTz/actMode/actSort/actRefresh`), state.js.
+
+**Verified.** Live: parser on 6:1 Warcraft (25 provs) and own 5:11 Dinotopia;
+one REAL sample committed to `activity/6_1_20260910` from the game origin
+(HTTP 200, CORS fine) and read back through the real `fbBatchGet`/`_actLoad`/
+`_actAggregate` in node (missing day -> null, 2 online now). Harness (new
+`:batchGet` mock, 7 days of synthetic samples with habits, mentor sessions, a
+6h outage, a slot that changed hands; `?actidle=1`, `?fb429=1`): open = 7
+reads, every view switch 0, widen 7->14 = 7, ⟳ = 1, re-open within TTL = 0;
+slot 3 counted only on its own days (1058 vs 1922 samples); 429 shows the
+read-failure message, never "no samples"; idle hides online-now; all 13 tabs
+render. Collector tested in `mockup/collector-test.html` (fake game page +
+Firestore): `*`, `(S)*`, `**` counted, `(M)` and `^` not, empty slot skipped,
+no double sample, lock handover, logged-out and 429 errors, Stop releases the
+lock. Minified build 363.5 KB. **NOT committed / NOT pushed** -- the tab and the
+userscript's @downloadURL (GitHub Pages) only exist once pushed.
+
+**Trap:** loading a script from `http://localhost` into the utopia-game.com
+tab hangs (Chrome local-network-access prompt) -- paste instead.
+
+**Next (not done):** measure the star's linger window (sample every minute for
+an hour, look at the shortest runs); an "online now" dot on the War Board
+(costs 1 read per refresh); prune `activity` docs at age rollover.
+
+## Recent work (2026-08-13) -- Plague: own kingdom only
 
 Leader: "I want to remove plague from the econ tab, many cure it right away
 casting nature's blessing, having it in will lure us thinking the enemy econ is

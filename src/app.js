@@ -398,7 +398,7 @@ window.__wpA = {
 
   tab(t) {
     S.tab = t;
-    ['board', 'player', 'intel', 'kingdom', 'summary', 'nwgraph', 'economy', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
+    ['board', 'player', 'intel', 'kingdom', 'summary', 'nwgraph', 'economy', 'activity', 'alerts', 'leaderboard', 'kddb', 'aistrategy', 'tmmatchup'].forEach(x => {
       $id('__wpc_' + x).style.display = x === t ? '' : 'none';
       const el = $id('__wpt_' + x);
       el.className = 'wt' + (x === t ? (x === 'player' ? ' on ong' : ' on') : '');
@@ -410,6 +410,7 @@ window.__wpA = {
     if (t === 'summary')     renderWavePlan();
     if (t === 'nwgraph')     renderNwGraph();
     if (t === 'economy')     renderEconomy();
+    if (t === 'activity')    renderActivity();
     if (t === 'alerts')      renderAlerts();
     if (t === 'leaderboard') renderLeaderboard();
     if (t === 'kddb')        renderKddb();
@@ -504,6 +505,14 @@ window.__wpA = {
   nwView(v) { S.nwView = v; renderNwGraph({ cached: true }); },
   nwRefresh,
   econView(v) { S.econView = v; renderEconomy(); },
+  // Activity view switches re-render from the day cache; only a wider range
+  // reads the days it is missing, and only ⟳ re-reads today (see activity.js).
+  actView(v) { S.actView = v;  renderActivity({ cached: true }); },
+  actDays(n) { S.actDays = n;  renderActivity({ cached: true }); },
+  actTz(v)   { S.actTz = v;    renderActivity({ cached: true }); },
+  actMode(v) { S.actMode = v;  renderActivity({ cached: true }); },
+  actSort(v) { S.actSort = v;  renderActivity({ cached: true }); },
+  actRefresh,
 
   /** Read current location inputs + reload graph */
   nwLoad() {
