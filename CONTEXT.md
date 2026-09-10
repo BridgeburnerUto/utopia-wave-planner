@@ -173,6 +173,152 @@ tab hangs (Chrome local-network-access prompt) -- paste instead.
 an hour, look at the shortest runs); an "online now" dot on the War Board
 (costs 1 read per refresh); prune `activity` docs at age rollover.
 
+### Same session, part 2 -- war activity saved to KD Database + batched writes
+
+Leader: save the enemy's general activity for future reference (their real
+kingdom identity), linked to KD Database, without driving Firestore cost.
+Decisions: **a button**, **kingdom AND per-ruler**, **collector writes every 15 min**.
+
+**Firestore usage measured first** (Cloud Monitoring via REST + `gcloud auth
+print-access-token`): `billingEnabled: False` -- Spark, costs 0 kr, the only
+risk is hitting the daily cap. 2026-09-10: 4,870 reads (10% of 50k), 1,486
+writes (7% of 20k); quiet days before the war: 10-120. `kd_identities` = 19
+docs, `kd_snapshots` = 37.
+
+**Profile** (`activity.js`: `_actBuildProfile`, `actSaveProfile`): "💾 Save to
+KD Database" in the ACTIVITY tab (enemy view) summarises up to 14 days of
+samples onto the identity tagged for (kddb age, enemy loc) --
+`kd_identities/{id}.activity.{age}` = `{age, loc, kdName, from, to, n, days,
+savedAt, kd: {on/mt/hn: [24]}, rulers: [{r, p, slot, n, pct, mtPct, on: [24 %],
+mt?: [24 %]}]}`, hours in **UTC** (tick time), null = no samples that hour.
+**Per ruler** because rulers are KD Database's cross-age fingerprint; a province
+without a SoT is kept under its name (r '') and cannot carry over. Needs the age
+set in KD DATABASE and the enemy tagged (Save & Analyze -> Confirm/Create);
+otherwise the button says exactly what is missing. Confirm dialog states the
+sample count, rulers, what it replaces and "1 Firestore write".
+**New `fbPatch(path, fieldPathArray, value)`** in firebase.js -- PATCH with
+`updateMask`, so only `activity.{age}` changes (fbWrite replaces the whole
+doc). Verified against REAL Firestore on a throwaway doc: other fields and other
+ages survive, nulls in arrays and odd age keys (backtick-quoted) work.
+kddb's own full-doc writes (`_kddbConfirm`, rename) carry `activity` along
+because the in-memory identity is updated after a save.
+
+**Display, 0 extra reads** (rides in kd_identities, already read once/session):
+- ACTIVITY enemy view: "KNOWN FROM EARLIER WARS" -- identity (tagged, else
+  2+ ruler match via `_kddbScore`), one KD strip per earlier war, and per current
+  province whose ruler has a saved profile: ruler, "seen as", %, 24-h strip.
+  Shown in the no-samples state too -- that is when it is worth most. The war on
+  screen is skipped (`_actRulerIndex(skip)`), or saving it would hide the older
+  ones. The ACTIVITY tab loads kd_identities itself if KD DATABASE has not.
+- KD DATABASE: "⏱ age · kd · strip · dates/samples/quietest" per identity, and a
+  **Past activity** column (ruler strip + %) in the enemy province table.
+- Strips shift UTC -> local with `S.actTz` (`_actToTz`).
+
+**Collector 1.1.0 -- batched.** Samples queue in localStorage
+(`wpActivityQueue`, per day doc) and flush when the oldest is 15 min old: ONE
+commit, one write per day doc (~96/day instead of 288). Queue survives reloads
+and closed browsers; failed flush keeps it (appendMissingElements makes a
+re-send harmless), 60s backoff so a 429 is not retried every tick; Stop and ↻
+flush at once. `ACTIVITY.LIVE_MIN` raised 15 -> 25 (newest stored sample can be
+~20 min old).
+
+**Cost of all of it:** collector ~96 writes/day per tracked KD; ACTIVITY open
+~7 reads + the shared ~19 for kd_identities once per session; save = 1 write
+(+ reads for any of the 14 days not yet cached).
+
+**Verified.** Harness (new `kd_identities` fixture: identity tagged a116 for
+the enemy with an a115 profile for 10 of its rulers; `?nokddb=1`; PATCH log in
+`__fbPatchLog`): open = 7 activity + kd_identities; tz switches 0; save = 1
+PATCH with mask `activity.a116` only, 22 rulers, mentor arrays only on the 2
+mentored slots; after saving, history still shows the a115 war and its 10
+rulers; KD DATABASE shows both wars and 22 Past-activity cells for 0 reads;
+untagged -> explicit message, no write; all 13 tabs render. Collector
+(collector-test.html): 3 samples -> 1 commit, 2 days -> 1 commit/2 writes,
+updatedAt = newest sample, 429 keeps the queue with 0 retries inside the
+backoff, a later good flush clears the write error, Stop flushes. Minified
+build 374.4 KB. **NOT committed / NOT pushed.**
+
+**Trap:** the Browser pane caches `scripts/*.js` from the python server hard --
+`fetch(url, {cache:'reload'})` then reload, or you test the old file.
+
+### Same session, part 3 -- OWN kingdom from the IS SoT archive; Utopia time
+
+Leader: own provinces' activity should come from the IS ("it logs when their
+intel is updated"; "login lands on the throne page"). So the OWN view needs no
+collector at all.
+
+**`Province/v1/SotArchive?server&location&slot`** (found in the public IS
+bundle as the "SoTs over last 72 ticks" chart). **Verified live on 5:11 with
+`scripts/sotarchive-probe.js`** (run by the leader in the IS console; it prints
+no token): an array of ONLY the ticks in which a fresh SoT arrived -- gappy
+tickIds, no nulls, no entry identical to the previous one -- each
+`{tickId, tickName, buildingEff, networth, gold, runes, peasants, food, land,
+thieves, wizards, soldiers, offSpecs, defSpecs, elites, horses, prisoners,
+offPoints, defPoints}`; 63 / 34 / 11 / 6 entries for four provinces over 72
+ticks. **It is a LOGIN log** (not session length). A SoT's `tickId` = the tick
+number MINUS ONE during the hour it was posted (fresh SoT 1109 while
+`currentTick.tickNumber` 1110; fixture 1680 / 1665 / 14.7h agrees); the pull
+re-calibrates that against every province's `sot.ageSeconds` (median).
+
+**Own view** (`_actIsPull`, `api.js:fetchSotArchive`): on opening Own / ⟳,
+at most every `ACTIVITY.IS_PULL_MIN` (30), fetch OwnKingdom + the archive of
+every own province (4 at a time, ~24 GETs, **0 Firestore**), fold COMPLETED
+ticks into `activity_is/{K_I}_{YYYYMMDD}` = `{loc, day, names, updatedAt, src,
+covered: [UTC hours], seen: {slot: [UTC hours]}}` via the new **`fbAppend`**
+(one `:commit`, updateMask + `appendMissingElements`; only NEW hours are sent,
+so a repeat pull writes nothing). The **current tick is never stored** (it is
+not over -- it would record later logins as "off"); it is shown live from
+`S.actIsNow` (on this tick, exact last-seen from `sot.ageSeconds`). **If any
+province's archive fails, nothing is stored** (it would read as "never on").
+`_actDocSamples` turns a stored IS day into one synthetic sample per covered
+hour, so the same aggregator/heatmap/timeline serve both sources; timeline
+cells are 1 tick for IS. Cache keys are now `coll|loc` (`_actCacheOf`).
+
+**Utopia time everywhere on the tab + KD DB strips** (leader: "fokusera på
+utopia tid, den fungerar för alla" -- then "same for the enemy tracker"). 1
+tick = 1 Utopian day, so the hour axis is the **day of the month 1-24**;
+range buttons are "Months" (= real days); stamps read "July 24, YR9 +17m";
+timeline headers show the month name at day 1 and days 7/13/19. The Local/UTC
+toggle and `S.actTz` are gone. Anchor: `S.currentTickName` + new **`S.tickAt`**
+(set in app.js init/refresh and on each IS pull) -> `_actUto(t)` via ritual.js
+`_parseUtoDate/_utoToAbs/_absToUto`; ticks assumed on the UTC hour. **Storage
+stays in UTC hours** (habits follow the real clock, and which Utopian day a UTC
+hour becomes shifts with each age's start hour) -- `_actToTz` re-maps saved
+profiles onto THIS age's days when drawn.
+
+**Verified.** Harness: SotArchive mock (only-fresh-ticks shape, per-slot
+habits), OwnKingdom ages re-derived to agree with now (`?skewages=1` keeps the
+frozen ones), `:commit` persisted into `window.__fbStore` and served back by
+`:batchGet`, `?sotfail=1`. First Own open = 3-4 day-doc writes, second ⟳ and
+view switches = 0 writes; "On this tick 5/23"; last seen 1h45m -> "July 22, YR9
++30m" (2 ticks back from day 24); one failed archive -> error, 0 writes, not
+shown as "no data"; enemy view columns 1-24, "quietest day 16"; all 13 tabs
+render; KD DB strips still draw. Minified build 384.2 KB. **NOT committed.**
+
+### Same session, part 4 -- the two Tampermonkey scripts
+
+- **They do not conflict**: news scraper (`userscripts/kingdom-news-scraper.user.js`,
+  `/wol/game/*`, fetches kingdom_news every 90s, POSTs to Cloud Run, key
+  `wp_kdnews_last_scrape`, no UI) vs the activity collector (`/wol/*`, own keys
+  `wpActivity*`, panel bottom-left). Neither reloads or navigates.
+- **The collector did not run** because it was pasted into Tampermonkey's NEW
+  SCRIPT TEMPLATE: the template header came first ("New Userscript",
+  version = date, `@match` = the page it was created on), and Tampermonkey only
+  reads the first header. Fix = replace the whole editor content with the file.
+- **The news scraper WORKS** -- tested in a fresh game tab: `Sent to backend:
+  {"success":true}`, stored as `parsed/20260910_233036_unknown_9562.json`, all
+  14 military events parsed (10 TMs + 4 razes incl. the "razed N acres of"
+  form); the other 8 lines were aid shipments, which parse.php does not handle.
+  The "nothing since July 4" in requests.log was simply the script not running
+  (and a tab opened before a script is enabled does not get it until reloaded).
+- **Bug fixed in `utopia-intel-server/parse.php`** (NOT deployed): the edition
+  label took the first "X YRn Edition" on the page, which is the
+  "< April YR6 Edition" previous-edition LINK -> May's news labelled April.
+  Now skips `<`/`>` links (tested in node against the stored page text: old
+  "April YR6", new "May YR6"). The Intel tab shows this label.
+- The scraper sends `prov: "unknown"` (its selector finds no province name on
+  most pages) -- harmless for kd_news.
+
 ## Recent work (2026-08-13) -- Plague: own kingdom only
 
 Leader: "I want to remove plague from the econ tab, many cure it right away

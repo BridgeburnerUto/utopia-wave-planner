@@ -51,7 +51,17 @@ const FB_QUOTA = {
 const ACTIVITY = {
   DAYS_MAX:      14,       // widest lookback the tab offers (= reads on first open)
   TODAY_TTL_MS:  10 * 60e3, // re-opening the tab re-reads TODAY's doc after this; older days never change
-  LIVE_MIN:      15,       // last sample younger than this = collector running, "online now" is shown
+  // Last sample younger than this = collector running, "online now" is shown.
+  // The collector writes every 15 min (FLUSH_MIN in the userscript) with a
+  // sample every ~5, so a healthy collector's newest stored sample can be ~20
+  // minutes old when read.
+  LIVE_MIN:      25,
+  PROFILE_MIN_SAMPLES: 24, // fewer than this (~2h at 5 min) is not a profile worth keeping
+  // OWN kingdom = the IS SoT archive (Province/v1/SotArchive, one GET per
+  // province, no Firestore). How far back it reaches, and how often the ACTIVITY
+  // tab re-reads it; each read stores the new hours (~1 write).
+  IS_ARCHIVE_TICKS: 72,
+  IS_PULL_MIN:      30,
   TIMELINE_H:    48,       // Timeline view: hours shown
   TIMELINE_BIN_MIN: 30,    // Timeline view: minutes per cell
 };

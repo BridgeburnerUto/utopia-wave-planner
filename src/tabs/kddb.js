@@ -305,8 +305,23 @@ function _kddbBuildIdRows() {
         </div>
         ${history ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px">${history}</div>` : ''}
         ${rulers  ? `<div style="font-size:19px;color:#7a9090;line-height:1.6"><b style="color:#b8c8c8">Rulers:</b> ${esc(rulers)}</div>` : ''}
+        ${_kddbActivityLines(identity)}
       </div>`;
   }).join('');
+}
+
+/**
+ * War activity saved from the ACTIVITY tab (identity.activity.{age}, see
+ * tabs/activity.js): one line per war with the kingdom's hour-of-day strip.
+ * It is part of the identity document, so showing it costs no extra read.
+ */
+function _kddbActivityLines(identity) {
+  const profs = Object.values(identity.activity || {}).sort((p, q) => q.savedAt - p.savedAt);
+  if (!profs.length) return '';
+  return `<div style="margin-top:6px;font-size:17px;color:#7a9090;line-height:1.9">` + profs.map(prof =>
+    `<div><b style="color:#b8c8c8">⏱ ${esc(prof.age)}</b> ${esc(prof.kdName || '')} (${esc(prof.loc)})
+      ${_actStrip(prof.kd?.on, null, 'kd', 12, `${prof.age} · `)}
+      <span style="font-size:15px">${esc(_actProfileLine(prof))}</span></div>`).join('') + `</div>`;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -359,11 +374,18 @@ function _buildMainView() {
   let provinceHtml = '';
   if (hasEnemy) {
     const rulerIdx = _kddbBuildRulerIdx();
-    const TH = 'padding:8px 14px;text-align:left;font-size:17px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070';
+    const actIdx   = _actRulerIndex();   // ruler → newest saved war-activity entry (no read)
+    const TH ='padding:8px 14px;text-align:left;font-size:17px;font-weight:700;color:#7a9090;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #617070';
     const provRows = (S.enemy.provinces || []).map(p => {
       const ruler    = p.sot?.ruler || '—';
       const known    = ruler !== '—' && rulerIdx[ruler.toLowerCase()];
       const identity = known ? _kddbIdentities.find(i => i.id === known) : null;
+      const act      = ruler !== '—' ? actIdx.get(ruler.trim().toLowerCase()) : null;
+      const actCell  = act
+        ? `${_actStrip(act.e.on, act.e.mt, 'ruler', 8, `${act.e.r} as ${act.e.p} (${act.prof.age}, ${act.prof.kdName || act.prof.loc}) · `)}
+           <span style="font-size:15px;color:#60C040;margin-left:4px">${act.e.pct}%</span>
+           <span style="font-size:14px;color:#617070">${esc(act.prof.age)}</span>`
+        : '';
       return `
         <tr onmouseover="this.style.background='rgba(255,212,0,.07)'" onmouseout="this.style.background=''">
           <td style="padding:9px 14px;color:#7a9090;font-size:19px;border-bottom:1px solid rgba(97,112,112,.25)">${p.slot}</td>
@@ -372,6 +394,7 @@ function _buildMainView() {
           <td style="padding:9px 14px;color:#b8c8c8;font-size:17px;border-bottom:1px solid rgba(97,112,112,.25)">${esc(p.race || '—')}</td>
           <td style="padding:9px 14px;color:#b8c8c8;font-size:17px;border-bottom:1px solid rgba(97,112,112,.25)">${esc(p.sot?.personality || '—')}</td>
           <td style="padding:9px 14px;font-size:19px;font-weight:700;color:#60d060;border-bottom:1px solid rgba(97,112,112,.25)">${identity ? esc(identity.label) : ''}</td>
+          <td style="padding:9px 14px;white-space:nowrap;border-bottom:1px solid rgba(97,112,112,.25)">${actCell}</td>
         </tr>`;
     }).join('');
     provinceHtml = `
@@ -389,6 +412,7 @@ function _buildMainView() {
               <th style="${TH}">Race</th>
               <th style="${TH}">Personality</th>
               <th style="${TH}">Known As</th>
+              <th style="${TH}" title="This ruler's online pattern in the last war it was saved from (ACTIVITY tab → Save to KD Database), by Utopian day of the month (1–24), laid onto this age's calendar">Past activity</th>
             </tr></thead>
             <tbody>${provRows}</tbody>
           </table>

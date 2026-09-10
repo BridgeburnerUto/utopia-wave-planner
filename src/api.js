@@ -26,6 +26,21 @@ async function fetchEnemyKingdom(location) {
   return r.json().catch(() => null);
 }
 
+/**
+ * "SoTs over last 72 ticks" for one province — ONLY the ticks in which a fresh
+ * SoT arrived, oldest first, each {tickId, tickName, gold, land, ...}
+ * (verified live 2026-09-11). For an OWN province that is when its player
+ * logged in, which is what the ACTIVITY tab's own view is built from.
+ * Returns the array, or null on failure.
+ */
+async function fetchSotArchive(location, slot) {
+  const r = await fetch(_url(`/Province/v1/SotArchive?server=${S.server}&location=${location}&slot=${slot}`), { headers: _headers() })
+    .catch(() => null);
+  if (!r || !r.ok) return null;
+  const body = await r.json().catch(() => null);
+  return Array.isArray(body) ? body : (Array.isArray(body?.content) ? body.content : null);
+}
+
 /** Fetch all op logs for the own kingdom (~24h window) */
 async function fetchKingdomOps() {
   const r = await fetch(_url(`/Kingdom/v1/KingdomOps?server=${S.server}`), { headers: _headers() })

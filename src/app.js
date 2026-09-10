@@ -114,6 +114,7 @@ window.__wpA = {
       if (od.currentTick) {
         S.own.currentTick = od.currentTick;
         S.currentTickName = od.currentTick.tickName;
+        S.tickAt = Date.now();
         const t = $id('__wptick');
         t.textContent = `Tick ${od.currentTick.tickNumber} · ${od.currentTick.tickName}`;
         t.style.display = '';
@@ -315,6 +316,7 @@ window.__wpA = {
       if (od.currentTick) {
         S.own.currentTick = od.currentTick;
         S.currentTickName = od.currentTick.tickName;
+        S.tickAt = Date.now();
         const t = $id('__wptick');
         t.textContent = `Tick ${od.currentTick.tickNumber} · ${od.currentTick.tickName}`;
       }
@@ -509,10 +511,10 @@ window.__wpA = {
   // reads the days it is missing, and only ⟳ re-reads today (see activity.js).
   actView(v) { S.actView = v;  renderActivity({ cached: true }); },
   actDays(n) { S.actDays = n;  renderActivity({ cached: true }); },
-  actTz(v)   { S.actTz = v;    renderActivity({ cached: true }); },
   actMode(v) { S.actMode = v;  renderActivity({ cached: true }); },
   actSort(v) { S.actSort = v;  renderActivity({ cached: true }); },
   actRefresh,
+  actSaveProfile,
 
   /** Read current location inputs + reload graph */
   nwLoad() {

@@ -92,6 +92,73 @@ async function fbWrite(path, data) {
   return json;
 }
 
+/** A Firestore field path segment, backtick-quoted unless it is a plain identifier */
+function _fbFieldSeg(s) {
+  return /^[A-Za-z_][A-Za-z_0-9]*$/.test(s) ? s : '`' + String(s).replace(/[`\\]/g, m => '\\' + m) + '`';
+}
+
+/**
+ * Write ONLY the given nested fields of a document, leaving the rest as it is
+ * (`updateMask`). fbWrite replaces the whole document, which is wrong whenever
+ * one feature owns one field of a document another feature also writes — e.g.
+ * the activity profile inside a kd_identities doc.
+ *   fbPatch('kd_identities/x', ['activity', 'a116'], profile)
+ * sets activity.a116 and nothing else. One write. Returns true on success.
+ */
+async function fbPatch(path, fieldPath, value) {
+  let fields = { [fieldPath[fieldPath.length - 1]]: _toFB(value) };
+  for (let i = fieldPath.length - 2; i >= 0; i--) fields = { [fieldPath[i]]: { mapValue: { fields } } };
+  const mask = fieldPath.map(_fbFieldSeg).join('.');
+  const url = `${CFG.FB_BASE}/${path}?updateMask.fieldPaths=${encodeURIComponent(mask)}&key=${CFG.FB_API_KEY}`;
+  const r = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    const hint = r?.status === 429 ? ' — Firestore daily free quota exhausted, resets at midnight US Pacific' : '';
+    console.error('[WavePlanner] fbPatch failed', r?.status, path, mask);
+    S.fbLastError = `Firestore write failed (${r ? 'HTTP ' + r.status : 'network'})${hint}`;
+    return false;
+  }
+  _fbBillWrites(1);
+  return true;
+}
+
+/**
+ * ONE document write that sets some top-level fields (leaving the rest alone)
+ * and adds values to arrays without duplicates (arrayUnion / appendMissingElements).
+ *   fbAppend('activity_is/5_11_20260911', {loc, day, names, updatedAt},
+ *            [[['covered'], [5, 6]], [['seen', '13'], [5]]])
+ * An array element that is already there is skipped by Firestore, so re-sending
+ * something that did land costs nothing but the write. Creates the document if
+ * it does not exist. Returns true on success.
+ */
+async function fbAppend(path, fields, appends) {
+  const root = CFG.FB_BASE.replace(/^https:\/\/firestore\.googleapis\.com\/v1\//, '');
+  const write = {
+    update: { name: `${root}/${path}`, fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, _toFB(v)])) },
+    updateMask: { fieldPaths: Object.keys(fields).map(_fbFieldSeg) },
+    updateTransforms: appends.filter(([, vals]) => vals?.length).map(([fp, vals]) => ({
+      fieldPath: fp.map(_fbFieldSeg).join('.'),
+      appendMissingElements: { values: vals.map(_toFB) },
+    })),
+  };
+  const r = await fetch(`${CFG.FB_BASE}:commit?key=${CFG.FB_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ writes: [write] }),
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    const hint = r?.status === 429 ? ' — Firestore daily free quota exhausted, resets at midnight US Pacific' : '';
+    console.error('[WavePlanner] fbAppend failed', r?.status, path);
+    S.fbLastError = `Firestore write failed (${r ? 'HTTP ' + r.status : 'network'})${hint}`;
+    return false;
+  }
+  _fbBillWrites(1);
+  return true;
+}
+
 /** Read a single document at path, returns plain JS object or null */
 async function fbGet(path) {
   const r = await fetch(_fbUrl(path)).catch(() => null);

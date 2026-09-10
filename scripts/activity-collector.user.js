@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia KD Activity Collector (War Planner)
 // @namespace    https://bridgeburneruto.github.io/utopia-wave-planner/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Samples the online (*) markers on one kingdom's page every few minutes and stores them for the War Planner's ACTIVITY tab.
 // @match        https://utopia-game.com/wol/*
 // @grant        none
@@ -47,9 +47,17 @@
 //
 // WHAT IT SENDS: one Firestore document per kingdom per UTC day,
 // activity/{K_I}_{YYYYMMDD}: {loc, day, kdName, names: {slot: name}, updatedAt,
-// samples: [{t, on: [slots online], mt: [the subset where the MENTOR is on]}]}. One document write per sample (~288 a day
-// at 5 minutes, against the 20k/day free tier). Nothing else on the page is
-// read, and nothing is sent anywhere except Firestore.
+// samples: [{t, on: [slots online], mt: [the subset where the MENTOR is on]}]}.
+// Nothing else on the page is read, and nothing is sent anywhere but Firestore.
+//
+// WRITES ARE BATCHED (leader's call, 2026-09-11 -- keep the Firestore cost
+// down). Samples queue in localStorage and are flushed every FLUSH_MIN minutes
+// as ONE write per day document: ~96 writes/day at 15 minutes instead of 288
+// with one write per sample. The queue survives a reload or a closed browser
+// and goes out on the next flush. A flush that fails keeps the queue; re-sending
+// a sample that did land is harmless, because appendMissingElements skips an
+// element that is already in the array. The planner's "online now" can
+// therefore trail by up to FLUSH_MIN.
 
 (() => {
   if (window.__wpActivity) { window.__wpActivity.show(); return; }   // pasted twice
@@ -59,7 +67,8 @@
   const FB_DB   = `projects/${FB_PROJECT}/databases/(default)/documents`;
   const FB_BASE = `https://firestore.googleapis.com/v1/${FB_DB}`;
 
-  const STATE_KEY = 'wpActivity';       // {loc, everyMin, on, lastAt, lastN, lastOn, kdName, err}
+  const STATE_KEY = 'wpActivity';       // {loc, everyMin, on, lastAt, lastN, lastOn, lastMt, kdName, err, nextAt, flushedAt}
+  const QUEUE_KEY = 'wpActivityQueue';  // {[docId]: {loc, day, kdName, names, samples: [{t, on, mt}]}}
   const LOCK_KEY  = 'wpActivityLock';   // {id, ts} -- which tab samples
   // A tab that has not ticked for this long lost the lock. Chrome throttles a
   // hidden tab's timers to about once a minute, so this must be well above 60s.
@@ -67,11 +76,15 @@
   const TICK_MS = 20e3;                 // how often the loop checks whether a sample is due
   const JITTER_MS = 30e3;               // +- spread so samples do not land on the same second
   const DEFAULT_MIN = 5;
+  const FLUSH_MIN = 15;                 // oldest queued sample may wait this long before a write
 
   const TAB_ID = Math.random().toString(36).slice(2);
 
-  const load = () => { try { return JSON.parse(localStorage.getItem(STATE_KEY) || '{}'); } catch (e) { return {}; } };
+  const readJson = (k, dflt) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? dflt; } catch (e) { return dflt; } };
+  const load = () => readJson(STATE_KEY, {});
   const save = (patch) => { const s = { ...load(), ...patch }; localStorage.setItem(STATE_KEY, JSON.stringify(s)); return s; };
+  const loadQueue = () => readJson(QUEUE_KEY, {});
+  const queued = (q = loadQueue()) => Object.values(q).reduce((n, d) => n + d.samples.length, 0);
 
   // ── Firestore value encoding (mirrors src/firebase.js _toFB) ────────────────
   const toFB = (v) => {
@@ -129,53 +142,92 @@
     return { kdName, names, on: on.sort((a, b) => a - b), mt: mt.sort((a, b) => a - b) };
   }
 
-  // ── Store one sample: a single document write ───────────────────────────────
-  // names/kdName are overwritten, the sample is APPENDED (appendMissingElements),
-  // so two collectors on the same kingdom merge instead of clobbering each other.
-  async function store(loc, t, parsed) {
+  // ── Queue + flush ───────────────────────────────────────────────────────────
+  function enqueue(loc, t, parsed) {
+    const q = loadQueue();
     const day = dayId(t);
-    const id  = `${loc.replace(':', '_')}_${day}`;
-    const fields = { loc, day, kdName: parsed.kdName, names: parsed.names, updatedAt: t };
-    const body = {
-      writes: [{
+    const id = `${loc.replace(':', '_')}_${day}`;
+    const d = q[id] || (q[id] = { loc, day, samples: [] });
+    d.kdName = parsed.kdName;              // latest wins, like the document fields
+    d.names = parsed.names;
+    d.samples.push({ t, on: parsed.on, mt: parsed.mt });
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+  }
+
+  // names/kdName are overwritten, the samples APPENDED (appendMissingElements),
+  // so two collectors on the same kingdom merge instead of clobbering each
+  // other. One commit, one write per day document in the queue.
+  async function flush() {
+    const q = loadQueue();
+    const ids = Object.keys(q);
+    if (!ids.length) return;
+    const writes = ids.map(id => {
+      const d = q[id];
+      const last = Math.max(...d.samples.map(s => s.t));
+      const fields = { loc: d.loc, day: d.day, kdName: d.kdName || '', names: d.names || {}, updatedAt: last };
+      return {
         update: {
           name: `${FB_DB}/activity/${id}`,
           fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, toFB(v)])),
         },
         updateMask: { fieldPaths: Object.keys(fields) },
-        updateTransforms: [{ fieldPath: 'samples', appendMissingElements: { values: [toFB({ t, on: parsed.on, mt: parsed.mt })] } }],
-      }],
-    };
+        updateTransforms: [{ fieldPath: 'samples', appendMissingElements: { values: d.samples.map(toFB) } }],
+      };
+    });
     const r = await fetch(`${FB_BASE}:commit?key=${FB_API_KEY}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ writes }),
     }).catch(e => ({ ok: false, status: e.message }));
     if (!r.ok) {
       const hint = r.status === 429 ? ' (Firestore daily quota -- resets midnight US Pacific)' : '';
-      throw new Error(`Firestore write failed: HTTP ${r.status}${hint}`);
+      throw new Error(`Firestore write failed: HTTP ${r.status}${hint} -- ${queued(q)} samples kept for the next try`);
     }
+    // Drop only what was sent: a sample queued while the request was in flight stays.
+    const now = loadQueue();
+    ids.forEach(id => {
+      const sent = new Set(q[id].samples.map(s => s.t));
+      if (!now[id]) return;
+      now[id].samples = now[id].samples.filter(s => !sent.has(s.t));
+      if (!now[id].samples.length) delete now[id];
+    });
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(now));
+    // A write that went through settles an earlier write error (not a sample error)
+    const stale = /^Firestore write failed/.test(load().err || '');
+    save({ flushedAt: Date.now(), ...(stale ? { err: '' } : {}) });
+    console.log(`[activity] flushed ${writes.length} document write(s)`);
+  }
+
+  function flushDue() {
+    // After a failure, wait a minute -- a 429 must not be retried every tick.
+    if (Date.now() - (load().errAt || 0) < 60e3) return false;
+    const q = loadQueue();
+    const oldest = Math.min(Infinity, ...Object.values(q).flatMap(d => d.samples.map(s => s.t)));
+    return oldest !== Infinity && Date.now() - oldest >= FLUSH_MIN * 60e3 - TICK_MS;
   }
 
   let busy = false;
-  async function sampleNow() {
+  async function run(opts = {}) {
+    if (busy) return;
+    busy = true;
     const s = load();
     const loc = normLoc(s.loc);
-    if (!loc || busy) return;
-    busy = true;
     const t = Date.now();
     try {
-      const [k, i] = loc.split(':');
-      const r = await fetch(`/wol/game/kingdom_details/${k}/${i}`, { credentials: 'include', cache: 'no-store' });
-      if (!r.ok) throw new Error(`kingdom page HTTP ${r.status}`);
-      const parsed = parseKingdom(await r.text(), loc);
-      await store(loc, t, parsed);
-      save({ lastAt: t, lastN: Object.keys(parsed.names).length, lastOn: parsed.on.length, lastMt: parsed.mt.length,
-             kdName: parsed.kdName, err: '', nextAt: t + (s.everyMin || DEFAULT_MIN) * 60e3 + (Math.random() * 2 - 1) * JITTER_MS });
-      console.log(`[activity] ${loc} ${hhmm(t)} — ${parsed.on.length}/${Object.keys(parsed.names).length} online: [${parsed.on.join(', ')}]`
-        + (parsed.mt.length ? ` (mentor: [${parsed.mt.join(', ')}])` : ''));
+      if (loc && (opts.sample || (s.on && t >= (s.nextAt || 0)))) {
+        const [k, i] = loc.split(':');
+        const r = await fetch(`/wol/game/kingdom_details/${k}/${i}`, { credentials: 'include', cache: 'no-store' });
+        if (!r.ok) throw new Error(`kingdom page HTTP ${r.status}`);
+        const parsed = parseKingdom(await r.text(), loc);
+        enqueue(loc, t, parsed);
+        save({ lastAt: t, lastN: Object.keys(parsed.names).length, lastOn: parsed.on.length, lastMt: parsed.mt.length,
+               kdName: parsed.kdName, err: '', nextAt: t + (s.everyMin || DEFAULT_MIN) * 60e3 + (Math.random() * 2 - 1) * JITTER_MS });
+        console.log(`[activity] ${loc} ${hhmm(t)} — ${parsed.on.length}/${Object.keys(parsed.names).length} online: [${parsed.on.join(', ')}]`
+          + (parsed.mt.length ? ` (mentor: [${parsed.mt.join(', ')}])` : '') + ` · ${queued()} queued`);
+      }
+      if (opts.flush || flushDue()) await flush();
     } catch (e) {
       // Retry sooner than a full interval, but never hammer: 1 minute.
-      save({ err: e.message, errAt: t, nextAt: t + 60e3 });
-      console.warn(`[activity] ${loc} sample failed: ${e.message}`);
+      save({ err: e.message, errAt: t, nextAt: Math.max(load().nextAt || 0, t + 60e3) });
+      console.warn(`[activity] ${loc}: ${e.message}`);
     } finally {
       busy = false;
       render();
@@ -184,8 +236,7 @@
 
   // ── Loop + tab lock ─────────────────────────────────────────────────────────
   function holdLock() {
-    let lock = null;
-    try { lock = JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch (e) {}
+    const lock = readJson(LOCK_KEY, null);
     const now = Date.now();
     if (!lock || lock.id === TAB_ID || now - lock.ts > LOCK_STALE_MS) {
       localStorage.setItem(LOCK_KEY, JSON.stringify({ id: TAB_ID, ts: now }));
@@ -194,15 +245,21 @@
     return false;
   }
   function releaseLock() {
-    try { const l = JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); if (l?.id === TAB_ID) localStorage.removeItem(LOCK_KEY); } catch (e) {}
+    const l = readJson(LOCK_KEY, null);
+    if (l?.id === TAB_ID) localStorage.removeItem(LOCK_KEY);
   }
 
   let isSampler = false;
   function tick() {
     const s = load();
-    if (!s.on || !normLoc(s.loc)) { isSampler = false; releaseLock(); render(); return; }
+    // A stopped collector still owes Firestore whatever it had queued.
+    if (!s.on || !normLoc(s.loc)) {
+      isSampler = false;
+      if (queued() && holdLock()) { isSampler = true; run(); return; }
+      releaseLock(); render(); return;
+    }
     isSampler = holdLock();
-    if (isSampler && Date.now() >= (s.nextAt || 0)) sampleNow();
+    if (isSampler && (Date.now() >= (s.nextAt || 0) || flushDue())) run();
     else render();
   }
 
@@ -211,7 +268,7 @@
   box.id = '__wpact';
   box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#101a1a;color:#c8d8d8;'
     + 'border:1px solid #3a5050;border-radius:4px;padding:5px 9px;font:13px/1.4 sans-serif;'
-    + 'box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:420px';
+    + 'box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:440px';
   document.body.appendChild(box);
 
   function render() {
@@ -219,14 +276,15 @@
     const loc = normLoc(s.loc);
     const btn = (id, label, tip) => `<button data-a="${id}" title="${tip || ''}" style="font:12px sans-serif;margin-left:6px;`
       + `padding:1px 7px;background:#1d2b2b;color:#c8d8d8;border:1px solid #3a5050;border-radius:3px;cursor:pointer">${label}</button>`;
+    const err = s.err ? `<div style="color:#ff7070" title="${s.err}">⚠ ${s.err}</div>` : '';
     if (!s.on || !loc) {
-      box.innerHTML = `📡 <b>Activity</b> <span style="color:#7a9090">off</span>`
-        + btn('start', 'Track…', 'Start sampling a kingdom\'s online markers');
+      const q = queued();
+      box.innerHTML = `📡 <b>Activity</b> <span style="color:#7a9090">off${q ? ` · ${q} samples waiting to be written` : ''}</span>`
+        + btn('start', 'Track…', 'Start sampling a kingdom\'s online markers') + err;
       return;
     }
-    const err = s.err ? `<div style="color:#ff7070" title="${s.err}">⚠ ${s.err}</div>` : '';
     box.innerHTML = `📡 <b>${loc}</b>${s.kdName ? ' ' + s.kdName.replace(/</g, '&lt;') : ''} · every ${s.everyMin || DEFAULT_MIN}m`
-      + btn('now', '↻', 'Sample now') + btn('stop', 'Stop')
+      + btn('now', '↻', 'Sample now and write everything queued') + btn('stop', 'Stop', 'Stop sampling (what is queued is still written)')
       + `<div id="__wpact_st" style="color:#8fa8a8"></div>${err}`;
     renderStatus();
   }
@@ -239,8 +297,10 @@
     const s = load();
     const age = s.lastAt ? Math.round((Date.now() - s.lastAt) / 60e3) : null;
     const next = s.nextAt ? Math.max(0, Math.round((s.nextAt - Date.now()) / 1000)) : 0;
+    const q = queued();
     el.textContent = !isSampler ? 'another tab is sampling'
       : s.lastAt ? `${s.lastOn}/${s.lastN} online${s.lastMt ? ` (${s.lastMt} mentor)` : ''} · ${age}m ago · next ${Math.floor(next / 60)}:${pad(next % 60)}`
+        + (q ? ` · ${q} queued` : '')
       : 'first sample…';
   }
 
@@ -253,17 +313,18 @@
       const every = parseInt(prompt('Sample every how many minutes? (shorter than the online window; 5 is a good start)',
         String(load().everyMin || DEFAULT_MIN)), 10);
       save({ loc, on: true, everyMin: Math.min(60, Math.max(2, every || DEFAULT_MIN)), nextAt: 0, err: '',
-             lastAt: 0, lastN: 0, lastOn: 0, kdName: '' });
+             lastAt: 0, lastN: 0, lastOn: 0, lastMt: 0, kdName: '' });
       tick();
     } else if (a === 'stop') {
-      save({ on: false }); releaseLock(); render();
+      save({ on: false });
+      if (queued() && holdLock()) { isSampler = true; run({ flush: true }); } else { releaseLock(); render(); }
     } else if (a === 'now') {
-      if (holdLock()) { isSampler = true; sampleNow(); }
+      if (holdLock()) { isSampler = true; run({ sample: true, flush: true }); }
     }
   });
 
   window.addEventListener('beforeunload', releaseLock);
-  window.__wpActivity = { show: render, sampleNow, parseKingdom, tick, state: load };
+  window.__wpActivity = { show: render, run, flush, parseKingdom, tick, state: load, queue: loadQueue };
   setInterval(tick, TICK_MS);
   setInterval(renderStatus, 1000);   // countdown only; sampling is driven by tick()
   tick();

@@ -39,6 +39,7 @@ const S = {
   playerProv: null, // selected own province object
   lbView: 'damage',
   currentTickName: null, // e.g. "July 18, YR1" — used for ritual expiry calc
+  tickAt:          0,    // real time (ms) currentTickName was read — anchors real time ↔ Utopian date (ACTIVITY tab)
   snLastAck: 0,          // real timestamp of last Snatch News acknowledgement
   nwView: 'total',
   econView: 'enemy',  // Economy tab KD switch — enemy econ matters most in war
@@ -118,12 +119,14 @@ const S = {
 
   // ── KD activity (tabs/activity.js) ─────────────────────────────────────────
   actView:  'enemy',  // 'enemy' | 'own' — which kingdom's online history is shown
-  actDays:  7,        // lookback in UTC days (1..ACTIVITY.DAYS_MAX)
-  actTz:    'local',  // 'local' | 'utc' — hour columns; UTC hours are tick-aligned
+  actDays:  7,        // lookback in real days = Utopian months (1..ACTIVITY.DAYS_MAX); shown in Utopia time only
   actMode:  'hours',  // 'hours' (hour-of-day heatmap) | 'timeline' (last 48h, per sample)
   actSort:  'slot',   // 'slot' | 'active' | 'seen'
   actCache: {},       // {[loc]: {docs: {[YYYYMMDD]: doc|null}, readAt: {[YYYYMMDD]: ms}}} — null = day has no doc (collector was not running)
   actErr:   '',       // last activity read failure (shown in the tab; never rendered as "no data")
+  actKddbErr: '',     // kd_identities read failed on the ACTIVITY tab — earlier-war profiles not shown (not retried per render)
+  actIsPulledAt: {},  // {[loc]: ms} last read of the IS SoT archive (own view, throttled by ACTIVITY.IS_PULL_MIN)
+  actIsNow: {},       // {[loc]: {at, hourStart, on: Set(slots with a SoT this hour), lastSeen: {slot: ms}, corrH}} — the hour that is not stored yet
 
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
