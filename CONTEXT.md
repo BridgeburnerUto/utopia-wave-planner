@@ -163,8 +163,9 @@ read-failure message, never "no samples"; idle hides online-now; all 13 tabs
 render. Collector tested in `mockup/collector-test.html` (fake game page +
 Firestore): `*`, `(S)*`, `**` counted, `(M)` and `^` not, empty slot skipped,
 no double sample, lock handover, logged-out and 429 errors, Stop releases the
-lock. Minified build 363.5 KB. **NOT committed / NOT pushed** -- the tab and the
-userscript's @downloadURL (GitHub Pages) only exist once pushed.
+lock. Minified build 363.5 KB. Committed by the leader as `41ba72c` ("added
+activity check"); parts 2-4 below are `cfd944d`. Both pushed; GitHub Pages
+serves the userscript at its @downloadURL (verified 1.1.0 live).
 
 **Trap:** loading a script from `http://localhost` into the utopia-game.com
 tab hangs (Chrome local-network-access prompt) -- paste instead.
@@ -236,7 +237,7 @@ untagged -> explicit message, no write; all 13 tabs render. Collector
 (collector-test.html): 3 samples -> 1 commit, 2 days -> 1 commit/2 writes,
 updatedAt = newest sample, 429 keeps the queue with 0 retries inside the
 backoff, a later good flush clears the write error, Stop flushes. Minified
-build 374.4 KB. **NOT committed / NOT pushed.**
+build 374.4 KB. Committed + pushed in `cfd944d`.
 
 **Trap:** the Browser pane caches `scripts/*.js` from the python server hard --
 `fetch(url, {cache:'reload'})` then reload, or you test the old file.
@@ -293,7 +294,9 @@ frozen ones), `:commit` persisted into `window.__fbStore` and served back by
 view switches = 0 writes; "On this tick 5/23"; last seen 1h45m -> "July 22, YR9
 +30m" (2 ticks back from day 24); one failed archive -> error, 0 writes, not
 shown as "no data"; enemy view columns 1-24, "quietest day 16"; all 13 tabs
-render; KD DB strips still draw. Minified build 384.2 KB. **NOT committed.**
+render; KD DB strips still draw. Minified build 384.2 KB. Committed + pushed
+in `cfd944d` (Pages live). The Own view has NOT yet been opened against the
+live IS -- first real run is the leader's next open of ACTIVITY -> Own.
 
 ### Same session, part 4 -- the two Tampermonkey scripts
 
@@ -311,7 +314,11 @@ render; KD DB strips still draw. Minified build 384.2 KB. **NOT committed.**
   form); the other 8 lines were aid shipments, which parse.php does not handle.
   The "nothing since July 4" in requests.log was simply the script not running
   (and a tab opened before a script is enabled does not get it until reloaded).
-- **Bug fixed in `utopia-intel-server/parse.php`** (NOT deployed): the edition
+- **Bug fixed in `utopia-intel-server/parse.php`**, **deployed as Cloud Run
+  revision `utopia-intel-00069-9d6`** (2026-09-10 23:38 UTC; the local backend
+  dir was diffed against rev 00068's stored source zip first -- parse.php was
+  the ONLY difference). Verified live: the 23:33 news post was labelled
+  "April YR6", the 23:39 one (after the deploy) "May YR6". The edition
   label took the first "X YRn Edition" on the page, which is the
   "< April YR6 Edition" previous-edition LINK -> May's news labelled April.
   Now skips `<`/`>` links (tested in node against the stored page text: old
