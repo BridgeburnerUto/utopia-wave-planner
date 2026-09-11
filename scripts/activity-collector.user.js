@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia KD Activity Collector (War Planner)
 // @namespace    https://bridgeburneruto.github.io/utopia-wave-planner/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Samples the online (*) markers on one kingdom's page every few minutes and stores them for the War Planner's ACTIVITY tab.
 // @match        https://utopia-game.com/wol/*
 // @grant        none
@@ -270,12 +270,25 @@
   }
 
   // ── Panel ───────────────────────────────────────────────────────────────────
+  // Shares a bottom-left dock with the news scraper's status box: whichever
+  // script loads first creates #__wpdock and the other appends to it, so the
+  // two boxes stack instead of covering each other, in either order.
+  function dock() {
+    let d = document.getElementById('__wpdock');
+    if (!d) {
+      d = document.createElement('div');
+      d.id = '__wpdock';
+      d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;display:flex;flex-direction:column;'
+        + 'gap:4px;align-items:flex-start;max-width:440px;pointer-events:none';
+      document.body.appendChild(d);
+    }
+    return d;
+  }
   const box = document.createElement('div');
   box.id = '__wpact';
-  box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#101a1a;color:#c8d8d8;'
-    + 'border:1px solid #3a5050;border-radius:4px;padding:5px 9px;font:13px/1.4 sans-serif;'
-    + 'box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:440px';
-  document.body.appendChild(box);
+  box.style.cssText = 'background:#101a1a;color:#c8d8d8;border:1px solid #3a5050;border-radius:4px;padding:5px 9px;'
+    + 'font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:auto';
+  dock().appendChild(box);
 
   function render() {
     const s = load();

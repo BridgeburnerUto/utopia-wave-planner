@@ -332,6 +332,17 @@ live IS -- first real run is the leader's next open of ACTIVITY -> Own.
   grey ("retrying"), red only after 3 in a row (`failN`) or on any write
   failure; tick/update pages are recognised; the error quotes the page title
   + first text so an odd page is diagnosable.
+- **Own view confirmed working live** by the leader (2026-09-11).
+- **News scraper 2.5 -- status box** (leader ask): "📰 News · sent Nm ago ·
+  May YR6 · 10 hits · 5 razes · next 1:28 · ↻", red line on a backend/fetch
+  failure. It reads the backend's reply (`{"success":true}` + the parsed
+  record, concatenated) and keeps the result in localStorage
+  `wp_kdnews_status`, so every tab shows the same status whichever tab sent.
+  Gained `@downloadURL`/`@updateURL` (Pages). **Both boxes share a dock**:
+  whichever script loads first creates `#__wpdock` (fixed bottom-left, flex
+  column) and the other appends, so they stack in either load order --
+  collector 1.1.2 moved into it. Tested in `mockup/userscripts-test.html`
+  (both orders, fake GM_xmlhttpRequest, `?backend=down`).
 
 ## Recent work (2026-08-13) -- Plague: own kingdom only
 
