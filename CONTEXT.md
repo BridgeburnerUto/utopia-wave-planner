@@ -325,6 +325,13 @@ live IS -- first real run is the leader's next open of ACTIVITY -> Own.
   "April YR6", new "May YR6"). The Intel tab shows this label.
 - The scraper sends `prov: "unknown"` (its selector finds no province name on
   most pages) -- harmless for kd_news.
+- **Collector 1.1.1**: first live run showed "⚠ no province table on the
+  kingdom page" once -- a sample landing on the hourly TICK (leader confirmed;
+  the retry a minute later went through, and Firestore shows clean 5-min
+  samples 23:39-23:54 UTC flushed in one write). One failure is now shown
+  grey ("retrying"), red only after 3 in a row (`failN`) or on any write
+  failure; tick/update pages are recognised; the error quotes the page title
+  + first text so an odd page is diagnosable.
 
 ## Recent work (2026-08-13) -- Plague: own kingdom only
 

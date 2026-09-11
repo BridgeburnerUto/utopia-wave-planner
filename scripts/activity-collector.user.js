@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Utopia KD Activity Collector (War Planner)
 // @namespace    https://bridgeburneruto.github.io/utopia-wave-planner/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Samples the online (*) markers on one kingdom's page every few minutes and stores them for the War Planner's ACTIVITY tab.
 // @match        https://utopia-game.com/wol/*
 // @grant        none
@@ -112,8 +112,14 @@
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const cells = [...doc.querySelectorAll('table.tablesorter td.province-name')];
     if (!cells.length) {
-      const loginish = /login|sign in|password/i.test(doc.title + ' ' + (doc.body?.textContent || '').slice(0, 3000));
-      throw new Error(loginish ? 'not logged in to the game' : 'no province table on the kingdom page');
+      // Say WHAT came back instead. A one-off is usually the page the game
+      // serves while the hourly tick runs; the retry a minute later gets the
+      // real one. The snippet is what makes anything else diagnosable.
+      const body = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+      const snippet = `"${(doc.title || '').trim()}" ${body.slice(0, 90)}`.trim();
+      if (/login|sign in|password/i.test(doc.title + ' ' + body.slice(0, 3000))) throw new Error('not logged in to the game');
+      if (/updat|tick|maintenance|please wait|try again/i.test(doc.title + ' ' + body.slice(0, 600))) throw new Error(`the game is ticking / updating — ${snippet}`);
+      throw new Error(`no province table on the kingdom page — got ${snippet}`);
     }
     const [k, i] = loc.split(':');
     const names = {}, on = [], mt = [];
@@ -219,14 +225,14 @@
         const parsed = parseKingdom(await r.text(), loc);
         enqueue(loc, t, parsed);
         save({ lastAt: t, lastN: Object.keys(parsed.names).length, lastOn: parsed.on.length, lastMt: parsed.mt.length,
-               kdName: parsed.kdName, err: '', nextAt: t + (s.everyMin || DEFAULT_MIN) * 60e3 + (Math.random() * 2 - 1) * JITTER_MS });
+               kdName: parsed.kdName, err: '', failN: 0, nextAt: t + (s.everyMin || DEFAULT_MIN) * 60e3 + (Math.random() * 2 - 1) * JITTER_MS });
         console.log(`[activity] ${loc} ${hhmm(t)} — ${parsed.on.length}/${Object.keys(parsed.names).length} online: [${parsed.on.join(', ')}]`
           + (parsed.mt.length ? ` (mentor: [${parsed.mt.join(', ')}])` : '') + ` · ${queued()} queued`);
       }
       if (opts.flush || flushDue()) await flush();
     } catch (e) {
       // Retry sooner than a full interval, but never hammer: 1 minute.
-      save({ err: e.message, errAt: t, nextAt: Math.max(load().nextAt || 0, t + 60e3) });
+      save({ err: e.message, errAt: t, failN: (load().failN || 0) + 1, nextAt: Math.max(load().nextAt || 0, t + 60e3) });
       console.warn(`[activity] ${loc}: ${e.message}`);
     } finally {
       busy = false;
@@ -276,7 +282,14 @@
     const loc = normLoc(s.loc);
     const btn = (id, label, tip) => `<button data-a="${id}" title="${tip || ''}" style="font:12px sans-serif;margin-left:6px;`
       + `padding:1px 7px;background:#1d2b2b;color:#c8d8d8;border:1px solid #3a5050;border-radius:3px;cursor:pointer">${label}</button>`;
-    const err = s.err ? `<div style="color:#ff7070" title="${s.err}">⚠ ${s.err}</div>` : '';
+    // One failed try is normal (the hourly tick) and is retried in a minute, so
+    // it is shown quietly; red means it keeps failing — or a WRITE failed,
+    // which always matters because samples are waiting in the queue.
+    const loud = (s.failN || 0) >= 3 || /^Firestore write failed/.test(s.err || '');
+    const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const err = !s.err ? ''
+      : loud ? `<div style="color:#ff7070" title="${esc(s.err)}">⚠ ${esc(s.err)}${s.failN >= 3 ? ` (${s.failN} tries in a row)` : ''}</div>`
+      : `<div style="color:#7a9090" title="${esc(s.err)}">last try failed, retrying in a minute — ${esc(s.err).slice(0, 90)}</div>`;
     if (!s.on || !loc) {
       const q = queued();
       box.innerHTML = `📡 <b>Activity</b> <span style="color:#7a9090">off${q ? ` · ${q} samples waiting to be written` : ''}</span>`
