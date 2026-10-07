@@ -230,8 +230,14 @@ and a real /eowcf in Discord.
   mini-sim, cached per population state. Farms sized for the new build's max pop.
   Kingdom plan ~0.8 s in node, ~0.1 s per change in the browser. Test fixture
   now realistic (91% of max via Housing 40) -- it was 128% overpopulated.
-  **cfg.elapsedTicks has no UI input yet** (plans made mid-ceasefire would
-  re-apply the start boosts) -- add one. Province table's Gold column is
+  Ceasefire start = cfg.startAt (ms; tab input "Started (ticks ago)", counts up;
+  blank = starts now) -> cfg.elapsedTicks in _eoCfgNow.
+- **/when [step] [slot] and /traintime [slot]** (leader idea): publish now also
+  stores per province `when: [{k, label, ticks, unix, uto}]` (_eoMilestones:
+  rebuild, wages low, draft start, wages high, armouries, train, exit); the bot
+  counts ticks left live from `unix` ("in N ticks · Utopian date · <t:f>",
+  NOW, or "passed N ticks ago"). Tested in php-wasm with a test copy whose
+  httpJson reads a local plan file. Needs a backend deploy + ?register=1. Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a

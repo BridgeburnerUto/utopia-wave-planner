@@ -53,7 +53,7 @@ const EO_SETUP_DEFAULT = () => ({ id: 'all', name: 'Everyone', race: '', pers: '
                                   guildPct: EOWCF.GUILD_PCT_DEFAULT, towerPct: EOWCF.TOWER_PCT_DEFAULT, homesPct: null, uniPct: null });   // homes null = keep current; unis null = 0 reserved
 const EO_CFG_DEFAULT = () => ({ ticks: 96, exitAt: 0, ritual: 'none',
                                 draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true, inspire: true,
-                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null, elapsedTicks: 0,
+                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null, startAt: null,
                                 wageExitRate: EOWCF.WAGE_EXIT_RATE, wageRaiseTicks: EOWCF.WAGE_RAISE_TICKS,
                                 setups: [EO_SETUP_DEFAULT()], assign: {} });
 /** The live config (created on first use — state.js loads before config tables are usable here) */
@@ -605,7 +605,33 @@ function _eoTicksLeft(cfg) {
 }
 function _eoCfgNow() {
   const c = _eoC();
-  return { ...c, ticks: _eoTicksLeft(c) };
+  // Ticks of the ceasefire already gone: the start-of-ceasefire population boosts
+  // only apply in its first 24 ticks. Unknown start = planning at the start.
+  const elapsedTicks = c.startAt ? Math.max(0, Math.floor((Date.now() - c.startAt) / 3600e3)) : 0;
+  return { ...c, ticks: _eoTicksLeft(c), elapsedTicks };
+}
+
+/** A moment `ticks` from now: unix seconds (on the tick hour) + the Utopian date */
+function _eoMoment(ticks) {
+  const t = Math.max(0, ticks);
+  // Ticks land on the hour: the Nth tick from now is N−1 hours after the next full hour
+  const unix = t <= 0 ? Math.floor(Date.now() / 1000) : Math.floor((Math.ceil(Date.now() / 3600e3) + t - 1) * 3600);
+  const uto = !S.currentTickName ? '' : t > 0 ? (_ritualExpiry(S.currentTickName, t)?.label || '') : S.currentTickName;
+  return { unix, uto };
+}
+
+/** The moments a player may ask the bot about (/when, /traintime) */
+function _eoMilestones(p) {
+  const m = [];
+  const add = (k, label, ticks) => { const x = _eoMoment(ticks); m.push({ k, label, ticks: Math.max(0, ticks), unix: x.unix, uto: x.uto }); };
+  if (p.build) add('rebuild', 'Rebuild', 0);
+  add('wages', `Wages to ${p.wages.low}%`, 0);
+  if (p.draft.drafted > 0) add('draft', 'Start drafting', p.draft.startAt);
+  if (p.wages.raiseAt < p.N) add('wages', `Wages to ${p.wages.high}%`, p.wages.raiseAt);
+  if (p.arm.pct > 0) add('armouries', `Swap ${p.arm.pct}% to armouries`, p.swapAt);
+  add('train', 'Train', p.trainAt);
+  add('exit', 'Ceasefire exit', p.N);
+  return m.sort((a, b) => a.ticks - b.ticks);
 }
 
 /** One read per session (FB_QUOTA rule 1): the published config, if any */
@@ -636,13 +662,9 @@ async function _eoLoad(force) {
 function _eoPlanText(p, discord) {
   const n = v => Math.round(v).toLocaleString('en-US');
   const at = ticks => {
-    const lbl = S.currentTickName ? _ritualExpiry(S.currentTickName, Math.max(1, ticks))?.label : '';
     if (ticks <= 0) return 'NOW';
-    if (discord) {
-      // Ticks land on the hour: the Nth tick from now is N−1 hours after the next full hour
-      const unix = Math.floor((Math.ceil(Date.now() / 3600e3) + ticks - 1) * 3600);
-      return `<t:${unix}:f> (<t:${unix}:R>${lbl ? ', ' + lbl : ''})`;   // exact local time + live countdown
-    }
+    const { unix, uto: lbl } = _eoMoment(ticks);
+    if (discord) return `<t:${unix}:f> (<t:${unix}:R>${lbl ? ', ' + lbl : ''})`;   // exact local time + live countdown
     return `in ${ticks} tick${ticks === 1 ? '' : 's'}${lbl ? ' (' + lbl + ')' : ''}`;
   };
   const L = [];
@@ -727,7 +749,7 @@ async function eoPublish() {
   if (!plans.length) { S.eo.msg = 'Nothing to publish — no own provinces loaded.'; renderEowcf(); return; }
   S.eo.publishing = true; renderEowcf();
   const provinces = {};
-  plans.forEach(p => { provinces[p.slot] = { name: p.name, text: _eoPlanText(p, true) }; });
+  plans.forEach(p => { provinces[p.slot] = { name: p.name, text: _eoPlanText(p, true), when: _eoMilestones(p) }; });
   const now = Date.now();
   const saveCfg = { ..._eoC(), exitAt: _eoC().exitAt || now + cfg.ticks * 3600e3 };
   const res = await fbWrite(EO_DOC(), {
@@ -750,7 +772,10 @@ async function eoPublish() {
 /** Inputs: write straight into S.eo.cfg and re-plan */
 function eoSet(key, val) {
   const c = _eoC();
-  if (key === 'ticks') {
+  if (key === 'startedAgo') {
+    const v = parseFloat(val);
+    c.startAt = String(val).trim() === '' || !isFinite(v) || v < 0 ? null : Date.now() - v * 3600e3;
+  } else if (key === 'ticks') {
     const t = Math.max(1, Math.min(EOWCF.MAX_TICKS, parseInt(val, 10) || 0));
     c.ticks = t; c.exitAt = Date.now() + t * 3600e3;
   } else if (key === 'ritual') {
@@ -837,6 +862,11 @@ async function renderEowcf(opts = {}) {
     const exitLbl = S.currentTickName ? _ritualExpiry(S.currentTickName, cfg.ticks)?.label : '';
     const controls = `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-bottom:10px">
         ${inp('ticks', 'Exit in (ticks)', cfg.ticks, 90, `EOWCF lasts ${EOWCF.MIN_TICKS}–${EOWCF.MAX_TICKS} ticks. Counts down by itself once set.`)}
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase"
+          title="How many ticks ago the ceasefire started (counts up by itself). The +20% population and ×11 births only happen in its first 24 ticks. Blank = it starts now.">Started (ticks ago)
+          <input type="number" min="0" step="1" value="${c.startAt ? cfg.elapsedTicks : ''}" placeholder="now"
+            style="width:90px;font-size:18px;padding:3px 6px;background:#2b3333;color:#fff;border:1px solid #617070;border-radius:3px"
+            onchange="__wpA.eoSet('startedAgo', this.value)"></label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase">Ritual
           <select style="font-size:18px;padding:3px 6px;background:#2b3333;color:#fff;border:1px solid #617070;border-radius:3px" onchange="__wpA.eoSet('ritual', this.value)">
             ${Object.entries(EOWCF_RITUALS).map(([k, r]) => `<option value="${k}"${k === c.ritual ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}
