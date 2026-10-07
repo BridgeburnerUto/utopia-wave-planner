@@ -436,10 +436,28 @@ const EOWCF = {
   // Self-spells kept up through the ceasefire (Mystics page). Training time takes
   // the stronger of the two (Military page: MAX(Inspire Army, Hero's Inspiration)),
   // never both; wages likewise get one of them.
+  // Players cast it right before training only (leader 2026-10-07: runes are saved
+  // for the ritual, wages are handled by the 20% wage rate instead), so only the
+  // training-time cut is used. Spells also cut wages 15% / 30% — not applied.
   INSPIRE: {
-    army: { name: 'Inspire Army',       wageMult: 0.85, trainMult: 0.80, ticks: 24 },
-    hero: { name: "Hero's Inspiration", wageMult: 0.70, trainMult: 0.70, ticks: 24 },
+    army: { name: 'Inspire Army',       trainMult: 0.80 },
+    hero: { name: "Hero's Inspiration", trainMult: 0.70 },
   },
+  // Wages: WAGE_RATE % as the ceasefire starts, raised to WAGE_EXIT_RATE %
+  // WAGE_RAISE_TICKS before exit so military efficiency recovers (leader
+  // 2026-10-07: "178 or 200% about 36h before exit"). Leadership inputs; defaults.
+  WAGE_RATE: 20, WAGE_EXIT_RATE: 200, WAGE_RAISE_TICKS: 36,
+  // Gold every province should still have after training (leadership input) —
+  // more than that only gets plundered, so the land goes to unis/guilds instead.
+  SPARE_GOLD: 500000,
+  // Build advice. Basics per setup (leadership): guild % for self-spells and
+  // the ritual, tower % for ritual runes. Farms are computed from food.
+  GUILD_PCT_DEFAULT: 12, TOWER_PCT_DEFAULT: 16,
+  // Food (Food page): 0.25 bushels per person per tick; farms 60 × BE ×
+  // Production science; 1% of the stock rots per tick.
+  FOOD_PER_PERSON: 0.25, FARM_BUSHELS: 60, FOOD_DECAY: 0.01,
+  // Dungeons hold 30 prisoners; homes house 10 more people than other buildings (35 vs 25).
+  DUNGEON_CAP: 30, HOME_EXTRA_POP: 10,
   // Draft Level Factor: MAX(1.0154x² + 1.1759x + 0.3633, 1),
   // x = (soldiers + specs + elites) / max population.
   DLF: [1.0154, 1.1759, 0.3633],
@@ -463,6 +481,11 @@ const RACE_BUILD_COST_MULT  = { dwarf: 0.50 };                  // −50% Constr
 const PERS_BUILD_COST_MULT  = { artisan: 0.75 };                // −25% Construction (incl. raze)
 const RACE_BUILD_TIME_MULT  = { dwarf: 0.50 };                  // −50% Construction Time
 const PERS_GUILD_MULT       = { mystic: 2.0, heretic: 1.5 };    // +100% / +50% Guild Effectiveness
+// Food / housing modifiers (Age 116 doc; the wiki's Dwarf +25% food is an older age)
+const RACE_FOOD_MULT        = { undead: 0, dwarf: 1.90 };        // No Food Requirement / +90% Food Consumption
+const PERS_FARM_PROD_MULT   = { artisan: 1.25 };                 // +25% Building Production (Farms)
+const PERS_HOME_CAP_MULT    = { artisan: 1.25 };                 // +25% Building Capacity (Homes)
+const PERS_DUNGEON_CAP_MULT = { artisan: 1.25 };                 // +25% Building Capacity (Dungeons)
 // Personalities with access to Hero's Inspiration (Age 116 doc; the wiki's
 // "Paladin & War Hero" is an older age). Everyone else uses Inspire Army.
 const PERS_HEROS_INSPIRATION = { cleric: true, 'war hero': true };

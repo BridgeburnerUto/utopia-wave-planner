@@ -69,7 +69,7 @@ for (const race of ['Orc', 'Human']) {
 assert.strictEqual(plan(prov({ pers: 'Cleric' }), { inspire: true }).trainTicks, Math.ceil(24 * 0.70));
 assert.strictEqual(plan(prov({ pers: 'Rogue' }), { inspire: true }).trainTicks, Math.ceil(24 * 0.80));
 assert.strictEqual(plan(prov({ pers: 'Rogue' }), { inspire: true }).inspire.name, 'Inspire Army');
-// lower wages → more gold by training time (same province, same horizon... training starts later too)
+// shorter training → ordered later → more ticks of income before the bill
 assert(plan(prov({ money: 0 }), { inspire: true }).gold.atTrain > plan(prov({ money: 0 })).gold.atTrain);
 
 // 4. Specialist credits pay for specs first: no gold at all, credits cover the def specs
@@ -110,6 +110,46 @@ r = plan(prov({ soldiers: 8000, money: 3e6 }));
 assert(/order training/.test(ctx._eoPlanText(r, false)));
 assert(/<t:\d+:f> \(<t:\d+:R>/.test(ctx._eoPlanText(r, true)));
 assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough risk in Discord)');
+
+// 10. Build advice
+{
+  const sum = m => Object.values(m).reduce((a, b) => a + b, 0);
+  // Mix always adds up to 100% and keeps the basics
+  r = plan(prov({ money: 2e5 }), { guildPct: 12, towerPct: 16 });
+  assert(r.build, 'a survey + enough time → build advice');
+  assert(Math.abs(sum(r.build.mix) - 100) < 0.6, 'mix sums to 100, got ' + sum(r.build.mix));
+  assert(r.build.mix.towers === 16 && r.build.mix.guilds >= 12);
+  // Farms: production covers consumption at exit; Undead need none
+  assert.strictEqual(plan(prov({ race: 'Undead' })).build.mix.farms, 0);
+  const orc = plan(prov({ race: 'Orc' }));
+  const people = 30000 + 0 + 6000 + 8000 + 10000 + 6000 + 4000;   // fixture population (no homes change assumed below)
+  assert(orc.build.mix.farms > 0 && orc.build.mix.farms / 100 * 2000 * 60 >= people * 0.25 * 0.99, 'farms feed everyone');
+  assert(plan(prov({ race: 'Dwarf' })).build.mix.farms > orc.build.mix.farms, 'dwarves eat more');
+  // Dungeons: only what the prisoners fill (3000 prisoners / 30 = 100 acres = 5%)
+  const pd = prov({}); pd.sot.prisoners = 3000; pd.survey.buildings.push(B('Dungeons', 12));
+  assert.strictEqual(plan(pd).build.mix.dungeons, 5);
+  // Spare gold: goal met → at least that much left; a bigger buffer needs more money acres
+  const money = x => x.build.mix.banks;
+  // Homes are leadership's number, the tool never adds its own; blank keeps the current homes
+  assert.strictEqual(plan(prov({ money: 0, soldiers: 8000 })).build.mix.homes, 0);
+  { const ph = prov(); ph.survey.buildings[1] = B('Homes', 7); assert.strictEqual(plan(ph).build.mix.homes, 7); }
+  assert.strictEqual(plan(prov(), { homesPct: 10 }).build.mix.homes, 10);
+  assert(plan(prov(), { homesPct: 10 }).draft.drafted > plan(prov()).draft.drafted, 'homes add people to draft');
+  const a1 = plan(prov({ money: 0, soldiers: 8000 }), { spareGold: 0 });
+  const a2 = plan(prov({ money: 0, soldiers: 8000 }), { spareGold: 3e6 });
+  if (a2.build.goal === 'met') assert(a2.train.left >= 3e6 - 1, 'spare gold kept');
+  assert(money(a2) >= money(a1), 'more spare gold → at least as many bank/home acres');
+  // A rich province needs no banks or homes — the land goes to guilds/unis
+  const rich = plan(prov({ money: 5e7 }));
+  assert.strictEqual(money(rich), 0);
+  assert(rich.build.mix.universities > 0);
+  // WPA: a high target pushes guilds above the base %
+  assert(plan(prov(), { wpa: 6 }).build.mix.guilds > plan(prov(), { wpa: 0 }).build.mix.guilds);
+  // Wages: raising them earlier costs gold
+  assert(plan(prov({ money: 0 }), { wageRaiseTicks: 80 }).gold.atTrain < plan(prov({ money: 0 }), { wageRaiseTicks: 0 }).gold.atTrain);
+  // Too little time left for a rebuild → no build advice, current build kept
+  assert.strictEqual(plan(prov(), { ticks: 30 }).build, null);
+}
 
 // 9. Setups: most specific match wins, manual assignment overrides
 ctx.S.own = { location: '1:1', provinces: [] };

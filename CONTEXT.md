@@ -186,6 +186,23 @@ and a real /eowcf in Discord.
   `S.eo.cfg` is created lazily by `_eoC()` (state.js holds null).
 - Plan steps are listed in TIME order (release, draft start, armoury swap,
   train) and the text names the province's setup.
+- **Build advice + wages (leader, same day).** Province model rewritten around a
+  full building mix (`_eoBuildOf`, `_eoWith(...{build, wages})`). Rebuild ordered
+  at tick 0 (only if it finishes before training): changed acres stand as barren
+  for BUILD_TICKS (no jobs), raze + build cost (credits cover building). Mix:
+  dungeons = only what current prisoners fill (30/dungeon, Artisan +25%); farms
+  = production covers consumption at exit (0.25/person x RACE_FOOD_MULT, Undead
+  0, Dwarf 1.9 per the age doc; 60 x BE x Production sci); towers + base guilds
+  per setup; homes per setup (BLANK = keep current -- razing homes cost one
+  province its whole draft); banks = searched (grid ~25 steps + refine): rank
+  most units trained > spare gold kept (cfg.spareGold, default 500k) > fewest
+  bank acres; then guilds up to the WPA target; rest universities. Every other
+  building is razed. Training gold beats WPA when land is short. TG count as
+  they stand at training (razed -> slower training). Wages: cfg.wageRate 20%
+  from the start, cfg.wageExitRate 200% from cfg.wageRaiseTicks 36 before exit
+  (leader: "178 or 200% about 36h before exit"). IA/HI = cast right before
+  training, training time only (no wage effect). Per-tick income is cached when
+  inputs repeat: kingdom plan 2.3 s -> ~0.3 s.
 
 **Known limits / next:** mid-war data shows most provinces at/above their draft
 target, so elites come from released ospecs + draft advice; negative-income
