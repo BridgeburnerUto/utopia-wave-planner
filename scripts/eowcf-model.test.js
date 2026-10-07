@@ -108,7 +108,7 @@ for (const money of [0, 3e5, 3e6]) {
 ctx.S.currentTickName = 'May 14, YR9';
 r = plan(prov({ soldiers: 8000, money: 3e6 }));
 assert(/order training/.test(ctx._eoPlanText(r, false)));
-assert(/<t:\d+:R>/.test(ctx._eoPlanText(r, true)));
+assert(/<t:\d+:f> \(<t:\d+:R>/.test(ctx._eoPlanText(r, true)));
 assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough risk in Discord)');
 
 // 9. Setups: most specific match wins, manual assignment overrides

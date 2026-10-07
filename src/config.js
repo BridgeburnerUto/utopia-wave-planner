@@ -470,7 +470,7 @@ const PERS_HEROS_INSPIRATION = { cleric: true, 'war hero': true };
 const PERS_ELITE_PER_CREDITS = { general: 2 };
 // Specialist credits spent per THIEF, for races/personalities that may train
 // thieves on credits. Age 116: Dark Elf "Can train Thieves using Specialist
-// Credits" (no ratio given in the doc — 1 credit per thief assumed).
+// Credits" — 1 credit per thief (ratio confirmed by the leader 2026-10-07).
 const RACE_THIEF_CREDITS = { 'dark elf': 1 };
 const PERS_THIEF_CREDITS = {};
 // Kingdom rituals that change the EOWCF maths (Ritual page).

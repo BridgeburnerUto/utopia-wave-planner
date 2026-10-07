@@ -464,7 +464,7 @@ function _eoPlanText(p, discord) {
     if (discord) {
       // Ticks land on the hour: the Nth tick from now is N−1 hours after the next full hour
       const unix = Math.floor((Math.ceil(Date.now() / 3600e3) + ticks - 1) * 3600);
-      return `<t:${unix}:R>${lbl ? ' (' + lbl + ')' : ''}`;
+      return `<t:${unix}:f> (<t:${unix}:R>${lbl ? ', ' + lbl : ''})`;   // exact local time + live countdown
     }
     return `in ${ticks} tick${ticks === 1 ? '' : 's'}${lbl ? ' (' + lbl + ')' : ''}`;
   };
@@ -512,9 +512,13 @@ function _eoPlanText(p, discord) {
   // What-ifs — NOT included in the numbers above, so the plan is exactly what it says
   const more = [];
   const da = p.draft.advice;
-  if (da) more.push(`Draft deeper, to ≈**${da.ppa} PPA**, for ≈${n(da.extra)} more soldiers`
-    + (da.speedLimited ? ` (the most the draft can deliver in time; ${n(da.wanted)} wanted)` : '')
-    + (da.spareEli ? ` — spare gold pays for ≈${n(da.spareEli)} more elites.` : '.'));
+  // Information, not an order: the PPA is leadership's call.
+  if (da) more.push(`Soldier gap: ≈${n(da.extra)} more soldiers`
+    + (t.fixedNoSol > 0 ? ` (${n(t.fixedNoSol)} for the thief/spec targets${da.spareEli ? `, ${n(da.spareEli)} more elites the spare gold could pay for` : ''})`
+                        : ` (more elites the spare gold could pay for)`)
+    + ` would mean drafting down to ≈${da.ppa} PPA instead of ${d.ppa}`
+    + (da.speedLimited ? ` — and even that is short of the ${n(da.wanted)} wanted.` : '.')
+    + ' Ask leadership before going below the PPA target.');
   if (p.banksAdd) more.push(p.banksAdd.partial != null
     ? `Build +${p.banksAdd.pct}% banks NOW (≈${n(p.banksAdd.cost)} gc): helps, but still ${n(p.banksAdd.partial)} units short of gold.`
     : `Build +${p.banksAdd.pct}% banks NOW (≈${n(p.banksAdd.cost)} gc) to afford every soldier above.`);
