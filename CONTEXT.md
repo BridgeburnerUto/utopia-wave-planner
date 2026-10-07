@@ -159,8 +159,10 @@ provinces, loads the real src), model run on the live IS snapshot (24 provs,
 snap_live.json` -- harness now takes `?dump=`): tab renders, select/ritual/ticks
 work, publish = 1 write of the right shape, all 13 tabs render, own net
 unchanged. discord.php /eowcf run in php-wasm (nick parsing, no nick, network
-failure). **NOT deployed / NOT pushed at time of writing** -- needs backend
-deploy + `?register=1` (adds /eowcf) and a commit/push of dist for the planner.
+failure). **LIVE 2026-10-07:** backend rev `utopia-intel-00071-ljb`
+(`?register=1` -> commands ["elites","eowcf"]), planner commit 4764081 pushed
+and served by GitHub Pages. Not yet exercised: a real Publish from the live IS
+and a real /eowcf in Discord.
 
 **Same day, leader follow-ups (built + verified):**
 - **Draft = PPA burst.** Leadership gives a target PPA (peasants/acre, ~6.5)
