@@ -458,6 +458,14 @@ const EOWCF = {
   FOOD_PER_PERSON: 0.25, FARM_BUSHELS: 60, FOOD_DECAY: 0.01,
   // Dungeons hold 30 prisoners; homes house 10 more people than other buildings (35 vs 25).
   DUNGEON_CAP: 30, HOME_EXTRA_POP: 10,
+  // Population (Economy page): living space 25 per built or in-progress acre, 15
+  // per barren acre, + home capacity; births ≈2.05% of peasants per tick (+0.3 per
+  // home acre); overpopulation costs up to 10% of peasants per tick. Ceasefire
+  // (Relations page): +20% of max population at once if under 50% of it, and
+  // +1000% births (minimum 500) for the first 24 ticks.
+  POP_PER_BUILT: 25, POP_PER_BARREN: 15, BIRTH_RATE: 0.0205, HOME_BIRTHS: 0.3, OVERPOP_LOSS: 0.10,
+  EOWCF_INSTANT_POP: 0.20, EOWCF_INSTANT_BELOW: 0.50,
+  EOWCF_BIRTH_MULT: 11, EOWCF_BIRTH_MIN: 500, EOWCF_BOOST_TICKS: 24,
   // Draft Level Factor: MAX(1.0154x² + 1.1759x + 0.3633, 1),
   // x = (soldiers + specs + elites) / max population.
   DLF: [1.0154, 1.1759, 0.3633],
@@ -481,6 +489,8 @@ const RACE_BUILD_COST_MULT  = { dwarf: 0.50 };                  // −50% Constr
 const PERS_BUILD_COST_MULT  = { artisan: 0.75 };                // −25% Construction (incl. raze)
 const RACE_BUILD_TIME_MULT  = { dwarf: 0.50 };                  // −50% Construction Time
 const PERS_GUILD_MULT       = { mystic: 2.0, heretic: 1.5 };    // +100% / +50% Guild Effectiveness
+// Birth rate (Age 116 doc): Dryad +20% Birth Rate, Dark Elf −15% Birth Rates.
+const RACE_BIRTH_MULT = { dryad: 1.20, 'dark elf': 0.85 };
 // Food / housing modifiers (Age 116 doc; the wiki's Dwarf +25% food is an older age)
 const RACE_FOOD_MULT        = { undead: 0, dwarf: 1.90 };        // No Food Requirement / +90% Food Consumption
 const PERS_FARM_PROD_MULT   = { artisan: 1.25 };                 // +25% Building Production (Farms)

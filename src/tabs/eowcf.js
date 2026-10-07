@@ -53,7 +53,7 @@ const EO_SETUP_DEFAULT = () => ({ id: 'all', name: 'Everyone', race: '', pers: '
                                   guildPct: EOWCF.GUILD_PCT_DEFAULT, towerPct: EOWCF.TOWER_PCT_DEFAULT, homesPct: null, uniPct: null });   // homes null = keep current; unis null = 0 reserved
 const EO_CFG_DEFAULT = () => ({ ticks: 96, exitAt: 0, ritual: 'none',
                                 draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true, inspire: true,
-                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null,
+                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null, elapsedTicks: 0,
                                 wageExitRate: EOWCF.WAGE_EXIT_RATE, wageRaiseTicks: EOWCF.WAGE_RAISE_TICKS,
                                 setups: [EO_SETUP_DEFAULT()], assign: {} });
 /** The live config (created on first use — state.js loads before config tables are usable here) */
@@ -91,13 +91,18 @@ function _eoBook(prov, type) {
 /** Province with some numbers replaced — fed to _provEconomy. Shallow copies only.
  *  `o.build` = {lowercase building name: pct} replaces the whole survey mix;
  *  `o.wages` replaces the wage rate (Military Advisor field). */
+const _eoSurveyCache = new WeakMap();   // build object → survey with that mix (builds are never mutated)
 function _eoWith(prov, o) {
   const sot = { ...prov.sot, peasants: o.peasants, soldiers: o.soldiers, oSpecs: o.oSpecs };
   const ma = o.wages != null ? { ...(prov.ma || {}), wages: o.wages } : prov.ma;
   const bArr = prov.survey?.buildings;
   if (!bArr || !bArr.length || !o.build) return { ...prov, sot, ma };
-  const buildings = bArr.map(b => ({ ...b, pctTot: o.build[b.name.toLowerCase()] || 0 }));
-  return { ...prov, sot, ma, survey: { ...prov.survey, buildings } };
+  let survey = _eoSurveyCache.get(o.build);
+  if (!survey || survey._prov !== prov) {
+    survey = { ...prov.survey, _prov: prov, buildings: bArr.map(b => ({ ...b, pctTot: o.build[b.name.toLowerCase()] || 0 })) };
+    _eoSurveyCache.set(o.build, survey);
+  }
+  return { ...prov, sot, ma, survey };
 }
 
 /** Building mix as {lowercase name: pct}, from the survey */
@@ -197,16 +202,33 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   const razeAcreGc  = (EOWCF.RAZE_COST_BASE + EOWCF.RAZE_COST_K * land) * bMult;
 
   const ectx = { ...ctx, wdWageCut: 0, beMin: 100, beMult: rit.beMult || 1, wageMult: rit.wageMult || 1 };
+  // ── Population (Economy page) ──
+  // Max population = ((built + in progress) × 25 + barren × 15 + homes × home
+  // capacity) × race × Housing science. (Honor's population bonus is not modelled.)
+  // Everyone counts: peasants + soldiers + specs + elites (incl. in training) +
+  // thieves + wizards. The ceasefire refills a war-shrunk province: +20% of max at
+  // once if under 50%, and births ×11 (min 500/tick) for its first 24 ticks.
   const housing = _eoBook(prov, 'Housing');
-  const homePop = EOWCF.HOME_EXTRA_POP * (PERS_HOME_CAP_MULT[pers] || 1) * (1 + housing / 100) * (RACE_POP_MULT[race] || 1);
-  const pop0 = sot.peasants + have.sol + have.osp + have.dsp + have.eli + have.thv + have.wiz;
+  const popMult = (RACE_POP_MULT[race] || 1) * (1 + housing / 100);
+  const homeCap = EOWCF.HOME_EXTRA_POP * (PERS_HOME_CAP_MULT[pers] || 1);
+  /** Max population for a building mix; `homesDone` = homes % that are finished */
+  const maxPopOf = (barrenPct, homesDone) =>
+    land / 100 * ((100 - barrenPct) * EOWCF.POP_PER_BUILT + barrenPct * EOWCF.POP_PER_BARREN + homesDone * homeCap) * popMult;
+  const maxPop0 = maxPopOf(b0['barren land'] || 0, b0.homes || 0);
+  // Military other than soldiers and home off specs, which the simulation moves around
+  const milFixed = (have.osp - (sot.oSpecs || 0)) + have.dsp + have.eli + have.thv + have.wiz;
+  const pop0 = sot.peasants + have.sol + (sot.oSpecs || 0) + milFixed;
+  const birthBase = EOWCF.BIRTH_RATE * (RACE_BIRTH_MULT[race] || 1);
+  // Ticks of the ceasefire already gone (leadership input) — the boosts are front-loaded
+  const elapsed0 = Math.max(0, Math.round(cfg.elapsedTicks || 0));
+  if (pop0 > maxPop0 * 1.02) warn.push(`overpopulated (${Math.round(pop0 / maxPop0 * 100)}% of max) — peasants shrink until it fits`);
 
   // ── The build ──
   // Dungeons: keep only what the current prisoners fill (filled dungeons pay).
   const dungNeed = (sot.prisoners || 0) / (EOWCF.DUNGEON_CAP * (PERS_DUNGEON_CAP_MULT[pers] || 1)) / land * 100;
   const dungPct  = Math.min(b0.dungeons || 0, Math.ceil(dungNeed * 10) / 10);
-  // Farms: production covers consumption at exit ("sustainable", leader). Population
-  // is held constant, so consumption is today's (plus any homes, added below).
+  // Farms: production covers consumption at exit ("sustainable", leader). The
+  // ceasefire refills population, so size them for the max population of the new build.
   const foodMult = RACE_FOOD_MULT[race] ?? 1;
   const farmAcreFood = EOWCF.FARM_BUSHELS * be * (PERS_FARM_PROD_MULT[pers] || 1) * (1 + _eoBook(prov, 'Production') / 100);
   const farmPctFor = pop => foodMult > 0 ? Math.min(100, Math.ceil(pop * EOWCF.FOOD_PER_PERSON * foodMult / farmAcreFood / land * 1000) / 10) : 0;
@@ -231,7 +253,7 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
    *  farms, towers, base guilds, homes, reserved unis) → banks → guilds up to the
    *  WPA target → everything left to universities. */
   const mixFor = (banks, homes) => {
-    const farms = farmPctFor(pop0 + acres(homes - (b0.homes || 0)) * homePop);
+    const farms = farmPctFor(maxPopOf(0, homes));
     const m = { dungeons: dungPct, farms, towers: towerPct, banks, homes };
     let left = 100 - dungPct - farms - towerPct - banks - homes - uniMin;
     const guilds = Math.max(0, Math.min(left, Math.max(guildBase, Math.ceil(guildForWpa * 10) / 10)));
@@ -239,25 +261,48 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
     m.universities = Math.max(0, Math.round((uniMin + left) * 10) / 10);
     return m;
   };
-  const basicsPct = () => dungPct + farmPctFor(pop0 + acres(homesPct - (b0.homes || 0)) * homePop) + towerPct + guildBase + homesPct + uniMin;
+  const basicsPct = () => dungPct + farmPctFor(maxPopOf(0, homesPct)) + towerPct + guildBase + homesPct + uniMin;
 
   // ── Tick simulation ──
-  const burstTicks = (pe, floor) => {
-    if (pe <= floor) return 0;
-    if (!(draftSpeed > 0)) return Infinity;
-    let k = 0;
-    while (pe > floor && k < 1000) { pe -= Math.max(1, Math.min(Math.floor(pe * draftSpeed), pe - floor)); k++; }
-    return k;
+  // Population per tick, shared by the full simulation and the cheap one that
+  // times the draft burst: rebuild switch → draft → births / overpopulation.
+  const phase = st => {
+    if (st.after && st.t === buildTicks) {                     // rebuild finished
+      st.build = st.after; st.after = null; st.arm = st.build.armouries || 0;
+      st.maxPop = st.maxPopAfter;
+    }
   };
+  const draftTick = st => {
+    if (st.t < st.drStart || st.pe <= st.floor) return 0;
+    const d = Math.min(Math.floor(st.pe * draftSpeed), st.pe - st.floor);
+    if (d > 0) { st.pe -= d; st.sol += d; st.drafted += d; }
+    return d > 0 ? d : 0;
+  };
+  const birthTick = st => {
+    const room = st.maxPop - (st.pe + st.sol + st.oHome + milFixed);
+    if (room > 0) {
+      const boost = elapsed0 + st.t < EOWCF.EOWCF_BOOST_TICKS;
+      let g = st.pe * birthBase * (boost ? EOWCF.EOWCF_BIRTH_MULT : 1);
+      if (boost) g = Math.max(g, EOWCF.EOWCF_BIRTH_MIN);
+      g += land * (st.build.homes || 0) / 100 * EOWCF.HOME_BIRTHS;
+      st.pe += Math.min(Math.floor(room), Math.floor(g));
+    } else if (room < 0) {                                   // overpopulated: peasants leave
+      st.pe -= Math.min(Math.floor(st.pe * EOWCF.OVERPOP_LOSS), Math.ceil(-room));
+    }
+  };
+  /** Peasants at the training tick if the burst starts at `s` — population only, no gold */
+  const peAtTrain = (st0, s) => {
+    const st = { t: 0, pe: st0.pe, sol: st0.sol, oHome: st0.oHome, drafted: 0, floor: st0.floor, drStart: s,
+                 build: st0.build, after: st0.after, maxPop: st0.maxPop, maxPopAfter: st0.maxPopAfter, arm: 0 };
+    for (; st.t < T; st.t++) { phase(st); draftTick(st); birthTick(st); }
+    return st.pe;
+  };
+  const drCache = new Map();
   /** `mix` = the build to order NOW (null = keep the current one) */
   const start = (toPeasants, mix, floorPpa = ppa) => {
-    const homesAdd = mix ? acres((mix.homes || 0) - (b0.homes || 0)) : 0;
-    const popAdd = Math.round(homesAdd * homePop);             // lands when the rebuild is done
-    const pe = sot.peasants + toPeasants;
-    const floor = Math.round(floorPpa * land);
-    const peAtBurst = pe + (popAdd > 0 ? popAdd : 0);
-    const k = burstTicks(peAtBurst, floor);
-    // During construction the changed acres stand empty (no jobs, no effect)
+    // During construction the changed acres stand empty for the economy (no jobs, no
+    // effect) but still house 25 people each ("land in progress"); new homes only
+    // add their extra space once finished.
     let during = null, built = 0, razed = 0;
     if (mix) {
       during = {};
@@ -270,12 +315,34 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
       during['barren land'] = Math.max(0, 100 - kept);
       razed = Math.max(0, built - (b0['barren land'] || 0));
     }
+    const barrenLeft = mix ? Math.max(0, (b0['barren land'] || 0) - built) : (b0['barren land'] || 0);
     const st = {
       t: 0, gold: sot.money || 0, minGold: sot.money || 0, credits: buildCredits,
-      pe, sol: have.sol + (surplusO - toPeasants), oHome: (sot.oSpecs || 0) - surplusO,
-      build: during || b0, after: mix, popAdd, drafted: 0, draftCost: 0, buildCost: 0,
-      floor, burst: k, drStart: Math.max(0, T - k), arm: 0,
+      pe: sot.peasants + toPeasants, sol: have.sol + (surplusO - toPeasants), oHome: (sot.oSpecs || 0) - surplusO,
+      build: during || b0, after: mix, drafted: 0, draftCost: 0, buildCost: 0,
+      floor: Math.round(floorPpa * land), arm: 0,
+      maxPop: mix ? maxPopOf(barrenLeft, Math.min(b0.homes || 0, mix.homes || 0)) : maxPop0,
+      maxPopAfter: mix ? maxPopOf(0, mix.homes || 0) : maxPop0,
     };
+    // Ceasefire start: +20% of max population at once when under 50% of it
+    if (elapsed0 === 0 && pop0 < EOWCF.EOWCF_INSTANT_BELOW * maxPop0) {
+      st.instant = Math.round(EOWCF.EOWCF_INSTANT_POP * maxPop0);
+      st.pe += st.instant;
+    }
+    // Draft burst: the LATEST start whose draft (with births refilling peasants
+    // meanwhile) still reaches the PPA floor at the training tick. It depends on
+    // population only — not on banks — so it is cached across the build search.
+    const dkey = `${toPeasants}|${st.floor}|${st.maxPop}|${st.maxPopAfter}|${st.pe}`;
+    if (drCache.has(dkey)) st.drStart = drCache.get(dkey);
+    else if (!(draftSpeed > 0)) st.drStart = T;
+    else if (peAtTrain(st, 0) > st.floor + land * 0.05) st.drStart = 0;   // can't reach it even from now
+    else {
+      let lo = 0, hi = T;                                    // invariant: start at lo reaches the floor
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (peAtTrain(st, mid) <= st.floor + land * 0.05) lo = mid; else hi = mid; }
+      st.drStart = peAtTrain(st, hi) <= st.floor + land * 0.05 ? hi : lo;
+    }
+    drCache.set(dkey, st.drStart);
+    st.burst = T - st.drStart;
     if (mix) {
       const r = pay(st, acres(built), acres(razed));
       st.rebuild = { built: acres(built), razed: acres(razed), cost: st.buildCost, ...r };
@@ -294,12 +361,9 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   };
   const step = (st, upto) => {
     for (; st.t < upto; st.t++) {
-      if (st.after && st.t === buildTicks) {                 // rebuild finished
-        st.build = st.after; st.after = null; st.arm = st.build.armouries || 0;
-        if (st.popAdd) { st.pe = Math.max(0, st.pe + st.popAdd); st.popAdd = 0; }
-      }
-      // Income only changes when its inputs do — most ticks before the draft burst
-      // repeat the previous one, so reuse it (the plan runs ~100 simulations/province).
+      phase(st);
+      // Income only changes when its inputs do — reuse the previous tick's when
+      // nothing moved (the plan runs ~100 simulations per province).
       const wages = st.t >= wageRaiseAt ? wageHigh : wageLow;
       const k = st.econKey;
       if (!k || k.pe !== st.pe || k.sol !== st.sol || k.oHome !== st.oHome || k.build !== st.build || k.wages !== wages) {
@@ -307,15 +371,15 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
         st.econKey = { pe: st.pe, sol: st.sol, oHome: st.oHome, build: st.build, wages, net: e ? e.net : 0 };
       }
       st.gold += st.econKey.net;
-      if (st.t >= st.drStart && st.pe > st.floor) {
-        const d = Math.min(Math.floor(st.pe * draftSpeed), st.pe - st.floor);
-        if (d > 0) {
-          const x = (st.sol + st.oHome + have.dsp + have.eli) / pop0;
-          const dlf = Math.max(EOWCF.DLF[0] * x * x + EOWCF.DLF[1] * x + EOWCF.DLF[2], 1);
-          const c = d * draftGc * dlf * (1 - _eoCurve(EOWCF.ARM_DRAFT_RATE, st.arm, be) / 100);
-          st.gold -= c; st.draftCost += c; st.pe -= d; st.sol += d; st.drafted += d;
-        }
+      const solBefore = st.sol;
+      const d = draftTick(st);
+      if (d > 0) {
+        const x = (solBefore + st.oHome + have.dsp + have.eli) / Math.max(1, st.maxPop);
+        const dlf = Math.max(EOWCF.DLF[0] * x * x + EOWCF.DLF[1] * x + EOWCF.DLF[2], 1);
+        const c = d * draftGc * dlf * (1 - _eoCurve(EOWCF.ARM_DRAFT_RATE, st.arm, be) / 100);
+        st.gold -= c; st.draftCost += c;
       }
+      birthTick(st);
       st.minGold = Math.min(st.minGold, st.gold);
     }
     return st;
@@ -502,6 +566,8 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
            cost: best.arm ? Math.round(best.st.buildCost - (best.st.rebuild?.cost || 0)) : 0 },
     gold: { now: sot.money || 0, atTrain: Math.round(best.st.gold), min: Math.round(best.st.minGold) },
     soldiersAtTrain: best.st.sol,
+    pop: { now: pop0, max: Math.round(maxPop0), pct: Math.round(pop0 / maxPop0 * 100), instant: best.st.instant || 0,
+           maxAfter: Math.round(best.st.maxPop), atTrain: Math.round(best.st.pe + best.st.sol + best.st.oHome + milFixed) },
     train: bt,
     baseline: { eli: baseline.tr.eli, left: baseline.tr.left },
     wiz: { have: have.wiz, proj: wizProj, target: target.wiz, gap: wizGap, guildPct: gNew, mult: wizMult },

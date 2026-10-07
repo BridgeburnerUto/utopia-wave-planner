@@ -18,7 +18,7 @@ function prov(o = {}) {
            thieves: o.thieves ?? 6000, wizards: 4000, prisoners: 0, plague: false, ...(o.sot || {}) },
     survey: { credits: o.buildCredits || 0, buildings: [B('Barren Land', 0), B('Homes', 0), B('Banks', o.banks ?? 15),
               B('Armouries', 0), B('Guilds', 10), B('Training Grounds', 0), B('Towers', 10)] },
-    sos: { books: [] },
+    sos: { books: [{ type: 'Housing', effect: 40 }] },   // max pop 2000 × 25 × 1.4 = 70,000 → default fixture at 91%
     som: { training: { oSpecs: 0, dSpecs: 0, elites: 0, thieves: 0 } },
     ma: { wages: 100, draftRate: o.draftRate ?? 'Normal', draftTarget: o.draftTarget ?? 60, credits: o.credits ?? 0 },
   };
@@ -46,14 +46,17 @@ for (const money of [0, 50000, 1e6, 2e7]) for (const soldiers of [0, 3000, 20000
 r = plan(prov({ peasants: 30000 }));                       // 2000 acres → floor 13,000 peasants
 assert(r.draft.drafted > 0 && r.draft.startAt > 0, 'burst should start late, not now');
 assert.strictEqual(r.draft.startAt + r.draft.ticks, r.trainAt, 'burst must end exactly at the training tick');
-assert(Math.abs(r.draft.ppaAtTrain - 6.5) < 0.01, 'drafts down to the PPA target');
+assert(Math.abs(r.draft.ppaAtTrain - 6.5) < 0.1, 'drafts down to the PPA target (births in the last tick add a few back)');
 // Patriotism makes the burst shorter (so it starts later)
 assert(plan(prov(), { patriotism: false }).draft.ticks > r.draft.ticks);
 // Rate "none" drafts nothing (leadership setting, or the province's own when blank)
 assert.strictEqual(plan(prov(), { draftRate: 'none' }).draft.drafted, 0);
 assert.strictEqual(plan(prov({ draftRate: 'None' }), { draftRate: '' }).draft.drafted, 0);
-// Already at/below the PPA: nothing to draft
-assert.strictEqual(plan(prov({ peasants: 10000 })).draft.drafted, 0);
+// Already at/below the PPA with a FULL population (no room for births): nothing to draft.
+// Fixture max pop = 70,000; 10,000 peasants + 60,000 military = full.
+assert.strictEqual(plan(prov({ peasants: 10000, soldiers: 26000 }), { ticks: 30 }).draft.drafted, 0);
+// ...but with room, births refill peasants above the PPA and the draft takes them
+assert(plan(prov({ peasants: 10000 })).draft.drafted > 0, 'births refill a shrunk province');
 // Emergency drafts in fewer ticks than Normal (so its burst can start later)
 assert(plan(prov(), { draftRate: 'normal' }).draft.ticks > plan(prov(), { draftRate: 'emergency' }).draft.ticks);
 
@@ -164,6 +167,21 @@ assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough ris
   }
   // Too little time left for a rebuild → no build advice, current build kept
   assert.strictEqual(plan(prov(), { ticks: 30 }).build, null);
+}
+
+// 11. Population regrowth
+{
+  // A war-shrunk province (well under 50% of max) gets +20% of max at once and refills
+  const shrunk = prov({ peasants: 2000, soldiers: 0, oSpecs: 0, dSpecs: 4000, thieves: 2000, sot: { elites: 4000, wizards: 1000 } });
+  r = plan(shrunk);
+  assert(r.pop.pct < 50 && r.pop.instant === Math.round(0.20 * r.pop.max), 'instant +20% of max');
+  assert(r.draft.drafted > 10000, 'refilled peasants get drafted');
+  // Already late in the ceasefire: no instant boost, no ×11 births
+  const late = plan(shrunk, { elapsedTicks: 40, ticks: 56 });
+  assert.strictEqual(late.pop.instant, 0);
+  assert(late.draft.drafted < r.draft.drafted);
+  // Overpopulated: flagged
+  assert(plan(prov({ peasants: 60000 })).warn.some(w => /overpopulated/.test(w)));   // 94k of 70k
 }
 
 // 9. Setups: most specific match wins, manual assignment overrides

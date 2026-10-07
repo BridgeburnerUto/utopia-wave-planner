@@ -215,7 +215,23 @@ and a real /eowcf in Discord.
   Land order: basics (dungeons, farms, towers, base guilds, homes, reserved
   unis) -> banks -> WPA guilds -> rest unis. Fixed: farms counted ALL homes as
   new people; now only homes added vs today.
-- Leader will judge the advice on ceasefire-start data (not the war snapshot). Province table's Gold column is
+- Leader will judge the advice on ceasefire-start data (not the war snapshot).
+- **Population regrowth** (leader asked): max pop = ((built + in progress) x 25
+  + barren x 15 + homes x 10 (Artisan +25%)) x RACE_POP_MULT x Housing sci
+  (Economy page; honor bonus NOT modelled). Checked on the live snapshot: 49-99%
+  of max, three at 106-111% = genuinely overpopulated after the war (or a stale
+  SoT). Sim per tick: rebuild switch -> income -> draft -> births. Births =
+  peasants x 2.05% x RACE_BIRTH_MULT (Dryad 1.2, Dark Elf 0.85) + 0.3 per home
+  acre, capped by room; overpop loses up to 10%/tick. Ceasefire: +20% of max at
+  once if under 50% (only when cfg.elapsedTicks = 0) and births x11 (min 500)
+  for the first 24 ticks (counted from cfg.elapsedTicks). Construction acres
+  house 25 during the build. Burst start = latest start whose draft (births
+  included) reaches the PPA at training, binary search on a population-only
+  mini-sim, cached per population state. Farms sized for the new build's max pop.
+  Kingdom plan ~0.8 s in node, ~0.1 s per change in the browser. Test fixture
+  now realistic (91% of max via Housing 40) -- it was 128% overpopulated.
+  **cfg.elapsedTicks has no UI input yet** (plans made mid-ceasefire would
+  re-apply the start boosts) -- add one. Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a
