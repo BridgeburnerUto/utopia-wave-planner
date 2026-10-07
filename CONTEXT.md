@@ -191,9 +191,13 @@ and a real /eowcf in Discord.
 target, so elites come from released ospecs + draft advice; negative-income
 provinces get a warning only. **Confirmed by leader (in game): thieves are a flat 500 -- no armoury
 discount and no training-cost modifiers; only explicit thief rebates via
-RACE_/PERS_THIEF_COST_MULT (empty Age 116).** Still to confirm: Heroism % = draft speed + cost, release = specs->soldiers->peasants no
-refund, military for the draft target includes thieves+wizards, Benediction BE
-is multiplicative. No per-province target overrides yet.
+RACE_/PERS_THIEF_COST_MULT (empty Age 116). Also confirmed: Heroism speeds AND
+cheapens the draft; release = spec -> soldier -> peasant, no refund.** Still to
+confirm: Benediction +20% BE multiplicative (leader checking). **Spells added:**
+Inspire Army (-15% wages, -20% training time) or Hero's Inspiration (-30%/-30%,
+Cleric + War Hero per the Age 116 doc -- the wiki's Paladin is an old age) via
+`PERS_HEROS_INSPIRATION`; the stronger one only, never both; switch on the tab
+(cfg.inspire, default on). Per-province targets = setups + manual assignment.
 
 ## Recent work (2026-10-06) -- Discord /elites calculator (Part 1)
 

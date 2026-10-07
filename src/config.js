@@ -433,6 +433,13 @@ const EOWCF = {
   DRAFT_RATE_DEFAULT: 'emergency', PPA_DEFAULT: 6.5,
   // Patriotism (Mystics page): +30% draft speed, max 20 ticks, available to all.
   PATRIOTISM_DRAFT_MULT: 1.3, PATRIOTISM_TICKS: 20,
+  // Self-spells kept up through the ceasefire (Mystics page). Training time takes
+  // the stronger of the two (Military page: MAX(Inspire Army, Hero's Inspiration)),
+  // never both; wages likewise get one of them.
+  INSPIRE: {
+    army: { name: 'Inspire Army',       wageMult: 0.85, trainMult: 0.80, ticks: 24 },
+    hero: { name: "Hero's Inspiration", wageMult: 0.70, trainMult: 0.70, ticks: 24 },
+  },
   // Draft Level Factor: MAX(1.0154x² + 1.1759x + 0.3633, 1),
   // x = (soldiers + specs + elites) / max population.
   DLF: [1.0154, 1.1759, 0.3633],
@@ -456,6 +463,9 @@ const RACE_BUILD_COST_MULT  = { dwarf: 0.50 };                  // −50% Constr
 const PERS_BUILD_COST_MULT  = { artisan: 0.75 };                // −25% Construction (incl. raze)
 const RACE_BUILD_TIME_MULT  = { dwarf: 0.50 };                  // −50% Construction Time
 const PERS_GUILD_MULT       = { mystic: 2.0, heretic: 1.5 };    // +100% / +50% Guild Effectiveness
+// Personalities with access to Hero's Inspiration (Age 116 doc; the wiki's
+// "Paladin & War Hero" is an older age). Everyone else uses Inspire Army.
+const PERS_HEROS_INSPIRATION = { cleric: true, 'war hero': true };
 // The General "can train one Elite for every two Specialist Credits".
 const PERS_ELITE_PER_CREDITS = { general: 2 };
 // Kingdom rituals that change the EOWCF maths (Ritual page).

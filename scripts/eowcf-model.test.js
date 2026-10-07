@@ -65,6 +65,13 @@ for (const race of ['Orc', 'Human']) {
   assert.strictEqual(Math.round(x.train.bill - x.train.eli * x.train.eliteUnit - specCost), 2000 * 500, race + ': thieves must cost 500 each');
 }
 
+// 3c. Inspire Army / Hero's Inspiration: Cleric gets Hero's (−30% time), Rogue gets Inspire Army (−20%)
+assert.strictEqual(plan(prov({ pers: 'Cleric' }), { inspire: true }).trainTicks, Math.ceil(24 * 0.70));
+assert.strictEqual(plan(prov({ pers: 'Rogue' }), { inspire: true }).trainTicks, Math.ceil(24 * 0.80));
+assert.strictEqual(plan(prov({ pers: 'Rogue' }), { inspire: true }).inspire.name, 'Inspire Army');
+// lower wages → more gold by training time (same province, same horizon... training starts later too)
+assert(plan(prov({ money: 0 }), { inspire: true }).gold.atTrain > plan(prov({ money: 0 })).gold.atTrain);
+
 // 4. Specialist credits pay for specs first: no gold at all, credits cover the def specs
 r = plan(prov({ money: 0, credits: 3000, dSpecs: 8000, soldiers: 5000, draftRate: 'None',
                 sot: { peasants: 0 } }));

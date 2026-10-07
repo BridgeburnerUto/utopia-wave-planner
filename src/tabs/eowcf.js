@@ -51,7 +51,7 @@ const EO_DOC = () => `eowcf/${(S.own?.location || '').replace(':', '_')}`;
 const EO_SETUP_DEFAULT = () => ({ id: 'all', name: 'Everyone', race: '', pers: '',
                                   tpa: 4, wpa: 2.5, dpa: 5, opa: 0, ppa: EOWCF.PPA_DEFAULT });
 const EO_CFG_DEFAULT = () => ({ ticks: 96, exitAt: 0, ritual: 'none',
-                                draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true,
+                                draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true, inspire: true,
                                 setups: [EO_SETUP_DEFAULT()], assign: {} });
 /** The live config (created on first use — state.js loads before config tables are usable here) */
 function _eoC() { return S.eo.cfg || (S.eo.cfg = EO_CFG_DEFAULT()); }
@@ -147,8 +147,11 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   // Timing
   const valor  = _eoBook(prov, 'Valor');
   const tgCut  = Math.min(_eoCurve(EOWCF.TG_TIME_RATE, pct('training grounds'), be), 25);
+  // Inspire Army / Hero's Inspiration kept up (leadership switch): the
+  // personality's best spell cuts training time and wages.
+  const insp = cfg.inspire ? EOWCF.INSPIRE[PERS_HEROS_INSPIRATION[pers] ? 'hero' : 'army'] : null;
   const trainTicks = Math.ceil(EOWCF.TRAIN_TICKS * (RACE_TRAIN_TIME_MULT[race] || 1) * (PERS_TRAIN_TIME_MULT[pers] || 1)
-                     * (1 - valor / 100) * (1 - tgCut / 100));
+                     * (1 - valor / 100) * (1 - tgCut / 100) * (insp ? insp.trainMult : 1));
   const buildTicks = Math.ceil(EOWCF.BUILD_TICKS * (RACE_BUILD_TIME_MULT[race] || 1));
   const trainAt = N - trainTicks;
   if (trainAt < 0) warn.push(`training takes ${trainTicks} ticks — it can no longer finish before exit`);
@@ -174,7 +177,8 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   const acreCost = (EOWCF.BUILD_COST_K * (land + EOWCF.BUILD_COST_LAND)
                   + EOWCF.RAZE_COST_BASE + EOWCF.RAZE_COST_K * land) * bMult;
 
-  const ectx = { ...ctx, wdWageCut: 0, beMin: 100, beMult: rit.beMult || 1, wageMult: rit.wageMult || 1 };
+  const ectx = { ...ctx, wdWageCut: 0, beMin: 100, beMult: rit.beMult || 1,
+                 wageMult: (rit.wageMult || 1) * (insp ? insp.wageMult : 1) };
   const banks0 = pct('banks'), arm0 = pct('armouries');
   const pop = sot.peasants + have.sol + have.osp + have.dsp + have.eli + have.thv + have.wiz;
 
@@ -371,7 +375,7 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   if (net0 != null && net0 < 0) warn.push('income is negative right now — wages exceed income');
   return {
     slot: prov.slot, name: prov.name, race, pers, land, N, trainAt, trainTicks, buildTicks, swapAt,
-    have, target, need, surplusO, specCredits, buildCredits,
+    have, target, need, surplusO, specCredits, buildCredits, inspire: insp,
     draft: { rate: rateKey || EOWCF.DRAFT_RATE_DEFAULT, patriotism: !!cfg.patriotism, ppa,
              startAt: best.st.drStart, ticks: Math.min(best.st.burst, T), drafted: best.st.drafted,
              cost: Math.round(best.st.draftCost), ppaAtTrain: best.st.pe / land, advice: draftAdvice },
@@ -466,6 +470,8 @@ function _eoPlanText(p, discord) {
     if (p.release.toPeasants) parts.push(`${n(p.release.toPeasants)} → all the way to peasants`);
     steps.push([0, `Release ${n(p.surplusO)} off specs NOW: ${parts.join(', ')}.`]);
   }
+  if (p.inspire) steps.push([0, `Keep **${p.inspire.name}** up the whole ceasefire (recast every ${p.inspire.ticks} ticks):`
+    + ` −${Math.round((1 - p.inspire.wageMult) * 100)}% wages, −${Math.round((1 - p.inspire.trainMult) * 100)}% training time — it must be up when you train.`]);
   const d = p.draft;
   if (d.drafted > 0) {
     const rateName = d.rate.charAt(0).toUpperCase() + d.rate.slice(1);
@@ -548,6 +554,8 @@ function eoSet(key, val) {
     c.draftRate = EOWCF.DRAFT_RATES[val] ? val : '';
   } else if (key === 'patriotism') {
     c.patriotism = !!val;
+  } else if (key === 'inspire') {
+    c.inspire = !!val;
   } else {
     const v = parseFloat(String(val).replace(',', '.'));
     c[key] = isFinite(v) && v >= 0 ? v : 0;
@@ -630,6 +638,9 @@ async function renderEowcf(opts = {}) {
           </select></label>
         <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px" title="Patriotism: +${Math.round((EOWCF.PATRIOTISM_DRAFT_MULT - 1) * 100)}% draft speed, lasts ${EOWCF.PATRIOTISM_TICKS} ticks">
           <input type="checkbox" ${c.patriotism ? 'checked' : ''} onchange="__wpA.eoSet('patriotism', this.checked)"> Patriotism</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px"
+          title="Inspire Army (−15% wages, −20% training time) or, for personalities that have it, Hero's Inspiration (−30% / −30%), kept up all ceasefire">
+          <input type="checkbox" ${c.inspire ? 'checked' : ''} onchange="__wpA.eoSet('inspire', this.checked)"> Inspire Army / Hero's Insp.</label>
         <span style="font-size:15px;color:#7a9090;padding-bottom:6px">${exitLbl ? `Exit ≈ <b style="color:#b8c8c8">${esc(exitLbl)}</b>` : ''}</span>
         <button class="wb g" style="font-size:16px;padding:5px 14px" ${S.eo.publishing ? 'disabled' : ''} onclick="__wpA.eoPublish()">${S.eo.publishing ? 'Publishing…' : '📣 Publish to Discord bot'}</button>
         <button class="wb" style="font-size:16px;padding:5px 12px" onclick="__wpA.eoRefresh()" title="Re-read the published config from Firestore">⟳</button>
@@ -732,7 +743,7 @@ async function renderEowcf(opts = {}) {
           Training is ordered at <i>exit − training time</i> (Valor, Training Grounds, race/personality) so it finishes by exit.
           Specialist credits pay for specs first (lost on exit); Generals turn leftover credits into elites (2:1).
           Assumes population stays full (EOWCF +1000% births), released specs → soldiers → peasants with no refund,
-          thieves at a flat price (no armoury discount), and no spells. Wizards come from guilds only (0.02/acre/tick, not BE-affected).
+          thieves at a flat price (no armoury discount), and only Patriotism + Inspire Army / Hero's Inspiration as spells. Wizards come from guilds only (0.02/acre/tick, not BE-affected).
         </div>`;
   });
 }
