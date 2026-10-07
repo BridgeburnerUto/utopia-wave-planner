@@ -196,7 +196,9 @@ function _provEconomy(prov, loc, ctx) {
   const land = prov.land || sot.land || 0;
   if (!(land > 0) || sot.peasants == null) return null;
 
-  const be   = (sot.be || 100) / 100;
+  // ctx.beMin / ctx.beMult: only the EOWCF planner sets them (BE reset to 100%
+  // at war end, Benediction +20% BE). Every other caller leaves them unset.
+  const be   = Math.max(sot.be || 100, ctx?.beMin || 0) / 100 * (ctx?.beMult || 1);
   const race = (prov.race || '').toLowerCase();
   const pers = (sot.personality || prov.personality || '').toLowerCase();
 
@@ -286,7 +288,7 @@ function _provEconomy(prov, loc, ctx) {
   const wdWageCut = ctx?.wdWageCut || 0;   // kingdom-wide race doctrine, at war
   const wages = wageBase * wageRate * (1 - armCut / 100) * (1 - book / 100)
               * (RACE_WAGE_MULT[race] || 1) * (PERS_WAGE_MULT[pers] || 1)
-              * (1 - wdWageCut / 100) * (dragon?.wageMult || 1);
+              * (1 - wdWageCut / 100) * (dragon?.wageMult || 1) * (ctx?.wageMult || 1);  // wageMult: EOWCF ritual
 
   return {
     gross: Math.round(gross), wages: Math.round(wages), net: Math.round(gross - wages),

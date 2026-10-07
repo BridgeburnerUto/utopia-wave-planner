@@ -395,6 +395,71 @@ const WAR_DOCTRINES = {
   'undead':   { effects: [{ label: 'Enemy Battle Gains',sign: '-', cap: 12.5 }, { label: 'Plague Spread',      sign: '+', cap: 12.5 }] },
 };
 
+// ── End-of-war ceasefire planner (tabs/eowcf.js) — Age 116 ───────────────────
+// Sources: AGE 116 FINAL CHANGES (race/personality lines, elite prices) +
+// utopiawiki.com Growth / Military / Relations / Ritual (formulas, base costs).
+// The age doc wins on conflict. UPDATE EVERY AGE.
+//
+// EOWCF: at least 24 ticks, the kingdom may leave any time after that, at most
+// 96. ALL specialist and building credits are lost on exit. BE is reset to 100%
+// if below. (Relations page.)
+const EOWCF = {
+  MIN_TICKS: 24, MAX_TICKS: 96,
+  // Base unit training costs (gc). Elites are per race below.
+  SPEC_COST: 350, THIEF_COST: 500,
+  // Training time = 24 × race × pers × Valor × Training Grounds (Military page).
+  // Spells (Inspire Army / Hero's Inspiration) are left out — not plannable.
+  TRAIN_TICKS: 24, TG_TIME_RATE: 1.0,           // TG: −1×% time, x·(1−x) curve, max 25%
+  // Construction: 16 ticks; cost 0.05 × (land + 10000) per acre;
+  // raze 300 + 0.05 × land per acre (Growth page).
+  BUILD_TICKS: 16, BUILD_COST_K: 0.05, BUILD_COST_LAND: 10000,
+  RAZE_COST_BASE: 300, RAZE_COST_K: 0.05,
+  // Armouries (Growth page): training −1.5×% (max 37.5%), draft cost −2×% (max 50%).
+  // The wage cut is ARMOURY_WAGE_RATE above.
+  ARM_TRAIN_RATE: 1.5, ARM_DRAFT_RATE: 2.0,
+  // Guilds: 0.02 wizards per guild acre per tick, NOT affected by BE.
+  GUILD_WIZ_PER_TICK: 0.02,
+  // Draft settings (Military page): % of peasants drafted per tick, gc per soldier.
+  DRAFT_RATES: {
+    none:      { pct: 0,   gc: 0 },                // drafting switched off
+    reservist: { pct: 0.5, gc: 30 }, normal:    { pct: 1.0, gc: 50 },
+    aggressive:{ pct: 1.5, gc: 75 }, emergency: { pct: 2.0, gc: 110 },
+  },
+  // Leadership practice (2026-10-07): draft to a peasants-per-acre target, at
+  // EMERGENCY with Patriotism, as one SHORT burst that ends when training is
+  // ordered -- peasants keep earning until the last moment; the faster draft is
+  // worth its higher gc per soldier.
+  DRAFT_RATE_DEFAULT: 'emergency', PPA_DEFAULT: 6.5,
+  // Patriotism (Mystics page): +30% draft speed, max 20 ticks, available to all.
+  PATRIOTISM_DRAFT_MULT: 1.3, PATRIOTISM_TICKS: 20,
+  // Draft Level Factor: MAX(1.0154x² + 1.1759x + 0.3633, 1),
+  // x = (soldiers + specs + elites) / max population.
+  DLF: [1.0154, 1.1759, 0.3633],
+};
+const RACE_ELITE_COST = {
+  avian: 750, 'dark elf': 700, dryad: 800, dwarf: 900, elf: 700,
+  faery: 1150, halfling: 900, human: 800, orc: 850, undead: 800,
+};
+const RACE_TRAIN_COST_MULT  = { human: 0.70 };                  // −30% Training Costs
+const PERS_TRAIN_COST_MULT  = { general: 0.75 };                // −25% Training Cost
+const RACE_TRAIN_TIME_MULT  = { avian: 0.75 };                  // −25% Training Time
+const PERS_TRAIN_TIME_MULT  = { general: 0.75 };                // −25% Training Speed
+const RACE_DRAFT_COST_MULT  = { orc: 0.60, elf: 1.35 };         // −40% / +35% Draft Costs
+const RACE_DRAFT_SPEED_MULT = { human: 1.20, halfling: 0.75 };  // +20% / −25% Draft Speed
+const PERS_DRAFT_SPEED_MULT = { tactician: 1.40 };              // +40% Draft Speed
+const RACE_BUILD_COST_MULT  = { dwarf: 0.50 };                  // −50% Construction Cost
+const PERS_BUILD_COST_MULT  = { artisan: 0.75 };                // −25% Construction (incl. raze)
+const RACE_BUILD_TIME_MULT  = { dwarf: 0.50 };                  // −50% Construction Time
+const PERS_GUILD_MULT       = { mystic: 2.0, heretic: 1.5 };    // +100% / +50% Guild Effectiveness
+// The General "can train one Elite for every two Specialist Credits".
+const PERS_ELITE_PER_CREDITS = { general: 2 };
+// Kingdom rituals that change the EOWCF maths (Ritual page).
+const EOWCF_RITUALS = {
+  none:        { label: 'None' },
+  benediction: { label: 'Benediction', wageMult: 0.80, draftCostMult: 0.80, buildCostMult: 0.80, beMult: 1.20 },
+  ascendancy:  { label: 'Ascendancy',  wizMult: 1.50 },
+};
+
 const CSS = `
 #__wp_overlay{position:fixed;inset:0;z-index:2147483647;background:#2b3333;color:#ffffff;font-family:Rajdhani,sans-serif;font-size:19px;display:flex;flex-direction:column;overflow:hidden}
 #__wp_overlay *{box-sizing:border-box;margin:0;padding:0}

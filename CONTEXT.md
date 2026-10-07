@@ -1,6 +1,6 @@
 ﻿# Wave Planner â€” Session Context
 
-Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-09-11 (latest).
+Paste-ready context for continuing work on the Utopia War Tools. Last updated 2026-10-07 (latest).
 
 **Standing rule (2026-07-28): every session must end by summarizing what was done into this file.**
 
@@ -102,7 +102,150 @@ Paste-ready context for continuing work on the Utopia War Tools. Last updated 20
   normally cured against how old that side's SoTs are** (see the 2026-08-13
   plague decision below).
 
-## Recent work (2026-09-11, latest) -- KD activity tracker (NEW: ACTIVITY tab)
+## Recent work (2026-10-07, latest) -- EOWCF training planner + /eowcf bot command
+
+Leader ask: plan the END-OF-WAR CEASEFIRE per province -- leadership sets
+targets at exit (raw TPA, raw WPA, dspecs/acre, ospecs/acre, rest elites), the
+tool says what each player must do. Leader decisions: wizards come from GUILDS
+ONLY; training must be FINISHED by exit (so it is ordered at exit - training
+time); release-to-peasants vs release-to-soldiers is COMPARED per province;
+planner AND bot together. **Never hard-code race/personality numbers** -- all of
+them are config.js tables (leader, same session; saved as a memory).
+
+**Game rules found (utopiawiki.com + Age 116 doc), now in config.js `EOWCF` +
+new RACE_/PERS_ tables:** EOWCF 24..96 ticks, ALL spec/building credits lost on
+exit, BE reset to >=100%, +1000% births first 24 ticks. Armouries: training
+-1.5x% (max 37.5), draft cost -2x%, wages -2x%. Build 16 ticks, cost
+0.05x(land+10000)/acre, raze 300+0.05xland/acre. Draft: none/reservist/normal/
+aggressive/emergency = 0/0.5/1/1.5/2% of peasants per tick at 0/30/50/75/110 gc,
+x Draft Level Factor. Guilds 0.02 wiz/acre/tick (not BE). Benediction -20%
+wages/draft/construction, +20% BE; Ascendancy +50% wizards. Training 24 ticks x
+race x pers x Valor x TG. Elite prices per race from the age doc. Personalities:
+General -25% training cost & time and 1 elite per 2 spec credits; Artisan -25%
+construction incl. raze; Tactician +40% draft speed; Mystic/Heretic guilds x2/x1.5.
+**IS fields used:** `ma.draftRate` (string, can be "None"), `ma.draftTarget`,
+`ma.credits` (spec credits), `survey.credits` (building credits),
+`som.training.{oSpecs,dSpecs,elites,thieves}` (NOT inside sot counts),
+`sot.tpa/wpa` are RAW. Province objects also carry a `discord` name.
+
+**`src/tabs/eowcf.js`, EOWCF tab** (after ECONOMY). Per province a tick
+simulation to the training tick: gold += `_provEconomy` net each tick (the
+Economy model re-run with changed peasants/units/buildings -- no income formula
+duplicated; two ctx hooks added to economy.js: `beMin`/`beMult`/`wageMult`,
+unset for every other caller), draft by rate/target/DLF/Heroism, construction
+paid with building credits first. Population held full (peasants = pop -
+military). Search: share of surplus ospecs released to PEASANTS (0/25/50/75/100%)
+x armoury swap % (banks razed first, ordered build-time before training; coarse
+5% then +-4 refine). Ranking: thief/spec targets met > most elites > SIMPLER
+plan (no swap/no release) > gold left. Training order: dspecs, ospecs (credits
+first), thieves, elites -- each limited by soldiers AND gold. What-ifs (NOT in
+the plan numbers): draft target that would supply missing soldiers / turn spare
+gold into elites (bounded by a 100%-target draft run), extra banks built now,
+extra guild % for WPA. Leadership can override draft rate/target kingdom-wide
+(cfg.draftRate/draftTarget; blank = own), Draft rate + Draft target % inputs on the tab.
+**Publish** = ONE `fbWrite` to `eowcf/{kdId}`: `cfgJson` + `planJson`
+(per slot the Discord text, timestamps as `<t:unix:R>` so they stay live) --
+~17 KB for 24 provinces. Read once per session (⟳ re-reads).
+
+**Bot: `/eowcf [slot]`** in discord.php -- slot from the leading number of
+`member.nick` ("12 Name", "[12]", "#12 -" all work; see memory
+discord-nick-province-slot), Firestore REST GET (404 -> "not published yet"),
+prints the slot's text + "published N h ago" (warns from 12h). `WP_OWN_KD` env
+optional (default 5_11). Uses `≈` not `~` (font + Discord strikethrough).
+
+**Verified:** `scripts/eowcf-model.test.js` (8 invariant groups on synthetic
+provinces, loads the real src), model run on the live IS snapshot (24 provs,
+~0.4-0.7 s), harness with the live snapshot (`mockup/harness.html?dump=
+snap_live.json` -- harness now takes `?dump=`): tab renders, select/ritual/ticks
+work, publish = 1 write of the right shape, all 13 tabs render, own net
+unchanged. discord.php /eowcf run in php-wasm (nick parsing, no nick, network
+failure). **NOT deployed / NOT pushed at time of writing** -- needs backend
+deploy + `?register=1` (adds /eowcf) and a commit/push of dist for the planner.
+
+**Same day, leader follow-ups (built + verified):**
+- **Draft = PPA burst.** Leadership gives a target PPA (peasants/acre, ~6.5)
+  and players draft at **Emergency + Patriotism** in ONE late burst: peasants
+  keep earning, the draft stays OFF until `trainAt - burst ticks`, then runs
+  until PPA is reached exactly when training is ordered. The draft-target-%
+  model is GONE (no `room`/`target` in the sim; `st.floor`/`st.drStart`).
+  Patriotism x1.3 draft speed, 20 ticks (Mystics page) -> text says "recast"
+  when the burst is longer. Config: `EOWCF.DRAFT_RATE_DEFAULT 'emergency'`,
+  `PPA_DEFAULT 6.5`, `PATRIOTISM_DRAFT_MULT/TICKS`; tab: Draft rate select
+  (default Emergency, "Own" = province's setting) + Patriotism checkbox.
+  What-if advice is now "draft deeper, to PPA X". On the live snapshot this
+  took kingdom elites from ~21k (own draft settings) to ~63k.
+- **Targets per SETUP** (leader: "an Orc General gets different numbers from a
+  Faery Rogue"; one person fills them in for everyone). `cfg.setups =
+  [{id,name,race,pers,tpa,wpa,dpa,opa,ppa}]`, index 0 = "Everyone" catch-all
+  (undeletable); `cfg.assign = {slot: setupId}` manual overrides (yellow in
+  the table). `_eoSetupFor`: manual > race+pers > race > pers > Everyone.
+  Race list = `RACE_ELITE_COST` keys, personality list = our provinces' (no
+  hard-coded lists). Old configs with top-level tpa... migrate into Everyone.
+  `S.eo.cfg` is created lazily by `_eoC()` (state.js holds null).
+- Plan steps are listed in TIME order (release, draft start, armoury swap,
+  train) and the text names the province's setup.
+
+**Known limits / next:** mid-war data shows most provinces at/above their draft
+target, so elites come from released ospecs + draft advice; negative-income
+provinces get a warning only. Assumptions to confirm in game: armouries discount
+thieves, Heroism % = draft speed + cost, release = specs->soldiers->peasants no
+refund, military for the draft target includes thieves+wizards, Benediction BE
+is multiplicative. No per-province target overrides yet.
+
+## Recent work (2026-10-06) -- Discord /elites calculator (Part 1)
+
+Leader ask: let players do training maths through the bot. Scoped in two parts;
+Part 1 BUILT, Part 2 (EOWCF planner) scoped only -- see "Part 2" below.
+
+**How it works:** the bot had no way to receive commands (the backend only
+REST-polls #dragon). Slash commands now arrive as HTTPS POSTs on the app's
+**Interactions Endpoint URL** = `https://utopia-intel-259283383296.europe-west1.run.app/discord`,
+handled by the NEW `utopia-intel-server/discord.php` (routed in index.php). No
+gateway, no extra process. Every request is Ed25519-verified with sodium
+(`X-Signature-Ed25519` + timestamp), else 401 -- Discord refuses an endpoint
+that does not do this. Replies must land within 3s; the calculator is instant.
+- `/elites` -- no options opens a 4-field form (soldiers, spec price, elite
+  price, budget; accepts `5,000,000` / `5m` / `350k`); all four options answers
+  inline. Reply is EPHEMERAL (only the asker sees it). Maths: every soldier
+  trained, max elites, rest specs: `E = floor((B - S*ps)/(pe - ps))`, clamped;
+  below `S*ps` it specs what it can and reports untrained soldiers. Also shows
+  "all-in on elites". Players type their in-game prices, so it is race/armoury
+  agnostic and never needs an age update.
+- Admin (WP_API_KEY): `GET /discord?register=1[&guild=ID]` PUTs the guild
+  commands (default guild 1397235789980631164) and caches app id + public key
+  to `/mnt/data/discord/app.json` (the interaction check reads env
+  `DISCORD_PUBLIC_KEY` first, else that cache -- so NO new env var is needed).
+  `GET /discord?endpoint=1&url=...` sets the Interactions Endpoint URL via
+  PATCH /applications/@me (Discord PINGs it first, so deploy before this).
+- **Tested** without local PHP: `scripts/elites-calc.test.js` (node mirror of
+  the maths + parser; keep in step with discord.php), and discord.php run
+  end-to-end in **php-wasm** (`@php-wasm/node` from the npx cache, needs
+  `emscriptenOptions:{processId:1}`; its CLI has a Windows path bug). php-wasm
+  has no sodium, so verify was stubbed there -- the real check is proven only
+  when Discord accepts the endpoint URL. php:8.4-apache ships sodium.
+- **LIVE: deployed as rev `utopia-intel-00070-9c4`** (2026-10-06, after the
+  leader approved -- auto mode had blocked the first try). `?register=1` ->
+  200, guild commands ["elites"]; `?endpoint=1` -> 200, and Discord only
+  accepts the URL after its own signed PING passes, so the sodium check is
+  proven live. Unsigned POST -> 401. The backend dir is NOT a git repo -- the
+  local copy = deployed 00070. If the first command after idle says "did not
+  respond", that is the Cloud Run cold start vs Discord's 3s -- min-instances 1.
+
+**Part 2 (scoped, not built):** EOWCF draft/training planner -- targets per acre
+(dspecs, thieves, rest elites) + gc at train time -> armoury % needed. Plan:
+per-race base elite prices from the Age 116 doc into config.js (Avian 750, DE
+700, Dryad 800, Dwarf 900, Elf 700, Faery 1150, Halfling 900, Human 800, Orc
+850, Undead 800; specs 350 / thieves 500 base per wiki; Human -30% training
+plus doctrine up to -12.5%), planner writes a per-province econ snapshot to
+Firestore (bot reads it, formulas stay in economy.js only). **Who is who: NO
+`/link` needed** -- every player's Discord server nick STARTS WITH THEIR
+PROVINCE SLOT NUMBER (kingdom convention, leader 2026-10-06), and the
+interaction payload already carries `member.nick`. Parse the leading number ->
+slot; no number -> ask them to fix the nick (or pass a slot option). **Open before building:** armoury training-cost
+rate/cap (wiki silent; check in game), do thieves use soldiers / get the
+armoury discount, specialist credits, draft projection during EOWCF.
+
+## Recent work (2026-09-11) -- KD activity tracker (NEW: ACTIVITY tab)
 
 Leader ask: map when the enemy's provinces are online, from the star next to
 their names on the game's kingdom page, with a computer keeping the page up.

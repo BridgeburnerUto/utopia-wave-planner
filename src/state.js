@@ -128,6 +128,12 @@ const S = {
   actIsPulledAt: {},  // {[loc]: ms} last read of the IS SoT archive (own view, throttled by ACTIVITY.IS_PULL_MIN)
   actIsNow: {},       // {[loc]: {at, hourStart, on: Set(slots with a SoT this hour), lastSeen: {slot: ms}, corrH}} — the hour that is not stored yet
 
+  // ── EOWCF training planner (tabs/eowcf.js) ─────────────────────────────────
+  // cfg is leadership's input; published (with every province's plan text) to
+  // Firestore eowcf/{kdId}, which the Discord bot's /eowcf reads. Read once per session.
+  eo: { cfg: null,   // created by _eoC() from EO_CFG_DEFAULT on first use
+        loaded: false, loadErr: '', publishedAt: 0, publishedBy: '', publishing: false, msg: '', sel: null },
+
   aiStrategyResult: null, // cached result from AI Strategy analysis (null = not yet run)
   tmMatchupShowAll: false, // T/M Matchup: true = show all own provinces, false = T/M only
   tmMatchupOp: 'ns',      // T/M Matchup: active op id (see TM_OPS in tmmatchup.js)
