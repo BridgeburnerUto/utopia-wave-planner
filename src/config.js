@@ -416,6 +416,7 @@ const EOWCF = {
   RAZE_COST_BASE: 300, RAZE_COST_K: 0.05,
   // Armouries (Growth page): training −1.5×% (max 37.5%), draft cost −2×% (max 50%).
   // The wage cut is ARMOURY_WAGE_RATE above.
+  // Thieves are NOT discounted by armouries (leader, confirmed in game 2026-10-07).
   ARM_TRAIN_RATE: 1.5, ARM_DRAFT_RATE: 2.0,
   // Guilds: 0.02 wizards per guild acre per tick, NOT affected by BE.
   GUILD_WIZ_PER_TICK: 0.02,
@@ -442,6 +443,10 @@ const RACE_ELITE_COST = {
 };
 const RACE_TRAIN_COST_MULT  = { human: 0.70 };                  // −30% Training Costs
 const PERS_TRAIN_COST_MULT  = { general: 0.75 };                // −25% Training Cost
+// Thieves cost a flat THIEF_COST: no armouries and none of the training-cost
+// modifiers above (leader 2026-10-07). Only an explicit thief rebate goes here.
+const RACE_THIEF_COST_MULT  = {};                               // none this age
+const PERS_THIEF_COST_MULT  = {};                               // none this age
 const RACE_TRAIN_TIME_MULT  = { avian: 0.75 };                  // −25% Training Time
 const PERS_TRAIN_TIME_MULT  = { general: 0.75 };                // −25% Training Speed
 const RACE_DRAFT_COST_MULT  = { orc: 0.60, elf: 1.35 };         // −40% / +35% Draft Costs

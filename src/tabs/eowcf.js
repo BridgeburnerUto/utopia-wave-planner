@@ -34,7 +34,7 @@
 //     24 ticks), so peasants = population − military at every tick. Drafting a
 //     peasant therefore costs his income for the rest of the ceasefire.
 //   * Released specs become soldiers; released soldiers become peasants; no refund.
-//   * Armouries discount ALL training incl. thieves ("Military Training Costs").
+//   * Thieves: flat THIEF_COST — no armoury or training-cost modifiers (leader, in game).
 //   * Heroism science: its effect % both speeds the draft and cuts its cost.
 //   * Spells (Inspire Army, Builders Boon …) are not planned.
 //
@@ -256,7 +256,7 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
     };
     const dsp = take(need.dsp, EOWCF.SPEC_COST * unitMult, true);
     const osp = take(need.osp, EOWCF.SPEC_COST * unitMult, true);
-    const thv = take(need.thv, EOWCF.THIEF_COST * unitMult, false);
+    const thv = take(need.thv, EOWCF.THIEF_COST * (RACE_THIEF_COST_MULT[race] || 1) * (PERS_THIEF_COST_MULT[pers] || 1), false);
     const freeEli = elitePerCredits ? Math.min(sol, Math.floor(credits / elitePerCredits)) : 0;
     const fixed = Math.max(0, st.gold) - gold;
     const eliteUnit = (eliteBase || 0) * unitMult;
@@ -732,7 +732,7 @@ async function renderEowcf(opts = {}) {
           Training is ordered at <i>exit − training time</i> (Valor, Training Grounds, race/personality) so it finishes by exit.
           Specialist credits pay for specs first (lost on exit); Generals turn leftover credits into elites (2:1).
           Assumes population stays full (EOWCF +1000% births), released specs → soldiers → peasants with no refund,
-          armouries discount thieves too, and no spells. Wizards come from guilds only (0.02/acre/tick, not BE-affected).
+          thieves at a flat price (no armoury discount), and no spells. Wizards come from guilds only (0.02/acre/tick, not BE-affected).
         </div>`;
   });
 }

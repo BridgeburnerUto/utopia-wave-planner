@@ -57,6 +57,14 @@ assert.strictEqual(plan(prov({ peasants: 10000 })).draft.drafted, 0);
 // Emergency drafts in fewer ticks than Normal (so its burst can start later)
 assert(plan(prov(), { draftRate: 'normal' }).draft.ticks > plan(prov(), { draftRate: 'emergency' }).draft.ticks);
 
+// 3b. Thieves cost a flat price: armouries and Human/General training discounts don't touch them
+for (const race of ['Orc', 'Human']) {
+  const x = plan(prov({ race, pers: 'General', money: 1e8, soldiers: 9000, thieves: 0, dSpecs: 10000, oSpecs: 0 }), { tpa: 1, dpa: 5 });
+  assert.strictEqual(x.train.thv, 2000);
+  const specCost = x.train.dsp * 350 * x.train.unitMult;   // 0 dspecs needed here, so the bill is thieves + elites
+  assert.strictEqual(Math.round(x.train.bill - x.train.eli * x.train.eliteUnit - specCost), 2000 * 500, race + ': thieves must cost 500 each');
+}
+
 // 4. Specialist credits pay for specs first: no gold at all, credits cover the def specs
 r = plan(prov({ money: 0, credits: 3000, dSpecs: 8000, soldiers: 5000, draftRate: 'None',
                 sot: { peasants: 0 } }));

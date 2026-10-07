@@ -189,8 +189,9 @@ and a real /eowcf in Discord.
 
 **Known limits / next:** mid-war data shows most provinces at/above their draft
 target, so elites come from released ospecs + draft advice; negative-income
-provinces get a warning only. Assumptions to confirm in game: armouries discount
-thieves, Heroism % = draft speed + cost, release = specs->soldiers->peasants no
+provinces get a warning only. **Confirmed by leader (in game): thieves are a flat 500 -- no armoury
+discount and no training-cost modifiers; only explicit thief rebates via
+RACE_/PERS_THIEF_COST_MULT (empty Age 116).** Still to confirm: Heroism % = draft speed + cost, release = specs->soldiers->peasants no
 refund, military for the draft target includes thieves+wizards, Benediction BE
 is multiplicative. No per-province target overrides yet.
 
