@@ -77,6 +77,18 @@ r = plan(prov({ money: 0, credits: 3000, dSpecs: 8000, soldiers: 5000, draftRate
                 sot: { peasants: 0 } }));
 assert(r.train.freeSpecs > 0 && r.train.dsp === r.train.freeSpecs, 'credit specs should be free when broke');
 
+// 4b. Dark Elf trains thieves on credits — and a credit goes to a thief (saves 500) before a spec (350)
+{
+  const de = plan(prov({ race: 'Dark Elf', money: 0, credits: 1000, thieves: 0, dSpecs: 0, soldiers: 20000, draftRate: 'None' }),
+                  { tpa: 1, dpa: 1 });                   // needs 2000 thieves + 2000 dspecs
+  assert.strictEqual(de.train.freeThv, 1000, 'credits should buy thieves first');
+  assert.strictEqual(de.train.freeSpecs, 0);
+  const orc = plan(prov({ race: 'Orc', money: 0, credits: 1000, thieves: 0, dSpecs: 0, soldiers: 20000, draftRate: 'None' }),
+                   { tpa: 1, dpa: 1 });
+  assert.strictEqual(orc.train.freeThv, 0, 'only races allowed to may use credits on thieves');
+  assert.strictEqual(orc.train.freeSpecs, 1000);
+}
+
 // 5. A race without an elite price is flagged, never guessed
 r = plan(prov({ race: 'Gnome' }));
 assert(r.warn.some(w => /RACE_ELITE_COST/.test(w)), 'missing race price must warn');

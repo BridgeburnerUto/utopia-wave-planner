@@ -197,7 +197,12 @@ confirm: Benediction +20% BE multiplicative (leader checking). **Spells added:**
 Inspire Army (-15% wages, -20% training time) or Hero's Inspiration (-30%/-30%,
 Cleric + War Hero per the Age 116 doc -- the wiki's Paladin is an old age) via
 `PERS_HEROS_INSPIRATION`; the stronger one only, never both; switch on the tab
-(cfg.inspire, default on). Per-province targets = setups + manual assignment.
+(cfg.inspire, default on). Per-province targets = setups + manual assignment. **Thieves on credits:** races/personalities
+that may train thieves with specialist credits are in `RACE_THIEF_CREDITS` /
+`PERS_THIEF_CREDITS` (credits per thief; Age 116: Dark Elf, 1:1 assumed -- the
+doc gives no ratio). Credits are allocated greedily by gc saved per credit
+(thief 500 > spec 350 x armoury/race mult; General elites at 2 credits each),
+since credits are lost on exit.
 
 ## Recent work (2026-10-06) -- Discord /elites calculator (Part 1)
 

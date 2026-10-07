@@ -245,34 +245,43 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   const eliteBase = RACE_ELITE_COST[race];
   if (eliteBase == null) warn.push(`no elite price for race "${race}" in config.js RACE_ELITE_COST — elites not costed`);
   const elitePerCredits = PERS_ELITE_PER_CREDITS[pers] || 0;
+  const thiefCredits = RACE_THIEF_CREDITS[race] || PERS_THIEF_CREDITS[pers] || 0;   // credits per thief, 0 = not allowed
+  const thiefUnit = EOWCF.THIEF_COST * (RACE_THIEF_COST_MULT[race] || 1) * (PERS_THIEF_COST_MULT[pers] || 1);
   const train = st => {
     const unitMult = raceTC * (1 - _eoCurve(EOWCF.ARM_TRAIN_RATE, st.arm, be) / 100);
-    // Order: def specs, off specs, thieves (credits cover specs first), then elites —
-    // every step limited by soldiers left AND gold left.
-    let sol = st.sol, gold = Math.max(0, st.gold), credits = specCredits, freeSpecs = 0;
-    const take = (want, unitGc, useCredits) => {
-      let n = Math.min(want, sol);
-      let free = useCredits ? Math.min(credits, n) : 0;
-      const paid = unitGc > 0 ? Math.min(n - free, Math.floor(gold / unitGc)) : n - free;
-      n = free + paid;
-      credits -= free; freeSpecs += useCredits ? free : 0; sol -= n; gold -= paid * unitGc;
-      return n;
-    };
-    const dsp = take(need.dsp, EOWCF.SPEC_COST * unitMult, true);
-    const osp = take(need.osp, EOWCF.SPEC_COST * unitMult, true);
-    const thv = take(need.thv, EOWCF.THIEF_COST * (RACE_THIEF_COST_MULT[race] || 1) * (PERS_THIEF_COST_MULT[pers] || 1), false);
-    const freeEli = elitePerCredits ? Math.min(sol, Math.floor(credits / elitePerCredits)) : 0;
-    const fixed = Math.max(0, st.gold) - gold;
+    const specUnit = EOWCF.SPEC_COST * unitMult;
     const eliteUnit = (eliteBase || 0) * unitMult;
-    const paidRoom = sol - freeEli;
-    const afford = eliteUnit > 0 ? Math.floor(gold / eliteUnit) : paidRoom;
-    const paidEli = Math.min(paidRoom, afford);
+    // 1. Soldiers: def specs, off specs, thieves, the rest elites.
+    let sol = st.sol;
+    const dspN = Math.min(need.dsp, sol); sol -= dspN;
+    const ospN = Math.min(need.osp, sol); sol -= ospN;
+    const thvN = Math.min(need.thv, sol); sol -= thvN;
+    // 2. Specialist credits (LOST on exit) go where one credit saves the most gc:
+    //    specs (everyone), thieves (e.g. Dark Elf), elites (General, 2 credits each).
+    const free = { spec: 0, thv: 0, eli: 0 };
+    let credits = specCredits;
+    [{ k: 'spec', n: dspN + ospN, per: 1, gc: specUnit },
+     { k: 'thv',  n: thvN, per: thiefCredits, gc: thiefUnit },
+     { k: 'eli',  n: sol,  per: elitePerCredits, gc: eliteUnit }]
+      .filter(u => u.per > 0 && u.n > 0)
+      .sort((a, b) => b.gc / b.per - a.gc / a.per)
+      .forEach(u => { const f = Math.min(u.n, Math.floor(credits / u.per)); free[u.k] = f; credits -= f * u.per; });
+    // 3. Gold pays for the rest, same priority — each step limited by gold left.
+    let gold = Math.max(0, st.gold);
+    const pay = (n, unit) => { const p = unit > 0 ? Math.min(n, Math.floor(gold / unit)) : n; gold -= p * unit; return p; };
+    const specs = free.spec + pay(dspN + ospN - free.spec, specUnit);
+    const dsp = Math.min(dspN, specs), osp = specs - dsp;
+    const thv = free.thv + pay(thvN - free.thv, thiefUnit);
+    const fixed = Math.max(0, st.gold) - gold;
+    const room = st.sol - dsp - osp - thv;                 // soldiers left for elites
+    const freeEli = Math.min(free.eli, room);
+    const paidEli = pay(room - freeEli, eliteUnit);
     const bill = fixed + paidEli * eliteUnit;
     const fixedMissing = need.thv + need.dsp + need.osp - (thv + dsp + osp);
     const fixedNoSol = Math.max(0, need.thv + need.dsp + need.osp - st.sol);   // missing for lack of soldiers
     return {
-      thv, dsp, osp, eli: freeEli + paidEli, freeSpecs, freeEli,
-      untrained: sol - freeEli - paidEli,                  // soldiers left because gold ran out
+      thv, dsp, osp, eli: freeEli + paidEli, freeSpecs: free.spec, freeThv: free.thv, freeEli,
+      untrained: room - freeEli - paidEli,                 // soldiers left because gold ran out
       fixedShort: fixedMissing > 0, fixedMissing, fixedNoSol,
       bill: Math.round(bill), left: Math.round(st.gold - bill), unitMult, eliteUnit,
     };
@@ -489,6 +498,7 @@ function _eoPlanText(p, discord) {
   if (t.eli) tr.push(`**${n(t.eli)} elites**`);
   steps.push([Math.max(0, p.trainAt) + 0.5, `Train ${at(p.trainAt)}: ${tr.length ? tr.join(', ') : (t.fixedNoSol > 0 ? 'nothing — no soldiers left to train' : 'nothing needed')}`
     + (t.freeSpecs ? ` (${n(t.freeSpecs)} specs on credits)` : '')
+    + (t.freeThv ? ` (${n(t.freeThv)} thieves on credits)` : '')
     + (t.freeEli ? ` (${n(t.freeEli)} elites on credits)` : '') + '.']);
   steps.sort((a, b) => a[0] - b[0]).forEach(([, s], i) => L.push(`${i + 1}. ${s}`));
   L.push(`Gold: ${n(p.gold.now)} now → ≈${n(p.gold.atTrain)} at training; bill ≈${n(t.bill)}, ${t.left >= 0 ? n(t.left) + ' left' : 'gold runs out'}.`);
@@ -741,7 +751,7 @@ async function renderEowcf(opts = {}) {
           − draft − construction (build + raze, building credits first). The draft is one late burst at the chosen rate
           (Patriotism, race/personality, Heroism, Draft Level Factor) down to the setup's PPA, timed to end when training is ordered.
           Training is ordered at <i>exit − training time</i> (Valor, Training Grounds, race/personality) so it finishes by exit.
-          Specialist credits pay for specs first (lost on exit); Generals turn leftover credits into elites (2:1).
+          Specialist credits (lost on exit) go where they save the most gold: specs, thieves where the race may (Dark Elf), elites for Generals (2:1).
           Assumes population stays full (EOWCF +1000% births), released specs → soldiers → peasants with no refund,
           thieves at a flat price (no armoury discount), and only Patriotism + Inspire Army / Hero's Inspiration as spells. Wizards come from guilds only (0.02/acre/tick, not BE-affected).
         </div>`;
