@@ -155,6 +155,13 @@ assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough ris
   const some = plan(prov(), { buildCredits: 100 }).build;
   assert.strictEqual(some.onCredits, 100); assert.strictEqual(some.overAcres, some.built - 100);
   assert(many.gcRaze > 0 && many.gcRaze === none.gcRaze, 'razing is gold either way');
+  // Unis: blank → only leftovers; a reserved % is kept even when gold is short
+  {
+    const poor = prov({ money: 0, soldiers: 20000, peasants: 60000 });   // gold-limited: wants every bank acre
+    const free = plan(poor), kept = plan(poor, { uniPct: 15 });
+    assert(kept.build.mix.universities >= 15, 'reserved unis kept');
+    assert(kept.build.mix.banks <= free.build.mix.banks, 'reserving unis can only leave fewer banks');
+  }
   // Too little time left for a rebuild → no build advice, current build kept
   assert.strictEqual(plan(prov(), { ticks: 30 }).build, null);
 }

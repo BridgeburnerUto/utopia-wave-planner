@@ -50,7 +50,7 @@ const EO_DOC = () => `eowcf/${(S.own?.location || '').replace(':', '_')}`;
 // or the setup leadership assigned it by hand (cfg.assign[slot]).
 const EO_SETUP_DEFAULT = () => ({ id: 'all', name: 'Everyone', race: '', pers: '',
                                   tpa: 4, wpa: 2.5, dpa: 5, opa: 0, ppa: EOWCF.PPA_DEFAULT,
-                                  guildPct: EOWCF.GUILD_PCT_DEFAULT, towerPct: EOWCF.TOWER_PCT_DEFAULT, homesPct: null });   // null = keep current homes
+                                  guildPct: EOWCF.GUILD_PCT_DEFAULT, towerPct: EOWCF.TOWER_PCT_DEFAULT, homesPct: null, uniPct: null });   // homes null = keep current; unis null = 0 reserved
 const EO_CFG_DEFAULT = () => ({ ticks: 96, exitAt: 0, ritual: 'none',
                                 draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true, inspire: true,
                                 spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null,
@@ -215,6 +215,9 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   // Homes are leadership's call (setup); blank = keep what the province has, so a
   // default never razes homes (fewer people = fewer to work and to draft).
   const homesPct  = cfg.homesPct != null && cfg.homesPct >= 0 ? cfg.homesPct : (b0.homes || 0);
+  // Universities: leadership may RESERVE a % (setup); blank = 0 reserved, unis then
+  // only get what is left after training gold and WPA guilds (leader 2026-10-07).
+  const uniMin    = cfg.uniPct > 0 ? cfg.uniPct : 0;
   // Wizards: old guilds produce until the rebuild is done, the new mix after.
   const wizMult = (PERS_GUILD_MULT[pers] || 1) * (rit.wizMult || 1);
   const wizPerPctTick = EOWCF.GUILD_WIZ_PER_TICK * wizMult * land / 100;
@@ -224,17 +227,19 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
   const guildForWpa = N > oldTicks
     ? Math.max(0, (target.wiz - have.wiz - wizPerPctTick * g0 * oldTicks) / (wizPerPctTick * (N - oldTicks))) : Infinity;
 
-  /** The full mix for a given banks % and homes %: basics, money, WPA guilds, rest unis */
+  /** The full mix for a given banks % and homes %. Land order: basics (dungeons,
+   *  farms, towers, base guilds, homes, reserved unis) → banks → guilds up to the
+   *  WPA target → everything left to universities. */
   const mixFor = (banks, homes) => {
-    const farms = farmPctFor(pop0 + acres(homes) * homePop);
+    const farms = farmPctFor(pop0 + acres(homes - (b0.homes || 0)) * homePop);
     const m = { dungeons: dungPct, farms, towers: towerPct, banks, homes };
-    let left = 100 - dungPct - farms - towerPct - banks - homes;
+    let left = 100 - dungPct - farms - towerPct - banks - homes - uniMin;
     const guilds = Math.max(0, Math.min(left, Math.max(guildBase, Math.ceil(guildForWpa * 10) / 10)));
     m.guilds = guilds; left -= guilds;
-    m.universities = Math.max(0, Math.round(left * 10) / 10);
+    m.universities = Math.max(0, Math.round((uniMin + left) * 10) / 10);
     return m;
   };
-  const basicsPct = () => dungPct + farmPctFor(pop0 + acres(homesPct - (b0.homes || 0)) * homePop) + towerPct + guildBase + homesPct;
+  const basicsPct = () => dungPct + farmPctFor(pop0 + acres(homesPct - (b0.homes || 0)) * homePop) + towerPct + guildBase + homesPct + uniMin;
 
   // ── Tick simulation ──
   const burstTicks = (pe, floor) => {
@@ -516,7 +521,7 @@ function eoPlanAll(cfg) {
     const { setup, how } = _eoSetupFor(p, cfg);
     const pc = { ...cfg, tpa: setup.tpa, wpa: setup.wpa, dpa: setup.dpa, opa: setup.opa, ppa: setup.ppa,
                  guildPct: setup.guildPct ?? EOWCF.GUILD_PCT_DEFAULT, towerPct: setup.towerPct ?? EOWCF.TOWER_PCT_DEFAULT,
-                 homesPct: setup.homesPct ?? null };
+                 homesPct: setup.homesPct ?? null, uniPct: setup.uniPct ?? null };
     try {
       const r = eoPlanProvince(p, pc, ctx, S.own?.location);
       if (r) r.setup = { id: setup.id, name: setup.name, how };
@@ -707,6 +712,7 @@ function eoSetupSet(i, key, val) {
   if (key === 'name') s.name = String(val).trim().slice(0, 40) || 'Setup';
   else if (key === 'race' || key === 'pers') s[key] = String(val || '').toLowerCase();
   else if (key === 'homesPct' && String(val).trim() === '') s.homesPct = null;   // blank = keep current homes
+  else if (key === 'uniPct' && String(val).trim() === '') s.uniPct = null;       // blank = none reserved
   else { const v = parseFloat(String(val).replace(',', '.')); s[key] = isFinite(v) && v >= 0 ? v : 0; }
   S.eo.msg = ''; renderEowcf();
 }
@@ -826,6 +832,10 @@ async function renderEowcf(opts = {}) {
           title="Homes % (more people to work and to draft). Blank = keep each province's current homes"
           style="width:58px;font-size:17px;padding:2px 5px;background:#2b3333;color:#fff;border:1px solid #617070;border-radius:3px"
           onchange="__wpA.eoSetupSet(${i}, 'homesPct', this.value)"></td>
+        <td><input type="number" step="any" min="0" value="${s.uniPct == null ? '' : esc(String(s.uniPct))}" placeholder="rest"
+          title="Universities % to RESERVE before banks. Blank = none reserved: unis only get the land left after training gold and WPA guilds"
+          style="width:58px;font-size:17px;padding:2px 5px;background:#2b3333;color:#fff;border:1px solid #617070;border-radius:3px"
+          onchange="__wpA.eoSetupSet(${i}, 'uniPct', this.value)"></td>
         <td style="font-family:monospace;color:#7a9090">${usedBy(s.id)}</td>
         <td>${i === 0 ? '' : `<button class="wb" style="font-size:14px;padding:1px 8px" onclick="__wpA.eoSetupDel(${i})" title="Delete this setup">✕</button>`}</td>
       </tr>`).join('');
@@ -835,7 +845,7 @@ async function renderEowcf(opts = {}) {
       <table class="wtbl" style="margin-bottom:6px"><thead><tr><th>Setup</th><th>Race</th><th>Personality</th>
         <th title="Raw thieves per acre">TPA</th><th title="Raw wizards per acre">WPA</th><th title="Def specs per acre">Dspec/a</th>
         <th title="Off specs per acre to keep">Ospec/a</th><th title="Peasants per acre after the draft">PPA</th>
-        <th title="Base guilds % (self-spells, ritual)">Guild%</th><th title="Towers % (ritual runes)">Tower%</th><th title="Homes % — leadership's call">Homes%</th><th>Provs</th><th></th></tr></thead>
+        <th title="Base guilds % (self-spells, ritual)">Guild%</th><th title="Towers % (ritual runes)">Tower%</th><th title="Homes % — leadership's call">Homes%</th><th title="Universities % reserved before banks (blank = only what is left)">Unis%</th><th>Provs</th><th></th></tr></thead>
         <tbody>${setupRows}</tbody></table>
       <button class="wb" style="font-size:15px;padding:3px 12px;margin-bottom:14px" onclick="__wpA.eoSetupAdd()">+ Add setup</button>`;
 

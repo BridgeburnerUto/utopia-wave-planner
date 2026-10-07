@@ -208,7 +208,14 @@ and a real /eowcf in Discord.
   credit builds one acre; acres beyond the credits cost gold; RAZING is always
   gold per the wiki (300 + 0.05 x land / acre) -- shown separately in the plan
   text so the leader can confirm (unconfirmed whether razing is free in the
-  ceasefire). KD card "Rebuild gold" counts provinces over their credits. Province table's Gold column is
+  ceasefire). Leader: credits CAN raze, but they save them for building -- so
+  razing stays gold. KD card "Rebuild gold" counts provinces over credits.
+- **Unis % per setup** (leader): blank = none reserved, unis only get the land
+  left after training gold and WPA guilds; a number is reserved before banks.
+  Land order: basics (dungeons, farms, towers, base guilds, homes, reserved
+  unis) -> banks -> WPA guilds -> rest unis. Fixed: farms counted ALL homes as
+  new people; now only homes added vs today.
+- Leader will judge the advice on ceasefire-start data (not the war snapshot). Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a
