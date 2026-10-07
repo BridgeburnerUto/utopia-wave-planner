@@ -147,6 +147,9 @@ assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough ris
   assert(plan(prov(), { wpa: 6 }).build.mix.guilds > plan(prov(), { wpa: 0 }).build.mix.guilds);
   // Wages: raising them earlier costs gold
   assert(plan(prov({ money: 0 }), { wageRaiseTicks: 80 }).gold.atTrain < plan(prov({ money: 0 }), { wageRaiseTicks: 0 }).gold.atTrain);
+  // Rebuild on credits (default) costs no gold; off → razing and building cost gold
+  assert.strictEqual(plan(prov()).build.cost, 0);
+  assert(plan(prov(), { rebuildCredits: false }).build.cost > 0);
   // Too little time left for a rebuild → no build advice, current build kept
   assert.strictEqual(plan(prov(), { ticks: 30 }).build, null);
 }

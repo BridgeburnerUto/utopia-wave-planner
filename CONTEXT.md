@@ -203,6 +203,15 @@ and a real /eowcf in Discord.
   (leader: "178 or 200% about 36h before exit"). IA/HI = cast right before
   training, training time only (no wage effect). Per-tick income is cached when
   inputs repeat: kingdom plan 2.3 s -> ~0.3 s.
+- **Rebuild on credits** (leader: "plenty of build credits as eowcf starts, we
+  rarely use gold"): cfg.rebuildCredits default ON = construction + raze cost 0;
+  off = survey credits first, gold for the rest. Province table's Gold column is
+  now **Left** after training (red < spare, yellow > 3x spare), bill below.
+- **The live snapshot is post-war** (military 64-99% of population, a bad war):
+  most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a
+  real ceasefire start military is ~30-50% (leader), gold becomes the limit and
+  banks take over (a crude 40%-military what-if: "far above spare" 9 -> 1). Judge
+  the advice on ceasefire-start data, not this snapshot.
 
 **Known limits / next:** mid-war data shows most provinces at/above their draft
 target, so elites come from released ospecs + draft advice; negative-income
