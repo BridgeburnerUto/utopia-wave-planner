@@ -237,7 +237,9 @@ and a real /eowcf in Discord.
   rebuild, wages low, draft start, wages high, armouries, train, exit); the bot
   counts ticks left live from `unix` ("in N ticks · Utopian date · <t:f>",
   NOW, or "passed N ticks ago"). Tested in php-wasm with a test copy whose
-  httpJson reads a local plan file. Needs a backend deploy + ?register=1. Province table's Gold column is
+  httpJson reads a local plan file. **LIVE: backend rev utopia-intel-00072-cw7,
+  ?register=1 -> [elites, eowcf, when, traintime].** The backend dir is still not
+  a git repo -- local copy = deployed 00072. Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a
