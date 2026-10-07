@@ -53,7 +53,7 @@ const EO_SETUP_DEFAULT = () => ({ id: 'all', name: 'Everyone', race: '', pers: '
                                   guildPct: EOWCF.GUILD_PCT_DEFAULT, towerPct: EOWCF.TOWER_PCT_DEFAULT, homesPct: null });   // null = keep current homes
 const EO_CFG_DEFAULT = () => ({ ticks: 96, exitAt: 0, ritual: 'none',
                                 draftRate: EOWCF.DRAFT_RATE_DEFAULT, patriotism: true, inspire: true,
-                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, rebuildCredits: true,
+                                spareGold: EOWCF.SPARE_GOLD, wageRate: EOWCF.WAGE_RATE, buildCredits: null,
                                 wageExitRate: EOWCF.WAGE_EXIT_RATE, wageRaiseTicks: EOWCF.WAGE_RAISE_TICKS,
                                 setups: [EO_SETUP_DEFAULT()], assign: {} });
 /** The live config (created on first use — state.js loads before config tables are usable here) */
@@ -182,7 +182,9 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
                    * (cfg.patriotism ? EOWCF.PATRIOTISM_DRAFT_MULT : 1) * (1 + heroism / 100);
   const draftGc = rate.gc * (RACE_DRAFT_COST_MULT[race] || 1) * (1 - heroism / 100) * (rit.draftCostMult || 1);
   const specCredits = ma.credits > 0 ? ma.credits : 0;
-  const buildCredits = prov.survey?.credits || 0;
+  // Building credits: leadership enters the amount everyone gets as the ceasefire
+  // starts (one number for all); blank = what the province's survey shows.
+  const buildCredits = cfg.buildCredits != null && cfg.buildCredits >= 0 ? cfg.buildCredits : (prov.survey?.credits || 0);
 
   // ── Wages: ceasefire rate from the start, raised again before exit ──
   const wageLow  = cfg.wageRate > 0 ? cfg.wageRate : EOWCF.WAGE_RATE;
@@ -269,20 +271,21 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
       build: during || b0, after: mix, popAdd, drafted: 0, draftCost: 0, buildCost: 0,
       floor, burst: k, drStart: Math.max(0, T - k), arm: 0,
     };
-    if (mix) { pay(st, acres(built), acres(razed)); st.rebuild = { built: acres(built), razed: acres(razed), cost: st.buildCost }; }
+    if (mix) {
+      const r = pay(st, acres(built), acres(razed));
+      st.rebuild = { built: acres(built), razed: acres(razed), cost: st.buildCost, ...r };
+    }
     st.arm = st.build.armouries || 0;
     return st;
   };
-  // Leader: everyone gets plenty of building credits as the ceasefire starts, so
-  // rebuilding is normally free (switch on the tab). Off = credits on hand pay
-  // for building first, gold for the rest and for razing.
-  const freeBuild = cfg.rebuildCredits !== false;
+  // Credits pay for BUILDING (one credit per acre); acres beyond them cost gold.
+  // Razing is always gold (Growth page: 300 + 0.05 × land per acre, × race/pers/ritual).
   const pay = (st, buildAcres, razeAcres) => {
-    if (freeBuild) return;
-    const free = Math.min(st.credits, buildAcres);
-    st.credits -= free;
-    const c = (buildAcres - free) * buildAcreGc + razeAcres * razeAcreGc;
-    st.gold -= c; st.buildCost += c;
+    const onCredits = Math.min(st.credits, buildAcres);
+    st.credits -= onCredits;
+    const gcBuild = (buildAcres - onCredits) * buildAcreGc, gcRaze = razeAcres * razeAcreGc;
+    st.gold -= gcBuild + gcRaze; st.buildCost += gcBuild + gcRaze;
+    return { onCredits, overAcres: buildAcres - onCredits, gcBuild, gcRaze };
   };
   const step = (st, upto) => {
     for (; st.t < upto; st.t++) {
@@ -486,6 +489,8 @@ function eoPlanProvince(prov, cfg, ctx, loc) {
     build: mix ? {
       mix, before: b0, goal: buildGoal, spare,
       built: best.st.rebuild?.built || 0, razed: best.st.rebuild?.razed || 0, cost: Math.round(best.st.rebuild?.cost || 0),
+      onCredits: best.st.rebuild?.onCredits || 0, overAcres: best.st.rebuild?.overAcres || 0,
+      gcBuild: Math.round(best.st.rebuild?.gcBuild || 0), gcRaze: Math.round(best.st.rebuild?.gcRaze || 0),
       wpaShort: wizGap > 0, dungNeed,
     } : null,
     arm: { pct: best.arm, from: b0.armouries || 0,
@@ -592,7 +597,9 @@ function _eoPlanText(p, discord) {
       .map(([k, v]) => (B.mix[k] || 0) > 0 ? `${cap(k)} ${+v.toFixed(1)}→${+B.mix[k].toFixed(1)}%` : cap(k)).join(', ');
     steps.push([0, `**Rebuild NOW** to: ${mixTxt}`
       + (razeTxt ? `. Raze: ${razeTxt}` : '')
-      + ` (≈${n(B.built)} acres, ${B.cost > 0 ? `≈${n(B.cost)} gc${p.buildCredits ? ', building credits first' : ''}` : 'on building credits'}).`
+      + ` (${n(B.built)} acres to build: ${B.overAcres > 0
+            ? `${n(B.onCredits)} on credits + **${n(B.overAcres)} paid ≈${n(B.gcBuild)} gc**`
+            : 'all on building credits'}${B.gcRaze > 0 ? `; razing ≈${n(B.gcRaze)} gc` : ''}).`
       + (B.goal === 'met' ? ` Banks are sized to train what you can and keep ≈${n(B.spare)} gc spare.`
                           : ` Even all spare land in banks can't keep ≈${n(B.spare)} gc spare after training.`)]);
   }
@@ -606,7 +613,7 @@ function _eoPlanText(p, discord) {
       + (d.startAt > 0 ? ' Keep the draft OFF until then.' : '')
       + (d.patriotism && d.ticks > EOWCF.PATRIOTISM_TICKS ? ` Recast Patriotism — it lasts ${EOWCF.PATRIOTISM_TICKS} ticks.` : '')]);
   }
-  if (p.arm.pct > 0) steps.push([p.swapAt, `Swap ${p.arm.pct}% to **armouries** ${at(p.swapAt)} (banks first; ${p.arm.cost > 0 ? '≈' + n(p.arm.cost) + ' gc' : 'on building credits'}).`]);
+  if (p.arm.pct > 0) steps.push([p.swapAt, `Swap ${p.arm.pct}% to **armouries** ${at(p.swapAt)} (banks first; ≈${n(p.arm.cost)} gc incl. razing, credits first).`]);
   const t = p.train;
   const tr = [];
   if (t.thv) tr.push(`${n(t.thv)} thieves`);
@@ -683,8 +690,9 @@ function eoSet(key, val) {
     c.patriotism = !!val;
   } else if (key === 'inspire') {
     c.inspire = !!val;
-  } else if (key === 'rebuildCredits') {
-    c.rebuildCredits = !!val;
+  } else if (key === 'buildCredits') {
+    const v = parseFloat(val);
+    c.buildCredits = String(val).trim() === '' || !isFinite(v) || v < 0 ? null : Math.round(v);   // blank = each survey
   } else {
     const v = parseFloat(String(val).replace(',', '.'));
     c[key] = isFinite(v) && v >= 0 ? v : 0;
@@ -771,9 +779,11 @@ async function renderEowcf(opts = {}) {
         <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px"
           title="Cast right before training: Inspire Army (−20% training time) or, for personalities that have it, Hero's Inspiration (−30%)">
           <input type="checkbox" ${c.inspire ? 'checked' : ''} onchange="__wpA.eoSet('inspire', this.checked)"> IA / HI for training</label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding-bottom:6px"
-          title="The rebuild (and any armoury swap) is paid with the building credits everyone gets as the ceasefire starts. Off = gold pays for razing and for building beyond the credits on hand.">
-          <input type="checkbox" ${c.rebuildCredits !== false ? 'checked' : ''} onchange="__wpA.eoSet('rebuildCredits', this.checked)"> Rebuild on credits</label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:14px;color:#7a9090;font-weight:700;letter-spacing:1px;text-transform:uppercase"
+          title="Building credits everyone gets as the ceasefire starts (same for all). Blank = each province's credits from its survey.">Build credits
+          <input type="number" min="0" step="1" value="${c.buildCredits == null ? '' : esc(String(c.buildCredits))}" placeholder="survey"
+            style="width:90px;font-size:18px;padding:3px 6px;background:#2b3333;color:#fff;border:1px solid #617070;border-radius:3px"
+            onchange="__wpA.eoSet('buildCredits', this.value)"></label>
         ${inp('spareGold', 'Spare gold', c.spareGold ?? EOWCF.SPARE_GOLD, 110, 'Gold every province should still have after training. Banks/homes are sized for this; the rest of the land goes to guilds/unis.')}
         ${inp('wageRate', 'Wages %', c.wageRate ?? EOWCF.WAGE_RATE, 70, 'Wage rate set as the ceasefire starts')}
         ${inp('wageExitRate', 'Exit wages %', c.wageExitRate ?? EOWCF.WAGE_EXIT_RATE, 70, 'Wage rate before exit, so military efficiency recovers')}
@@ -839,6 +849,9 @@ async function renderEowcf(opts = {}) {
         ${card('Short', short, 'Gold or soldiers do not reach the targets', short ? '#E05050' : '#60C040')}
         ${card('Elites to train', fK(sum(p => p.train.eli)), 'Total elites ordered at training time')}
         ${card('Plan gain', '+' + fK(sum(p => p.train.eli - p.baseline.eli)), 'Extra elites from release-to-peasants and armoury swaps, vs doing neither', '#ffd400')}
+        ${card('Rebuild gold', plans.filter(p => p.build && p.build.overAcres > 0).length + ' provs',
+               'Provinces whose rebuild needs more acres than their building credits (razing gold not counted here)',
+               plans.some(p => p.build && p.build.overAcres > 0) ? '#E05050' : '#60C040')}
         ${card('Armoury swaps', plans.filter(p => p.arm.pct > 0).length, 'Provinces where razing banks into armouries before training pays for itself')}
         ${card('WPA short', plans.filter(p => p.wiz.gap > 0).length, 'Provinces whose guilds will not reach the WPA target by exit', '#c090ff')}
       </div>`;

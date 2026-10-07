@@ -203,9 +203,12 @@ and a real /eowcf in Discord.
   (leader: "178 or 200% about 36h before exit"). IA/HI = cast right before
   training, training time only (no wage effect). Per-tick income is cached when
   inputs repeat: kingdom plan 2.3 s -> ~0.3 s.
-- **Rebuild on credits** (leader: "plenty of build credits as eowcf starts, we
-  rarely use gold"): cfg.rebuildCredits default ON = construction + raze cost 0;
-  off = survey credits first, gold for the rest. Province table's Gold column is
+- **Building credits = one number** (leader: everyone gets the same amount as
+  the ceasefire starts): cfg.buildCredits (blank = each survey's credits). One
+  credit builds one acre; acres beyond the credits cost gold; RAZING is always
+  gold per the wiki (300 + 0.05 x land / acre) -- shown separately in the plan
+  text so the leader can confirm (unconfirmed whether razing is free in the
+  ceasefire). KD card "Rebuild gold" counts provinces over their credits. Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a

@@ -148,8 +148,13 @@ assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough ris
   // Wages: raising them earlier costs gold
   assert(plan(prov({ money: 0 }), { wageRaiseTicks: 80 }).gold.atTrain < plan(prov({ money: 0 }), { wageRaiseTicks: 0 }).gold.atTrain);
   // Rebuild on credits (default) costs no gold; off → razing and building cost gold
-  assert.strictEqual(plan(prov()).build.cost, 0);
-  assert(plan(prov(), { rebuildCredits: false }).build.cost > 0);
+  // Leadership's credits cover building; acres beyond them, and razing, cost gold
+  const many = plan(prov(), { buildCredits: 99999 }).build, none = plan(prov(), { buildCredits: 0 }).build;
+  assert.strictEqual(many.overAcres, 0); assert.strictEqual(many.gcBuild, 0);
+  assert.strictEqual(none.onCredits, 0); assert(none.overAcres === none.built && none.gcBuild > 0);
+  const some = plan(prov(), { buildCredits: 100 }).build;
+  assert.strictEqual(some.onCredits, 100); assert.strictEqual(some.overAcres, some.built - 100);
+  assert(many.gcRaze > 0 && many.gcRaze === none.gcRaze, 'razing is gold either way');
   // Too little time left for a rebuild → no build advice, current build kept
   assert.strictEqual(plan(prov(), { ticks: 30 }).build, null);
 }
