@@ -654,92 +654,102 @@ async function _eoLoad(force) {
 }
 
 /**
- * Plan text for one province. `discord` = the published version the bot prints:
- * moments are Discord timestamps (<t:unix:R>), which every player's client shows
- * live ("in 3 hours", their own time zone) — so the text does not go stale between
- * publishing and the player asking. The planner view shows tick counts instead.
+ * Plan text for one province, in short sections: build, timeline, gold, result.
+ * `discord` = the published version the bot prints: moments are Discord
+ * timestamps (<t:unix:R>), which every player's client shows live ("in 3 hours",
+ * their own time zone), so the text does not go stale between publishing and the
+ * player asking. The planner view shows tick counts instead.
  */
 function _eoPlanText(p, discord) {
   const n = v => Math.round(v).toLocaleString('en-US');
-  const at = ticks => {
-    if (ticks <= 0) return 'NOW';
-    const { unix, uto: lbl } = _eoMoment(ticks);
-    if (discord) return `<t:${unix}:f> (<t:${unix}:R>${lbl ? ', ' + lbl : ''})`;   // exact local time + live countdown
-    return `in ${ticks} tick${ticks === 1 ? '' : 's'}${lbl ? ' (' + lbl + ')' : ''}`;
+  const gc = v => { const a = Math.abs(v), s = v < 0 ? '−' : '';
+    return a >= 1e6 ? s + (a / 1e6).toFixed(1) + 'M' : a >= 1e4 ? s + Math.round(a / 1e3) + 'k' : s + n(a); };
+  const utoShort = lbl => (lbl || '').replace(/^(\w{3})\w*\s+(\d+),\s*/, '$1 $2 ');      // "January 21, YR10" → "Jan 21 YR10"
+  const when = ticks => {
+    if (ticks <= 0) return '**Now**';
+    const { unix, uto } = _eoMoment(ticks);
+    const u = utoShort(uto);
+    return discord ? `**${u || 'Tick +' + ticks}** · <t:${unix}:R>` : `**${u || 'Tick +' + ticks}** · in ${ticks} tick${ticks === 1 ? '' : 's'}`;
   };
+  const t = p.train, d = p.draft;
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const L = [];
-  L.push(`**${p.name}** (slot ${p.slot}) — ${p.land.toLocaleString('en-US')} acres, ${p.race}${p.pers ? ' ' + p.pers : ''}`
-    + (p.setup ? ` · setup **${p.setup.name}**` : ''));
-  L.push(`Exit ${at(p.N)}. Training takes ${p.trainTicks} ticks → **order training ${at(p.trainAt)}**.`);
-  const steps = [];   // [tick, text] — listed in time order
+
+  // ── Header ──
+  L.push(`### ${p.name} · slot ${p.slot}`);
+  L.push(`${cap(p.race)}${p.pers ? ' ' + cap(p.pers) : ''} · ${n(p.land)} acres` + (p.setup ? ` · setup **${p.setup.name}**` : ''));
+
+  // ── Build: the mix to end up with (what they keep + what they build) ──
+  if (p.build) {
+    const B = p.build;
+    const nm = { banks: 'Banks', homes: 'Homes', guilds: 'Guilds', universities: 'Unis', towers: 'Towers',
+                 farms: 'Farms', dungeons: 'Dungeons', armouries: 'Armouries' };
+    const mix = Object.keys(nm).filter(k => (B.mix[k] || 0) >= 0.1).map(k => `${nm[k]} **${+B.mix[k].toFixed(1)}%**`).join(' · ');
+    L.push('', '**🏗️ Your build** — order it now, everything else goes');
+    L.push(`> ${mix}`);
+    L.push(`-# ${n(B.built)} acres to build: ${B.overAcres <= 0 ? 'all on building credits'
+      : B.onCredits > 0 ? `${n(B.onCredits)} on credits, **${n(B.overAcres)} paid (≈${gc(B.gcBuild)} gc)**`
+      : `**all paid, ≈${gc(B.gcBuild)} gc** (no building credits)`}`
+      + (B.gcRaze > 0 ? ` · razing ≈${gc(B.gcRaze)} gc` : '')
+      + (B.goal === 'met' ? '' : ` · even all spare land in banks can't keep ${gc(B.spare)} gc spare`));
+  }
+
+  // ── Timeline ──
+  const steps = [];   // [tick, text]
   if (p.release.toPeasants || p.release.toSoldiers) {
     const parts = [];
     if (p.release.toSoldiers) parts.push(`${n(p.release.toSoldiers)} → soldiers`);
-    if (p.release.toPeasants) parts.push(`${n(p.release.toPeasants)} → all the way to peasants`);
-    steps.push([0, `Release ${n(p.surplusO)} off specs NOW: ${parts.join(', ')}.`]);
+    if (p.release.toPeasants) parts.push(`${n(p.release.toPeasants)} → peasants`);
+    steps.push([0, `Release off specs: ${parts.join(', ')}`]);
   }
-  steps.push([0, `Set wages to **${p.wages.low}%** NOW.`]);
-  if (p.build) {
-    const B = p.build, nm = { universities: 'Unis', guilds: 'Guilds', banks: 'Banks', homes: 'Homes', farms: 'Farms',
-                              towers: 'Towers', dungeons: 'Dungeons', armouries: 'Armouries' };
-    const order = ['banks', 'homes', 'guilds', 'universities', 'towers', 'farms', 'dungeons'];
-    const mixTxt = order.filter(k => (B.mix[k] || 0) > 0).map(k => `${nm[k]} ${+B.mix[k].toFixed(1)}%`).join(' · ');
-    const cap = k => k.replace(/\b\w/g, c => c.toUpperCase());
-    const razeTxt = Object.entries(B.before)
-      .filter(([k, v]) => k !== 'barren land' && v - (B.mix[k] || 0) >= 0.5)
-      .map(([k, v]) => (B.mix[k] || 0) > 0 ? `${cap(k)} ${+v.toFixed(1)}→${+B.mix[k].toFixed(1)}%` : cap(k)).join(', ');
-    steps.push([0, `**Rebuild NOW** to: ${mixTxt}`
-      + (razeTxt ? `. Raze: ${razeTxt}` : '')
-      + ` (${n(B.built)} acres to build: ${B.overAcres > 0
-            ? `${n(B.onCredits)} on credits + **${n(B.overAcres)} paid ≈${n(B.gcBuild)} gc**`
-            : 'all on building credits'}${B.gcRaze > 0 ? `; razing ≈${n(B.gcRaze)} gc` : ''}).`
-      + (B.goal === 'met' ? ` Banks are sized to train what you can and keep ≈${n(B.spare)} gc spare.`
-                          : ` Even all spare land in banks can't keep ≈${n(B.spare)} gc spare after training.`)]);
-  }
-  if (p.wages.raiseAt < p.N) steps.push([p.wages.raiseAt, `Raise wages to **${p.wages.high}%** ${at(p.wages.raiseAt)} (${p.N - p.wages.raiseAt} ticks before exit).`]);
-  if (p.inspire) steps.push([Math.max(0, p.trainAt) + 0.4, `Cast **${p.inspire.name}** right before training (−${Math.round((1 - p.inspire.trainMult) * 100)}% training time, already counted).`]);
-  const d = p.draft;
+  steps.push([0.1, `Wages to **${p.wages.low}%**`]);
   if (d.drafted > 0) {
-    const rateName = d.rate.charAt(0).toUpperCase() + d.rate.slice(1);
-    steps.push([d.startAt, `Start drafting ${at(d.startAt)}: **${rateName}**${d.patriotism ? ' + **Patriotism**' : ''}`
-      + ` for ${d.ticks} ticks, down to ${d.ppa} PPA (≈${n(d.drafted)} soldiers, ≈${n(d.cost)} gc).`
-      + (d.startAt > 0 ? ' Keep the draft OFF until then.' : '')
-      + (d.patriotism && d.ticks > EOWCF.PATRIOTISM_TICKS ? ` Recast Patriotism — it lasts ${EOWCF.PATRIOTISM_TICKS} ticks.` : '')]);
+    steps.push([d.startAt + 0.2, `Start drafting: **${cap(d.rate)}${d.patriotism ? ' + Patriotism' : ''}** for ${d.ticks} ticks, down to ${d.ppa} PPA (≈${gc(d.drafted)} soldiers)`
+      + (d.startAt > 0 ? ' — draft OFF until then' : '')
+      + (d.patriotism && d.ticks > EOWCF.PATRIOTISM_TICKS ? ` — recast Patriotism every ${EOWCF.PATRIOTISM_TICKS} ticks` : '')]);
   }
-  if (p.arm.pct > 0) steps.push([p.swapAt, `Swap ${p.arm.pct}% to **armouries** ${at(p.swapAt)} (banks first; ≈${n(p.arm.cost)} gc incl. razing, credits first).`]);
-  const t = p.train;
+  if (p.wages.raiseAt < p.N) steps.push([p.wages.raiseAt + 0.3, `Wages to **${p.wages.high}%**`]);
+  if (p.arm.pct > 0) steps.push([p.swapAt + 0.4, `Swap **${p.arm.pct}%** banks → armouries`]);
   const tr = [];
   if (t.thv) tr.push(`${n(t.thv)} thieves`);
   if (t.dsp) tr.push(`${n(t.dsp)} def specs`);
   if (t.osp) tr.push(`${n(t.osp)} off specs`);
   if (t.eli) tr.push(`**${n(t.eli)} elites**`);
-  steps.push([Math.max(0, p.trainAt) + 0.5, `Train ${at(p.trainAt)}: ${tr.length ? tr.join(', ') : (t.fixedNoSol > 0 ? 'nothing — no soldiers left to train' : 'nothing needed')}`
-    + (t.freeSpecs ? ` (${n(t.freeSpecs)} specs on credits)` : '')
-    + (t.freeThv ? ` (${n(t.freeThv)} thieves on credits)` : '')
-    + (t.freeEli ? ` (${n(t.freeEli)} elites on credits)` : '') + '.']);
-  steps.sort((a, b) => a[0] - b[0]).forEach(([, s], i) => L.push(`${i + 1}. ${s}`));
-  L.push(`Gold: ${n(p.gold.now)} now → ≈${n(p.gold.atTrain)} at training; bill ≈${n(t.bill)}, ${t.left >= 0 ? n(t.left) + ' left' : 'gold runs out'}.`);
-  if (t.untrained > 0) L.push(`⚠ ${n(t.untrained)} soldiers stay untrained — not enough gold.`);
-  if (t.fixedNoSol > 0) L.push(`⚠ ${n(t.fixedNoSol)} soldiers short of the thief/spec targets even after drafting down to ${d.ppa} PPA.`);
-  else if (t.fixedShort) L.push(`⚠ Not enough gold for the thief/spec targets (${n(t.fixedMissing)} units short).`);
-  const tpa = p.after.thv / p.land, wpa = p.after.wiz / p.land, dpa = p.after.dsp / p.land;
-  L.push(`At exit: TPA ${tpa.toFixed(2)} · WPA ${wpa.toFixed(2)} · ${dpa.toFixed(2)} dspecs/acre · ${n(p.after.eli)} elites`);
-  if (p.train.eli > p.baseline.eli) L.push(`-# The release/armoury choices train ${n(p.train.eli - p.baseline.eli)} more elites than skipping them.`);
+  const credits = [t.freeSpecs && `${n(t.freeSpecs)} specs`, t.freeThv && `${n(t.freeThv)} thieves`, t.freeEli && `${n(t.freeEli)} elites`].filter(Boolean);
+  steps.push([Math.max(0, p.trainAt) + 0.5, `**Train**${p.inspire ? ` (cast ${p.inspire.name} first)` : ''}: `
+    + (tr.length ? tr.join(' · ') : (t.fixedNoSol > 0 ? 'nothing — no soldiers left' : 'nothing needed'))
+    + (credits.length ? ` — ${credits.join(', ')} on credits` : '')]);
+  steps.push([p.N + 0.6, 'Ceasefire ends']);
+  L.push('', '**🗓️ Timeline**');
+  steps.sort((a, b) => a[0] - b[0]).forEach(([tk, s]) => L.push(`${when(Math.floor(tk))} · ${s}`));
 
-  // What-ifs — NOT included in the numbers above, so the plan is exactly what it says
+  // ── Gold and result ──
+  L.push('', `**💰 Gold** ${gc(p.gold.now)} now → ≈${gc(p.gold.atTrain)} at training · bill ≈${gc(t.bill)} · `
+    + (t.left >= 0 ? `**≈${gc(t.left)} left**` : '**runs out**'));
+  const tpa = p.after.thv / p.land, wpa = p.after.wiz / p.land, dpa = p.after.dsp / p.land;
+  L.push(`**🎯 At exit** TPA **${tpa.toFixed(2)}** · WPA **${wpa.toFixed(2)}** · def specs **${dpa.toFixed(2)}**/acre · **${n(p.after.eli)}** elites`);
+
+  // ── Problems and what-ifs (NOT in the numbers above, so the plan is exactly what it says) ──
+  const warn = [];
+  if (t.untrained > 0) warn.push(`${n(t.untrained)} soldiers stay untrained — not enough gold`);
+  if (t.fixedNoSol > 0) warn.push(`${n(t.fixedNoSol)} soldiers short of the thief/spec targets even at ${d.ppa} PPA`);
+  else if (t.fixedShort) warn.push(`not enough gold for the thief/spec targets (${n(t.fixedMissing)} units short)`);
+  if (warn.length) L.push('', ...warn.map(w => `⚠️ ${w}`));
   const more = [];
-  const da = p.draft.advice;
+  const da = d.advice;
   // Information, not an order: the PPA is leadership's call.
-  if (da) more.push(`Soldier gap: ≈${n(da.extra)} more soldiers`
-    + (t.fixedNoSol > 0 ? ` (${n(t.fixedNoSol)} for the thief/spec targets${da.spareEli ? `, ${n(da.spareEli)} more elites the spare gold could pay for` : ''})`
-                        : ` (more elites the spare gold could pay for)`)
-    + ` would mean drafting down to ≈${da.ppa} PPA instead of ${d.ppa}`
-    + (da.speedLimited ? ` — and even that is short of the ${n(da.wanted)} wanted.` : '.')
-    + ' Ask leadership before going below the PPA target.');
+  if (da) more.push(`≈${gc(da.extra)} more soldiers`
+    + (t.fixedNoSol > 0 ? ` (${n(t.fixedNoSol)} for targets${da.spareEli ? `, ${n(da.spareEli)} more elites the spare gold could pay for` : ''})`
+                        : ' (more elites the spare gold could pay for)')
+    + ` would mean drafting to ≈${da.ppa} PPA instead of ${d.ppa}`
+    + (da.speedLimited ? `, and even that is short of ${gc(da.wanted)}` : '')
+    + ' — ask leadership first');
   if (p.wiz.gap > 0) more.push(`Wizards: ${n(p.wiz.proj)} of ${n(p.wiz.target)} by exit — `
-    + (p.build ? 'not enough land left for the guilds the WPA target needs (training gold comes first).' : 'too late for new guilds to close it.'));
-  if (more.length) { L.push('**To do better:**'); more.forEach(m => L.push('• ' + m)); }
-  if (p.warn.length) L.push(`-# ${p.warn.join('; ')}`);
+    + (p.build ? 'no land left for more guilds (training gold comes first)' : 'too late for new guilds'));
+  if (more.length) { L.push('', '**💡 To do better**'); more.forEach(m => L.push('• ' + m)); }
+  const notes = [...p.warn];
+  if (t.eli > p.baseline.eli) notes.push(`release/armoury choices add ${n(t.eli - p.baseline.eli)} elites`);
+  if (notes.length) L.push(`-# ${notes.join(' · ')}`);
   return L.join('\n');
 }
 
@@ -832,11 +842,15 @@ function eoRefresh() { S.eo.loaded = false; renderEowcf({ force: true }); }
 
 // ── Render ──────────────────────────────────────────────────────────────────
 
+/** The plan text's Discord markdown, rendered for the planner preview */
 function _eoMdToHtml(s) {
   return esc(s)
     .replace(/\*\*(.+?)\*\*/g, '<b style="color:#fff">$1</b>')
+    .replace(/^### (.*)$/gm, '<div style="font-size:21px;font-weight:700;color:#ffd400;margin-bottom:2px">$1</div>')
+    .replace(/^&gt; (.*)$/gm, '<div style="border-left:3px solid #617070;padding:2px 10px;margin:2px 0">$1</div>')
     .replace(/^-# (.*)$/gm, '<span style="color:#7a9090;font-size:15px">$1</span>')
-    .replace(/\n/g, '<br>');
+    .replace(/\n/g, '<br>')
+    .replace(/(<\/div>)<br>/g, '$1');
 }
 
 async function renderEowcf(opts = {}) {

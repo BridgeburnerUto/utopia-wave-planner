@@ -110,8 +110,13 @@ for (const money of [0, 3e5, 3e6]) {
 // 8. Plan text renders, and the published (Discord) version uses live timestamps
 ctx.S.currentTickName = 'May 14, YR9';
 r = plan(prov({ soldiers: 8000, money: 3e6 }));
-assert(/order training/.test(ctx._eoPlanText(r, false)));
-assert(/<t:\d+:f> \(<t:\d+:R>/.test(ctx._eoPlanText(r, true)));
+{
+  const view = ctx._eoPlanText(r, false), pub = ctx._eoPlanText(r, true);
+  assert(/\*\*Train\*\*/.test(view) && /in \d+ ticks/.test(view), 'planner view: tick counts');
+  assert(/<t:\d+:R>/.test(pub) && !/in \d+ ticks/.test(pub), 'published: live Discord timestamps');
+  assert(/Your build/.test(pub) && !/Raze/i.test(pub.split('Timeline')[0].replace('razing', '')), 'build = what to have, no raze list');
+  assert(pub.length < 1900, 'fits one Discord message with the footer');
+}
 assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough risk in Discord)');
 
 // 10. Build advice

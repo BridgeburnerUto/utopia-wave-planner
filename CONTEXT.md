@@ -239,7 +239,13 @@ and a real /eowcf in Discord.
   NOW, or "passed N ticks ago"). Tested in php-wasm with a test copy whose
   httpJson reads a local plan file. **LIVE: backend rev utopia-intel-00072-cw7,
   ?register=1 -> [elites, eowcf, when, traintime].** The backend dir is still not
-  a git repo -- local copy = deployed 00072. Province table's Gold column is
+  a git repo -- local copy = deployed 00072.
+- **Plan text reformatted** (leader: easier to read; no raze list). Sections:
+  `### Name · slot` + race/pers/acres/setup; "Your build" = the target mix as a
+  quoted line (what they keep + build), acres/credits/razing gold as subtext;
+  "Timeline" lines led by the short Utopian date + <t:R> (planner: tick count);
+  Gold; At exit; warnings; "To do better"; notes. ~1.2 KB, under Discord's 2000.
+  Planner preview renders ###, > and -# (_eoMdToHtml). Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a
