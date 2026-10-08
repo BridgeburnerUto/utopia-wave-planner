@@ -245,7 +245,10 @@ and a real /eowcf in Discord.
   quoted line (what they keep + build), acres/credits/razing gold as subtext;
   "Timeline" lines led by the short Utopian date + <t:R> (planner: tick count);
   Gold; At exit; warnings; "To do better"; notes. ~1.2 KB, under Discord's 2000.
-  Planner preview renders ###, > and -# (_eoMdToHtml). Province table's Gold column is
+  Planner preview renders ###, > and -# (_eoMdToHtml).
+- **"Turn the draft OFF" is a Now step** whenever the burst starts later (or no
+  draft is needed) -- players forget it (leader). Also a /when milestone (k
+  'draft', ticks 0); the later line is just "Start drafting". Province table's Gold column is
   now **Left** after training (red < spare, yellow > 3x spare), bill below.
 - **The live snapshot is post-war** (military 64-99% of population, a bad war):
   most provinces are soldier-limited, so banks drop to 0 and gold piles up. At a

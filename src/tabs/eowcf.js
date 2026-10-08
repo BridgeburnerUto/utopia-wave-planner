@@ -626,6 +626,7 @@ function _eoMilestones(p) {
   const add = (k, label, ticks) => { const x = _eoMoment(ticks); m.push({ k, label, ticks: Math.max(0, ticks), unix: x.unix, uto: x.uto }); };
   if (p.build) add('rebuild', 'Rebuild', 0);
   add('wages', `Wages to ${p.wages.low}%`, 0);
+  if (p.draft.drafted === 0 || p.draft.startAt > 0) add('draft', 'Turn the draft OFF', 0);
   if (p.draft.drafted > 0) add('draft', 'Start drafting', p.draft.startAt);
   if (p.wages.raiseAt < p.N) add('wages', `Wages to ${p.wages.high}%`, p.wages.raiseAt);
   if (p.arm.pct > 0) add('armouries', `Swap ${p.arm.pct}% to armouries`, p.swapAt);
@@ -703,9 +704,11 @@ function _eoPlanText(p, discord) {
     steps.push([0, `Release off specs: ${parts.join(', ')}`]);
   }
   steps.push([0.1, `Wages to **${p.wages.low}%**`]);
+  // The burst starts late, so the draft must be switched OFF now — easy to miss
+  // when the "start drafting" line is far down the timeline (leader).
+  if (d.drafted === 0 || d.startAt > 0) steps.push([0.15, '**Turn the draft OFF**' + (d.drafted > 0 ? ' (back on below)' : '')]);
   if (d.drafted > 0) {
     steps.push([d.startAt + 0.2, `Start drafting: **${cap(d.rate)}${d.patriotism ? ' + Patriotism' : ''}** for ${d.ticks} ticks, down to ${d.ppa} PPA (≈${gc(d.drafted)} soldiers)`
-      + (d.startAt > 0 ? ' — draft OFF until then' : '')
       + (d.patriotism && d.ticks > EOWCF.PATRIOTISM_TICKS ? ` — recast Patriotism every ${EOWCF.PATRIOTISM_TICKS} ticks` : '')]);
   }
   if (p.wages.raiseAt < p.N) steps.push([p.wages.raiseAt + 0.3, `Wages to **${p.wages.high}%**`]);

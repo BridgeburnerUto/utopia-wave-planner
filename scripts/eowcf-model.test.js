@@ -116,6 +116,12 @@ r = plan(prov({ soldiers: 8000, money: 3e6 }));
   assert(/<t:\d+:R>/.test(pub) && !/in \d+ ticks/.test(pub), 'published: live Discord timestamps');
   assert(/Your build/.test(pub) && !/Raze/i.test(pub.split('Timeline')[0].replace('razing', '')), 'build = what to have, no raze list');
   assert(pub.length < 1900, 'fits one Discord message with the footer');
+  // A late burst → "turn the draft OFF" is a NOW step, before the later start
+  const late = plan(prov({ peasants: 30000 }));
+  assert(late.draft.startAt > 0);
+  const tl = ctx._eoPlanText(late, true);
+  assert(/\*\*Now\*\* · \*\*Turn the draft OFF\*\*/.test(tl) && tl.indexOf('Turn the draft OFF') < tl.indexOf('Start drafting'));
+  assert(ctx._eoMilestones(late).some(m => m.label === 'Turn the draft OFF' && m.ticks === 0));
 }
 assert(!/~\d/.test(ctx._eoPlanText(r, true)), 'use ≈, not ~ (strikethrough risk in Discord)');
 
