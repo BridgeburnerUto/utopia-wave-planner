@@ -601,13 +601,23 @@ function eoPlanAll(cfg) {
 /** Ticks left to the planned exit — the config stores an absolute time so it counts down */
 function _eoTicksLeft(cfg) {
   if (!cfg.exitAt) return cfg.ticks;
-  return Math.max(0, Math.min(EOWCF.MAX_TICKS, Math.ceil((cfg.exitAt - Date.now()) / 3600e3)));
+  // Count the tick hours from the next tick up to the exit, so the count drops
+  // when the game ticks, not an hour after the leader typed it. An exitAt saved
+  // mid-hour (before 2026-10-28) snaps back to the tick before it.
+  const next = _eoNextTick(), exit = cfg.exitAt / 1000;
+  if (exit < next - 1) return 0;
+  return Math.max(0, Math.min(EOWCF.MAX_TICKS, 1 + Math.floor((exit - next + 1) / 3600)));
 }
+/** Unix seconds of the next tick (ticks land on the hour), as in _eoMoment */
+const _eoNextTick = () => Math.ceil(Date.now() / 3600e3) * 3600;
+/** The exit moment `t` ticks from now, on the tick hour (ms) */
+const _eoExitAt = t => (_eoNextTick() + (t - 1) * 3600) * 1000;
 function _eoCfgNow() {
   const c = _eoC();
   // Ticks of the ceasefire already gone: the start-of-ceasefire population boosts
   // only apply in its first 24 ticks. Unknown start = planning at the start.
-  const elapsedTicks = c.startAt ? Math.max(0, Math.floor((Date.now() - c.startAt) / 3600e3)) : 0;
+  // Counted in ticks: startAt sits mid-hour, so it goes up when the game ticks.
+  const elapsedTicks = c.startAt ? Math.max(0, Math.ceil((_eoNextTick() - c.startAt / 1000) / 3600) - 1) : 0;
   return { ...c, ticks: _eoTicksLeft(c), elapsedTicks };
 }
 
@@ -764,7 +774,7 @@ async function eoPublish() {
   const provinces = {};
   plans.forEach(p => { provinces[p.slot] = { name: p.name, text: _eoPlanText(p, true), when: _eoMilestones(p) }; });
   const now = Date.now();
-  const saveCfg = { ..._eoC(), exitAt: _eoC().exitAt || now + cfg.ticks * 3600e3 };
+  const saveCfg = { ..._eoC(), exitAt: cfg.ticks > 0 ? _eoExitAt(cfg.ticks) : _eoC().exitAt };
   const res = await fbWrite(EO_DOC(), {
     cfgJson: JSON.stringify(saveCfg),
     planJson: JSON.stringify({ kd: S.own?.location, kdName: S.own?.kingdomName || '', updatedAt: now,
@@ -787,10 +797,10 @@ function eoSet(key, val) {
   const c = _eoC();
   if (key === 'startedAgo') {
     const v = parseFloat(val);
-    c.startAt = String(val).trim() === '' || !isFinite(v) || v < 0 ? null : Date.now() - v * 3600e3;
+    c.startAt = String(val).trim() === '' || !isFinite(v) || v < 0 ? null : (_eoNextTick() - (Math.floor(v) + 0.5) * 3600) * 1000;
   } else if (key === 'ticks') {
     const t = Math.max(1, Math.min(EOWCF.MAX_TICKS, parseInt(val, 10) || 0));
-    c.ticks = t; c.exitAt = Date.now() + t * 3600e3;
+    c.ticks = t; c.exitAt = _eoExitAt(t);
   } else if (key === 'ritual') {
     c.ritual = EOWCF_RITUALS[val] ? val : 'none';
   } else if (key === 'draftRate') {
